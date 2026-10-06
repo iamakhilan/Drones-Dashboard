@@ -343,8 +343,8 @@
           <!-- Camera Stream Frame Viewport -->
           <div class="relative w-full aspect-video bg-stone-900 rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center">
             
-            <!-- Camera Feed Background (Using Project Asset or Dynamic Canvas) -->
-            <img id="camera-feed-bg" class="absolute inset-0 w-full h-full object-cover opacity-80" src="camera_feed_light.png" alt="Monocular Camera Stream" />
+            <!-- Camera Feed Background (Using Project Asset: Monocular Drone Camera Feed) -->
+            <img id="camera-feed-bg" class="absolute inset-0 w-full h-full object-cover opacity-90" src="monocular_tracking_feed.png" alt="Monocular Camera Stream" />
 
             <!-- Optical Center Reticle -->
             <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -1043,16 +1043,56 @@
       // Update Historic Trajectory Path SVG
       updateTrajectorySVG(allPoints);
 
-      // 4. Live Charts Waveforms
+      // 4. Update Monocular Optical Flow Feature Overlay
+      updateKltFeatureOverlay(frame, euler, speed);
+
+      // 5. Live Charts Waveforms
       updateDriftChart(reproj);
       updateNoiseChart(frame);
 
-      // 5. ROS 2 CPU load micro-jitter
+      // 6. ROS 2 CPU load micro-jitter
       setElText('cpu-camera', `${(4.0 + Math.random() * 0.4).toFixed(1)}%`);
       setElText('cpu-tracker', `${(18.0 + Math.random() * 0.8).toFixed(1)}%`);
       setElText('cpu-imu', `${(1.7 + Math.random() * 0.3).toFixed(1)}%`);
       setElText('cpu-msckf', `${(21.8 + Math.random() * 0.9).toFixed(1)}%`);
       setElText('cpu-ctrl', `${(8.4 + Math.random() * 0.5).toFixed(1)}%`);
+    }
+
+    // Dynamic Optical Flow Features Motion Simulation from Flight Telemetry
+    function updateKltFeatureOverlay(frame, euler, speed) {
+      const kltGroup = document.getElementById('klt-points-group');
+      if (!kltGroup) return;
+
+      const flowX = (-frame.vy * 14 + (euler.yaw % 30) * 0.5).toFixed(1);
+      const flowY = (-frame.vx * 14 + euler.pitch * 0.8).toFixed(1);
+
+      const baseFeatures = [
+        { id: '#F-1042 [12.4m]', x: 140, y: 110, color: '#0EA5E9' },
+        { id: '#F-1048 [4.1m]',  x: 220, y: 195, color: '#10B981' },
+        { id: '#KF-89',          x: 380, y: 130, color: '#F59E0B' },
+        { id: '#F-0994 [2.2m]',  x: 460, y: 260, color: '#10B981' },
+        { id: '#F-1051',         x: 290, y: 220, color: '#0EA5E9' },
+        { id: '#F-1102 [8.7m]',  x: 180, y: 250, color: '#38BDF8' },
+        { id: '#F-1115 [15.2m]', x: 420, y: 180, color: '#34D399' }
+      ];
+
+      kltGroup.innerHTML = baseFeatures.map((f, idx) => {
+        const jitterX = Math.sin(frame.t * 4 + idx) * 2;
+        const jitterY = Math.cos(frame.t * 4 + idx) * 2;
+        const posX = (f.x + jitterX).toFixed(1);
+        const posY = (f.y + jitterY).toFixed(1);
+        const vecX = (flowX * (1 + idx * 0.1)).toFixed(1);
+        const vecY = (flowY * (1 + idx * 0.1)).toFixed(1);
+
+        return `
+          <g transform="translate(${posX}, ${posY})">
+            <circle cx="0" cy="0" fill="${f.color}" r="3.5"></circle>
+            <circle cx="0" cy="0" fill="none" stroke="${f.color}" stroke-width="1" r="7" opacity="0.6"></circle>
+            <line class="flow-vector" stroke="${f.color}" stroke-width="1.5" x1="0" y1="0" x2="${vecX}" y2="${vecY}" style="display: ${showVectors ? 'inline' : 'none'}"></line>
+            <text fill="${f.color}" font-family="monospace" font-size="9" x="9" y="3">${f.id}</text>
+          </g>
+        `;
+      }).join('');
     }
 
     // 6. Update Historic Trajectory Spline in SVG
