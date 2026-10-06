@@ -1,0 +1,100 @@
+/* ==========================================================================
+   AeroVIO Ground Control Station - Custom Styles & HUD Overlays
+   Aerospace Dark Theme (#0a0e15 / #181c23 / #7df4ff / #d1bcff)
+   ========================================================================== */
+
+/* Base Layout & Clean Scrollbars */
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #0a0e15;
+  color: #dfe2ed;
+  font-family: 'Space Mono', monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6, .font-headline {
+  font-family: 'Chivo', sans-serif;
+}
+
+/* Custom Tactical Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0e15;
+}
+::-webkit-scrollbar-thumb {
+  background: #262a32;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7df4ff;
+}
+
+/* HUD Reticles and Grid Patterns */
+.hud-grid {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(125, 244, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(125, 244, 255, 0.06) 1px, transparent 1px);
+}
+
+.hud-radar-glow {
+  box-shadow: 0 0 25px -3px rgba(125, 244, 255, 0.15);
+}
+
+.hud-violet-glow {
+  box-shadow: 0 0 25px -3px rgba(209, 188, 255, 0.15);
+}
+
+/* Animations */
+@keyframes radar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-radar {
+  animation: radar-sweep 8s linear infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.9; }
+  50% { transform: scale(1.15); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.9; }
+}
+
+.live-pulse {
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Stale Warning Banner */
+.stale-warning {
+  background: rgba(147, 0, 10, 0.85);
+  border: 1px solid #ffb4ab;
+  color: #ffdad6;
+  animation: flash-warning 1s ease-in-out infinite alternate;
+}
+
+@keyframes flash-warning {
+  from { opacity: 0.85; }
+  to { opacity: 1; }
+}
+
+/* Monospace Numbers Alignment */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Canvas styling */
+canvas {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Smooth transitions */
+.transition-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
