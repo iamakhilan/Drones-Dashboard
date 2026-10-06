@@ -1,39 +1,19 @@
-# 🛰️ Drone VIO Ground Control Dashboard
+# 🛰️ AeroVIO Ground Station — Monocular Visual-Inertial Odometry & 3D Mapping
 
-An advanced, high-precision avionics ground control interface designed for autonomous drones equipped with Monocular Visual-Inertial Odometry (VIO), real-time 3D point cloud mapping, and ROS 2 telemetry streaming.
+A modern, high-precision SaaS-style ground control interface designed for autonomous drones equipped with Monocular Visual-Inertial Odometry (VIO), real-time 3D spatial reconstruction, and ROS 2 computational graph telemetry.
 
-![Dashboard Preview](drone_vio_screen_89764d85cb77486e852b5b488c2f5fff.png)
+![Dashboard Preview](stitch_screen_5f02e90f849a4a9b90ee2d2da12b516a.png)
 
 ---
 
 ## ⚡ Features
 
-- **Spatial VIO Matrix & HUD**: Real-time position, velocity, orientation (quaternions & Euler angles), and attitude stability telemetry.
-- **3D Point Cloud & Trajectory Stream**: Interactive point cloud mapping viewer with dynamic drift covariance calculations.
-- **Monocular Feature Tracking Feed**: Live camera feed with optical flow landmark points and keyframe tracking crosshairs.
-- **ROS 2 Pipeline Graph & Diagnostics**: High-frequency packet rate monitor (120+ Hz), latency tracking (<5ms), and node status inspection.
-- **Avionics Cockpit Aesthetics**: Dark-mode HUD design tailored for mission control and field engineering operations.
-
----
-
-## 🚁 Drone Hardware Configuration
-
-![Drone Prototype](drone_prototype_render.png)
-
-- **Airframe**: Toray T700 Carbon Fiber Quadrotor
-- **All-Up Weight (AUW)**: 1.42 kg
-- **Power Bus**: 14.8V (4S LiPo)
-- **Sensor Suite**:
-  - Global Shutter Monocular Optical Flow Camera
-  - 6-DoF Low-Noise Industrial IMU (Acc + Gyro)
-  - RTK-GPS Dual-Antenna Subsystem
-  - LiDAR Rangefinder Module
-
----
-
-## 📷 Monocular Camera Optical Tracking
-
-![Tracking Feed](monocular_tracking_feed.png)
+- **Keyframe Summary & Filter KPI Cards**: Harris-FAST corner detector metrics (248 pts), estimation rate (60 Hz), sliding window MSCKF clones (11/15), and displacement tracking.
+- **Monocular Optical Feed Viewport**: Real-time KLT tracker with 248 keypoint overlays, optical flow vectors, pinhole + Brown-Conrady lens model parameters, and FOV diagnostics.
+- **3D Spatial Reconstruction & Pose**: Synthetic 3D isometric SLAM grid projection, global NED origin triad, camera frustums along trajectory splines, and coordinate HUD overlay.
+- **Precision Telemetry Matrix**: Global NED position (North, East, Down), linear kinematics with ADIS-16470 IMU accelerations, and SO(3) quaternion attitude/angular rates.
+- **Analytics & Diagnostics Charts**: Clean line charts showing trajectory drift vs. RTK baseline and pre-integration innovation error σ (Ax/Ay/Az noise).
+- **ROS 2 Computational Pipeline**: Live worker thread table monitoring camera drivers, feature tracking, IMU publishers, and MSCKF estimator nodes.
 
 ---
 
@@ -56,5 +36,5 @@ An advanced, high-precision avionics ground control interface designed for auton
 
 ## 🛠️ Tech Stack
 
-- **UI / Styling**: HTML5, Tailwind CSS, Google Chivo & Space Mono Fonts, Material Symbols
-- **Visual Design**: Generated via Google Stitch & Antigravity
+- **UI / Styling**: HTML5, Tailwind CSS with Forms & Container Plugins, SF Mono / Inter fonts
+- **Visual Design**: Generated via Google Stitch (Screen ID: `5f02e90f849a4a9b90ee2d2da12b516a`)
