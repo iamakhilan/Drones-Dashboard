@@ -163,13 +163,18 @@
       if (window.telemetry) {
         const isConn = (status === 'CONNECTED');
         window.telemetry.state.connection.websocket = isConn;
-        window.telemetry.state.connection.ros = isConn;
-        window.telemetry.state.connection.state = isConn ? 'ROS 2 CONNECTED' : `ROS 2 ${status}`;
+        window.telemetry.state.connection.state = isConn 
+          ? (window.telemetry.mode === 'LIVE' ? 'BRIDGE LIVE' : 'BRIDGE DEMO') 
+          : `BRIDGE ${status}`;
         window.telemetry.state.connection.latency_ms = this.latencyMs;
         window.telemetry.state.health.websocket = isConn ? 'ONLINE' : (status === 'CONNECTING' ? 'READY' : 'DISCONNECTED');
         
-        if (!isConn && window.telemetry.mode === 'LIVE') {
-          window.telemetry.setDisconnectedState();
+        // A WebSocket connection means bridge is connected; ROS 2 status is updated truthfully from server payloads
+        if (!isConn) {
+          window.telemetry.state.connection.ros = false;
+          if (window.telemetry.mode === 'LIVE') {
+            window.telemetry.setDisconnectedState();
+          }
         }
       }
 
@@ -219,8 +224,16 @@
           this.latencyMs = +(performance.now() - this.lastPingSent).toFixed(1);
           if (window.telemetry) {
             window.telemetry.state.connection.latency_ms = this.latencyMs;
+            if (msg.ros2_connected !== undefined) {
+              window.telemetry.state.connection.ros = !!msg.ros2_connected;
+            }
           }
           return;
+        }
+
+        // Check for server broadcast telemetry with connection flags
+        if (msg.type === 'telemetry' && msg.ros2_connected !== undefined && window.telemetry) {
+          window.telemetry.state.connection.ros = !!msg.ros2_connected;
         }
 
         // Camera frame stream

@@ -403,10 +403,10 @@
       this.updateFromNormalizedData({
         timestamp: now,
         connection: {
-          ros: true,
+          ros: false,
           websocket: false,
-          latency_ms: 2.1,
-          state: 'DEMO MODE',
+          latency_ms: 1.8,
+          state: 'DEMO PLAYBACK',
           mode: 'DEMO',
           packet_rate_hz: 50
         },
