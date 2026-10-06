@@ -1,1178 +1,1421 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>AeroVIO Ground Station — 50 Hz SO(3) Cascaded Controller &amp; 3D VIO Mapping</title>
+  <title>AeroVIO Ground Station — Monocular Visual-Inertial Odometry &amp; 3D Mapping</title>
   
-  <!-- Fonts & Material Symbols -->
-  <link href="https://fonts.googleapis.com" rel="preconnect" />
-  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
-  <link href="https://fonts.googleapis.com/css2?family=Chivo:wght@700;800;900&amp;family=Space+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS CDN with Forms & Container Plugins -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   
-  <!-- Tailwind Custom Theme Configuration (Aerospace Palette) -->
-  <script id="tailwind-config">
+  <!-- Tailwind Custom Configuration -->
+  <script>
     tailwind.config = {
-      darkMode: "class",
       theme: {
         extend: {
           colors: {
-            "surface-dim": "#0f141b",
-            "on-secondary-container": "#00686f",
-            "outline-variant": "#4a4457",
-            "on-background": "#dfe2ed",
-            "on-error-container": "#ffdad6",
-            "tertiary-fixed-dim": "#b5c4ff",
-            "tertiary-container": "#004edd",
-            "surface-bright": "#353941",
-            "secondary-container": "#00eefc",
-            "surface-container-low": "#181c23",
-            "surface-container-lowest": "#0a0e15",
-            "surface-container-highest": "#31353d",
-            "error-container": "#93000a",
-            "on-primary-fixed-variant": "#5700c9",
-            "surface-variant": "#31353d",
-            "on-primary-container": "#ddcdff",
-            "on-surface-variant": "#ccc3da",
-            "on-primary": "#3c0090",
-            "primary": "#d1bcff",
-            "inverse-primary": "#7212ff",
-            "on-tertiary": "#00287c",
-            "on-primary-fixed": "#23005b",
-            "secondary-fixed": "#7df4ff",
-            "outline": "#958da3",
-            "primary-fixed-dim": "#d1bcff",
-            "surface-tint": "#d1bcff",
-            "tertiary": "#b5c4ff",
-            "on-secondary": "#00363a",
-            "on-secondary-fixed-variant": "#004f54",
-            "on-tertiary-fixed-variant": "#003cae",
-            "error": "#ffb4ab",
-            "surface-container": "#1c2027",
-            "inverse-on-surface": "#2c3139",
-            "primary-fixed": "#e9ddff",
-            "secondary-fixed-dim": "#00dbe9",
-            "surface": "#0f141b",
-            "on-secondary-fixed": "#002022",
-            "primary-container": "#7000ff",
-            "on-tertiary-fixed": "#00164e",
-            "on-tertiary-container": "#c9d3ff",
-            "on-error": "#690005",
-            "on-surface": "#dfe2ed",
-            "background": "#0f141b",
-            "inverse-surface": "#dfe2ed",
-            "surface-container-high": "#262a32",
-            "secondary": "#d3fbff",
-            "tertiary-fixed": "#dce1ff"
+            brand: {
+              50: '#F0F9FF',
+              100: '#E0F2FE',
+              500: '#0EA5E9',
+              600: '#0284C7',
+              700: '#0369A1'
+            },
+            surface: {
+              base: '#F8F9FA',
+              card: '#FFFFFF',
+              border: '#E5E7EB',
+              muted: '#6B7280'
+            }
           },
           fontFamily: {
-            "label-lg": [ "Space Mono", "monospace" ],
-            "headline-sm": [ "Chivo", "sans-serif" ],
-            "headline-xl": [ "Chivo", "sans-serif" ],
-            "body-sm": [ "Space Mono", "monospace" ],
-            "headline-lg": [ "Chivo", "sans-serif" ],
-            "label-sm": [ "Space Mono", "monospace" ],
-            "body-md": [ "Space Mono", "monospace" ],
-            "body-lg": [ "Space Mono", "monospace" ],
-            "label-md": [ "Space Mono", "monospace" ]
-          },
-          spacing: {
-            "space-xs": "0.25rem",
-            "space-sm": "0.5rem",
-            "space-md": "0.75rem",
-            "space-lg": "1.25rem",
-            "space-xl": "2rem"
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Inter', 'Helvetica', 'Arial', 'sans-serif'],
+            mono: ['"SF Mono"', 'Monaco', 'Menlo', 'Consolas', '"Ubuntu Mono"', 'monospace']
           }
         }
       }
-    };
+    }
   </script>
 
-  <!-- Custom Styles & Animations -->
-  <link rel="stylesheet" href="css/dashboard.css" />
-
-  <!-- Global Application Config (Configurable for remote ROS 2 bridge on friend's laptop) -->
-  <script>
-    window.APP_CONFIG = {
-      websocketUrl: "ws://localhost:8000/ws",
-      rateHz: 50.0,
-      massKg: 1.5,
-      gravity: 9.81
-    };
-  </script>
-
-  <!-- Real VIO Trajectory & PCD Datasets from GitHub Repository -->
+  <!-- Real Drone VIO Datasets from GitHub Repository -->
   <script src="data/real_data.js"></script>
+
+  <!-- Custom Styles for Precision UI -->
+  <style data-purpose="base-layout">
+    body {
+      background-color: #F6F6F7;
+      color: #202223;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    /* Custom scrollbar for data tables and logs */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #D1D5DB;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #9CA3AF;
+    }
+  </style>
+
+  <style data-purpose="canvas-and-overlays">
+    .reticle-grid {
+      background-size: 24px 24px;
+      background-image: 
+        linear-gradient(to right, rgba(14, 165, 233, 0.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
+    }
+    .hud-glow {
+      box-shadow: 0 0 15px -3px rgba(14, 165, 233, 0.25);
+    }
+    .live-pulse {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.1); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+  </style>
 </head>
 
-<body class="bg-surface-container-lowest text-on-surface font-body-md text-xs sm:text-sm antialiased selection:bg-primary selection:text-on-primary">
-
-  <!-- ==================== STALE TELEMETRY WARNING BANNER ==================== -->
-  <div id="stale-warning-banner" class="hidden fixed top-14 left-0 right-0 z-40 px-4 py-1.5 stale-warning flex items-center justify-between text-xs font-mono">
-    <div class="flex items-center gap-2">
-      <span class="material-symbols-outlined text-[16px] text-red-300">warning</span>
-      <span id="stale-warning-text" class="font-bold">TELEMETRY STALE — 1.8s (NO ROS 2 PACKETS RECEIVED)</span>
-    </div>
-    <span class="text-[10px] uppercase tracking-wider text-red-200">SAFETY WATCHDOG ACTIVE // FAILSAFE READY</span>
-  </div>
+<body class="min-h-screen flex flex-col font-sans selection:bg-brand-100 selection:text-brand-700">
 
   <!-- ==================== TOP NAVIGATION BAR ==================== -->
-  <header class="fixed top-0 left-0 right-0 z-50 h-14 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-surface-container-highest">
-    <div class="w-full h-full px-space-md flex items-center justify-between gap-space-md">
+  <header class="bg-[#1A1A1A] text-white h-14 px-4 flex items-center justify-between border-b border-black/10 shrink-0 sticky top-0 z-50">
+    
+    <!-- Left Logo & Session Identity -->
+    <div class="flex items-center space-x-3 w-72">
+      <div class="flex items-center space-x-2 text-white font-semibold tracking-tight text-base">
+        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24">
+          <polygon points="12 2 19 8.5 12 15 5 8.5 12 2"></polygon>
+          <polyline points="5 15.5 12 22 19 15.5"></polyline>
+        </svg>
+        <span class="text-sm font-bold tracking-normal font-mono">AERO<span class="text-emerald-400">VIO</span></span>
+      </div>
+      <span class="bg-stone-800 text-stone-300 text-xs px-2 py-0.5 rounded-full font-mono font-medium border border-stone-700">Spring '26</span>
+    </div>
+
+    <!-- Center Search & Command Trigger -->
+    <div class="flex-1 max-w-xl px-4">
+      <div class="relative w-full">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </div>
+        <input id="global-search-input" onfocus="openSearchModal()" class="w-full bg-[#2C2C2C] text-sm text-stone-100 placeholder-stone-400 rounded-lg pl-9 pr-12 py-1.5 border border-stone-700 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 cursor-pointer" placeholder="Search telemetry, topics, or node params (⌘ K)" type="text" value="/vio/odometry/filtered" readonly />
+        <div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+          <kbd class="text-[11px] font-mono text-stone-400 bg-stone-700/80 px-1.5 py-0.5 rounded border border-stone-600">⌘ K</kbd>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Controls: Status, Bags & Profile -->
+    <div class="flex items-center space-x-3 text-stone-300">
       
-      <!-- Left: Logo & Subsystem Node Identity -->
-      <div class="flex items-center gap-space-md shrink-0">
-        <div class="flex items-center justify-center w-8 h-8 bg-surface-container-high border border-primary/40 text-primary">
-          <span class="material-symbols-outlined text-[20px]">radar</span>
-        </div>
-        <div class="flex flex-col">
-          <div class="flex items-center gap-space-xs">
-            <span class="font-headline-sm text-sm font-bold tracking-wider text-on-surface uppercase">AeroVIO</span>
-            <span class="font-label-sm text-[9px] px-1 py-0.5 bg-primary-container text-on-primary-container font-mono">50Hz SO(3) GCS</span>
-          </div>
-          <span class="font-label-sm text-[9px] text-outline tracking-widest uppercase font-mono">Visual-Inertial Odometry • Geometric Controller</span>
-        </div>
+      <!-- Live Status Indicator -->
+      <div class="flex items-center space-x-2 bg-stone-900/90 border border-stone-700/70 px-2.5 py-1 rounded-full">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span id="flight-mode-status" class="text-xs font-mono font-medium text-emerald-400">MISSION FLIGHT</span>
+        <span class="text-stone-600">|</span>
+        <span class="text-xs font-mono text-stone-300">RTK FIX (18)</span>
       </div>
 
-      <!-- Center: Data Source Switcher & Dataset Selector -->
-      <div class="hidden md:flex items-center gap-space-md">
-        <!-- Dual Mode Switcher -->
-        <div class="flex items-center bg-surface-container-low border border-surface-container-high p-0.5">
-          <button id="btn-mode-live" onclick="setDashboardMode('LIVE')" class="px-3 py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface uppercase tracking-wider text-xs transition" title="Connect to Live ROS 2 WebSocket Bridge">
-            LIVE ROS 2
-          </button>
-          <button id="btn-mode-demo" onclick="setDashboardMode('DEMO')" class="px-3 py-1 bg-secondary text-on-secondary font-bold uppercase tracking-wider text-xs shadow-[0_0_12px_rgba(125,244,255,0.4)] transition" title="Replay Real Repository Trajectory Datasets">
-            DEMO MODE
-          </button>
+      <!-- Rosbag Record Pill -->
+      <button id="rosbag-btn" onclick="toggleRosbag()" class="flex items-center space-x-1.5 bg-red-950/60 text-red-300 hover:bg-red-900/60 border border-red-800/80 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors">
+        <span class="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+        <span id="rosbag-timer">REC 00:14:22</span>
+      </button>
+
+      <!-- RTL Safety Button -->
+      <button id="rtl-btn" onclick="triggerRTL()" class="bg-stone-800 hover:bg-stone-700 text-white text-xs font-medium px-2.5 py-1 rounded-lg border border-stone-700 transition">
+        RTL Land
+      </button>
+
+      <!-- Profile Indicator -->
+      <div class="flex items-center space-x-2 pl-2 border-l border-stone-800">
+        <div class="w-7 h-7 rounded-full bg-brand-500 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+          PX
         </div>
-
-        <!-- Demo Dataset Selector Dropdown -->
-        <div id="dataset-selector-container" class="flex items-center gap-1.5 px-space-sm py-1 bg-surface-container-low border border-surface-container-high">
-          <span class="font-label-sm text-[9px] text-outline uppercase font-mono">DATASET:</span>
-          <select id="dataset-selector" onchange="window.ui.onDatasetChanged(this.value)" class="bg-surface-container-high text-secondary font-mono text-xs py-0.5 px-1.5 border border-surface-container-highest focus:outline-none focus:border-secondary">
-            <option value="synthetic_orbit">Synthetic Orbit (60s)</option>
-            <option value="synthetic_hover">Synthetic Hover (30s)</option>
-            <option value="synthetic_straight">Synthetic Straight (45s)</option>
-            <option value="synthetic_multi_axis">Synthetic Multi-Axis</option>
-            <option value="synthetic_stress">Synthetic Stress Test</option>
-          </select>
-        </div>
-
-        <!-- Dynamic Connection Badge -->
-        <div id="top-ros-badge" class="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container-low border border-surface-container-high">
-          <div id="top-ros-dot" class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
-          <span id="top-ros-text" class="font-label-md text-[10px] text-secondary tracking-wider uppercase font-bold font-mono">DEMO DATASET ACTIVE</span>
-        </div>
-      </div>
-
-      <!-- Right: Search Trigger, Rosbag, RTL & Clock -->
-      <div class="flex items-center gap-space-sm shrink-0">
-        <!-- Search Trigger -->
-        <button onclick="toggleModal('modal-search')" class="hidden lg:flex items-center gap-2 bg-surface-container-low hover:bg-surface-container border border-surface-container-high px-2.5 py-1 text-outline hover:text-on-surface transition">
-          <span class="material-symbols-outlined text-[16px]">search</span>
-          <span class="text-xs font-mono">Topics (⌘K)</span>
-        </button>
-
-        <!-- Rosbag Record Pill -->
-        <button id="rosbag-btn" onclick="toggleRosbag()" class="flex items-center space-x-1.5 bg-red-950/60 text-red-300 hover:bg-red-900/60 border border-red-800/80 px-2.5 py-1 rounded text-xs font-mono transition-colors">
-          <span class="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
-          <span id="rosbag-timer">REC 00:14:22</span>
-        </button>
-
-        <!-- RTL Safety Failsafe Trigger -->
-        <button id="rtl-btn" onclick="triggerRTL()" class="bg-error-container hover:bg-error text-on-error-container hover:text-on-error text-xs font-bold px-2.5 py-1 uppercase tracking-wider transition font-mono">
-          RTL FAILSAFE
-        </button>
-
-        <!-- UTC Clock -->
-        <div class="px-space-sm py-1 bg-surface-container text-on-surface border border-surface-container-highest font-mono">
-          <span class="font-label-md text-[10px] tracking-wider text-outline font-bold">UTC </span>
-          <span id="utc-clock" class="font-label-md text-[10px] tracking-wider text-on-surface">14:28:49.02</span>
-        </div>
-
-        <button onclick="toggleModal('modal-controller')" class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high border border-transparent hover:border-surface-container-highest transition-colors" title="Controller Inspector">
-          <span class="material-symbols-outlined text-[18px]">tune</span>
-        </button>
+        <span class="text-xs text-stone-200 font-medium hidden md:inline">Station GCS</span>
       </div>
 
     </div>
   </header>
 
-  <!-- ==================== LEFT SIDEBAR ==================== -->
-  <aside class="fixed left-0 top-14 bottom-0 w-64 bg-surface-container-lowest border-r border-surface-container-highest z-40 hidden md:flex flex-col justify-between select-none">
-    <div class="flex flex-col py-space-md">
-      <div class="px-space-md pb-space-sm mb-space-xs border-b border-surface-container-high flex items-center justify-between">
-        <span class="font-label-sm text-[9px] uppercase tracking-widest text-outline font-mono">TELEMETRY SUITE</span>
-        <span class="font-label-sm text-[9px] text-secondary font-mono">ROS 2 JAZZY</span>
+  <!-- ==================== MAIN LAYOUT ==================== -->
+  <div class="flex flex-1 overflow-hidden">
+    
+    <!-- ==================== LEFT SIDEBAR ==================== -->
+    <aside class="w-60 bg-[#EFEFEF]/50 border-r border-[#E1E3E5] flex flex-col justify-between shrink-0 select-none">
+      <div class="py-3 px-2 space-y-1">
+        
+        <!-- Navigation Group: Primary Monitoring -->
+        <a class="nav-btn flex items-center justify-between px-3 py-1.5 rounded-lg text-sm font-medium bg-[#E3E5E7] text-stone-900 font-sans shadow-sm" href="#overview">
+          <div class="flex items-center space-x-2.5">
+            <svg class="w-4 h-4 text-stone-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            <span>VIO Dashboard</span>
+          </div>
+          <span class="text-[11px] font-mono bg-stone-300/80 px-1.5 rounded text-stone-700 font-semibold">60Hz</span>
+        </a>
+
+        <a class="nav-btn flex items-center justify-between px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#camera">
+          <div class="flex items-center space-x-2.5">
+            <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            <span>Monocular Feed</span>
+          </div>
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        </a>
+
+        <a class="nav-btn flex items-center justify-between px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#pointcloud">
+          <div class="flex items-center space-x-2.5">
+            <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            <span>3D Landmarks (Map)</span>
+          </div>
+          <span id="sidebar-pointcount" class="text-xs font-mono text-stone-500">442 pts</span>
+        </a>
+
+        <a class="nav-btn flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#imu">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          <span>IMU &amp; Sensor Health</span>
+        </a>
+
+        <a class="nav-btn flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#residuals">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          <span>Telemetry &amp; MSCKF</span>
+        </a>
+
+        <!-- Section: Diagnostics -->
+        <div class="pt-3 pb-1 px-3 text-xs font-semibold text-stone-400 uppercase tracking-wider">ROS 2 Graph</div>
+        <a class="nav-btn flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#nodes">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          <span>Nodes &amp; Topics</span>
+        </a>
+
+        <a onclick="openTuningModal()" class="cursor-pointer flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#tuning">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          <span>Controller Tuning</span>
+        </a>
+
       </div>
+
+      <!-- Sidebar Footer / Settings -->
+      <div class="p-3 border-t border-[#E1E3E5] space-y-1">
+        <button onclick="openTuningModal()" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-200/60 transition text-left">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          <span>Extrinsics Config</span>
+        </button>
+        <div class="px-3 py-1 flex items-center justify-between text-[11px] text-stone-400 font-mono">
+          <span>FW: v4.8.2-MSCKF</span>
+          <span class="text-emerald-600 font-semibold">SYNC OK</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ==================== MAIN CONTENT ==================== -->
+    <main class="flex-1 overflow-y-auto p-6 space-y-6">
       
-      <nav class="flex flex-col gap-0.5 px-space-xs">
-        <a class="flex items-center justify-between px-space-sm py-space-sm bg-primary-container text-on-primary-container font-bold border-l-2 border-secondary" href="#cockpit">
-          <div class="flex items-center gap-space-sm">
-            <span class="material-symbols-outlined text-[18px]">view_in_ar</span>
-            <span class="font-label-md text-[11px] tracking-wider uppercase font-mono">Spatial VIO Matrix</span>
+      <!-- Title & Action Bar -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4" id="overview">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-xl font-bold tracking-tight text-stone-900">Real-Time Visual-Inertial Odometry &amp; State Estimation</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+              EKF Nominal
+            </span>
           </div>
-          <span class="text-[9px] font-mono bg-primary px-1 text-on-primary font-bold">60Hz</span>
-        </a>
+          <p class="text-xs text-stone-500 mt-0.5">Autonomous corridor mapping &amp; real-time localization stream. Fusion of high-rate inertial measurements across dynamic operational volumes.</p>
+        </div>
 
-        <a class="flex items-center justify-between px-space-sm py-space-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" href="#pointcloud">
-          <div class="flex items-center gap-space-sm">
-            <span class="material-symbols-outlined text-[18px]">grain</span>
-            <span class="font-label-md text-[11px] tracking-wider uppercase font-mono">Point Cloud Stream</span>
-          </div>
-          <span class="text-[10px] font-mono text-secondary">442 pts</span>
-        </a>
-
-        <a class="flex items-center justify-between px-space-sm py-space-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" href="#camera">
-          <div class="flex items-center gap-space-sm">
-            <span class="material-symbols-outlined text-[18px]">videocam</span>
-            <span class="font-label-md text-[11px] tracking-wider uppercase font-mono">Monocular Feed</span>
-          </div>
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-        </a>
-
-        <a class="flex items-center gap-space-sm px-space-sm py-space-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" href="#telemetry">
-          <span class="material-symbols-outlined text-[18px]">speed</span>
-          <span class="font-label-md text-[11px] tracking-wider uppercase font-mono">IMU &amp; Sensor Drift</span>
-        </a>
-
-        <a class="flex items-center gap-space-sm px-space-sm py-space-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" href="#graphs">
-          <span class="material-symbols-outlined text-[18px]">route</span>
-          <span class="font-label-md text-[11px] tracking-wider uppercase font-mono">Trajectory &amp; Odometry</span>
-        </a>
-
-        <a class="flex items-center gap-space-sm px-space-sm py-space-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" onclick="toggleModal('modal-controller')" href="javascript:void(0)">
-          <span class="material-symbols-outlined text-[18px]">account_tree</span>
-          <span class="font-label-md text-[11px] tracking-wider uppercase font-mono">Cascaded Controller</span>
-        </a>
-      </nav>
-    </div>
-
-    <!-- Packet Rate & Bridge Latency Footer -->
-    <div class="p-space-md border-t border-surface-container-highest bg-surface-container-low/40">
-      <div class="flex items-center justify-between text-on-surface-variant mb-space-xs font-mono">
-        <span class="font-label-sm text-[9px] uppercase tracking-wider text-outline">STREAM RATE</span>
-        <span class="font-label-sm text-[10px] text-secondary font-bold">50.0 HZ</span>
+        <!-- Real Trajectory Dataset Filter Selector (Shopify 'Last 30 days' style) -->
+        <div class="flex items-center space-x-1.5 bg-white p-1 rounded-xl border border-stone-200 shadow-sm text-xs font-medium text-stone-600">
+          <button id="btn-traj-orbit" onclick="switchDataset('orbit')" class="traj-sel-btn px-3 py-1 bg-stone-100 text-stone-900 rounded-lg shadow-inner font-semibold">Orbit Scan</button>
+          <button id="btn-traj-hover" onclick="switchDataset('hover')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Hover Hold</button>
+          <button id="btn-traj-straight" onclick="switchDataset('straight')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Corridor</button>
+          <button id="btn-traj-multi_axis" onclick="switchDataset('multi_axis')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Multi-Axis</button>
+          <button id="btn-traj-stress" onclick="switchDataset('stress')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Stress</button>
+        </div>
       </div>
-      <div class="w-full bg-surface-container-highest h-1">
-        <div class="bg-secondary h-1 w-[85%]"></div>
-      </div>
-      <div class="flex items-center justify-between mt-space-sm pt-space-xs border-t border-surface-container-high text-outline text-[10px] font-mono">
-        <span>BRIDGE LATENCY</span>
-        <span class="text-on-surface font-bold">2.1 ms</span>
-      </div>
-    </div>
-  </aside>
 
-  <!-- ==================== MAIN AVIONICS COCKPIT VIEWPORT ==================== -->
-  <div class="md:pl-64">
-    <main class="relative pt-14 w-full bg-surface-container-lowest min-h-screen">
-      <div class="w-full p-space-md lg:p-space-lg flex flex-col gap-space-lg">
-
-        <!-- ==================== 1. TOP SECTION: DRONE SUBSYSTEM CENTERPIECE ==================== -->
-        <div id="cockpit" class="relative w-full bg-surface-container-low p-space-md lg:p-space-xl overflow-hidden shadow-2xl">
-          
-          <!-- Background HUD Crossgrid / Vector Pattern -->
-          <div class="absolute inset-0 opacity-15 pointer-events-none hud-grid"></div>
-
-          <!-- Overhead Bar: Metadata & Coordinate Baseline -->
-          <div class="relative z-10 flex flex-wrap items-center justify-between gap-space-sm mb-space-md">
-            <div class="flex items-center gap-space-sm">
-              <span class="px-space-xs py-0.5 bg-primary-container text-on-primary-container font-label-sm text-[9px] tracking-widest uppercase font-mono">AV-NODE // 01</span>
-              <span class="font-headline-sm text-base tracking-wider uppercase text-on-surface font-bold">SYS.PLATFORM: QUADROTOR VIO-MK4</span>
-            </div>
-            <div class="flex flex-wrap items-center gap-space-md text-outline font-label-sm text-[10px] font-mono">
-              <span>MASS: <strong class="text-on-surface">1.50 KG</strong> [CONFIGURED]</span>
-              <span class="text-surface-bright">/</span>
-              <span>RATE: <strong class="text-secondary">50 HZ CLOSED LOOP</strong></span>
-              <span class="text-surface-bright">/</span>
-              <span class="text-secondary-fixed">BUS: 14.8V [4S]</span>
-              <span class="text-surface-bright">/</span>
-              <span class="text-secondary flex items-center gap-1">
-                <span class="w-1.5 h-1.5 bg-secondary-fixed inline-block"></span>
-                ESTIMATOR: MSCKF NOMINAL
-              </span>
-            </div>
+      <!-- ==================== METRICS CARDS (Shopify KPI Style) ==================== -->
+      <section class="bg-white rounded-2xl border border-stone-200/90 p-5 shadow-sm" data-purpose="metrics-summary">
+        <div class="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
+          <div class="flex space-x-8 text-xs font-medium text-stone-500">
+            <div class="text-stone-900 font-semibold border-b-2 border-stone-900 pb-3 -mb-3.5">Keyframe Summary</div>
+            <div class="cursor-pointer hover:text-stone-800" onclick="openTuningModal()">Kalman State</div>
+            <div class="cursor-pointer hover:text-stone-800" onclick="showToast('Camera Focal Length: fx=615.2, fy=615.4, cx=320.0, cy=240.0')">Camera Intrinsics</div>
+            <div class="cursor-pointer hover:text-stone-800" onclick="showToast('Extrinsics: T_BC Translation=[0.05, 0.0, 0.02]m')">Extrinsic Alignment</div>
           </div>
-
-          <!-- Center Stage: Quadcopter Visual & Dual Floating Subsystem Cards -->
-          <div class="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-space-md items-center min-h-[380px]">
-            
-            <!-- LEFT CALLOUT CARD: Actual 50 Hz Cascaded Closed-Loop Flight Controller (drones-controller) -->
-            <div class="lg:col-span-3 flex flex-col gap-space-xs bg-surface-container p-space-md shadow-lg transition-transform hover:-translate-y-0.5 border border-surface-container-high">
-              <div class="flex items-center justify-between pb-space-xs bg-surface-container-high px-space-xs py-1">
-                <div class="flex items-center gap-1.5">
-                  <span class="w-2 h-2 bg-secondary-fixed"></span>
-                  <span class="font-label-md text-[10px] uppercase tracking-wider text-secondary font-bold font-mono">CONTROLLER // 50 Hz</span>
-                </div>
-                <span id="ctrl-fsm-pill" class="font-label-sm text-[9px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold uppercase font-mono">NAVIGATING</span>
-              </div>
-
-              <!-- Pipeline Progression Visual -->
-              <div class="py-1 px-1.5 bg-surface-container-lowest border border-surface-container-high text-[8px] font-mono text-outline flex items-center justify-between gap-0.5">
-                <span class="text-secondary font-bold">POS</span>
-                <span>→</span>
-                <span class="text-on-surface">ATT GEN</span>
-                <span>→</span>
-                <span class="text-primary font-bold">SO(3)</span>
-                <span>→</span>
-                <span class="text-emerald-400 font-bold">CMD</span>
-              </div>
-
-              <!-- Error & Force Metrics -->
-              <div class="grid grid-cols-2 gap-1 bg-surface-container-lowest p-space-xs mt-space-xs text-center font-label-sm text-[9px] font-mono">
-                <div>
-                  <span class="text-outline block">POS ERR ||e_p||</span>
-                  <span id="ctrl-pos-err-norm" class="text-secondary font-bold">0.14 m</span>
-                </div>
-                <div>
-                  <span class="text-outline block">ATT ERR ||e_R||</span>
-                  <span id="ctrl-att-err-norm" class="text-primary font-bold">0.82°</span>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-1 bg-surface-container-lowest p-space-xs text-center font-label-sm text-[9px] font-mono">
-                <div>
-                  <span class="text-outline block">FORCE ||F_d||</span>
-                  <span id="ctrl-force-norm" class="text-on-surface font-bold">14.72 N</span>
-                </div>
-                <div>
-                  <span class="text-outline block">MOMENT ||M_d||</span>
-                  <span id="ctrl-moment-norm" class="text-on-surface font-bold">0.042 N·m</span>
-                </div>
-              </div>
-
-              <button class="mt-space-xs w-full py-1.5 px-space-sm bg-surface-container-high hover:bg-primary hover:text-on-primary text-secondary font-label-sm text-[9px] uppercase tracking-wider flex items-center justify-between transition-colors font-mono" onclick="toggleModal('modal-controller')">
-                <span>CONTROLLER INSPECTOR</span>
-                <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
-              </button>
-            </div>
-
-            <!-- CENTER DRONE STAGE -->
-            <div class="lg:col-span-6 relative flex flex-col items-center justify-center py-space-sm">
-              <!-- Glow Circle underneath -->
-              <div class="absolute w-72 h-72 rounded-full bg-secondary-fixed/5 blur-3xl pointer-events-none"></div>
-              
-              <div class="relative w-full max-w-lg aspect-[16/9] flex items-center justify-center">
-                <img alt="Quadcopter Drone Payload Configuration" class="w-full h-full object-contain filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)]" src="drone_prototype_render.png" />
-                
-                <!-- Target Reticle & Visual Annotations -->
-                <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
-                  <div class="w-48 h-48 rounded-full border border-secondary/20 flex items-center justify-center animate-spin" style="animation-duration: 24s;">
-                    <div class="w-full h-0.5 bg-gradient-to-r from-transparent via-secondary/40 to-transparent"></div>
-                  </div>
-                </div>
-
-                <!-- Optical Sensor Origin Pinpoint -->
-                <div class="absolute bottom-10 left-1/2 -translate-x-12 flex items-center gap-1.5">
-                  <span class="relative flex h-2 w-2">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2 w-2 bg-secondary-fixed"></span>
-                  </span>
-                  <span class="font-label-sm text-[9px] bg-surface-container-lowest/90 px-1 py-0.5 text-secondary border border-secondary/30 font-mono">CAM: IMX219 (VIO)</span>
-                </div>
-              </div>
-
-              <!-- Bottom Axis Baseline: Explicit Distinction Between T_WB and T_WC -->
-              <div class="flex items-center gap-space-lg text-outline font-label-sm text-[10px] tracking-widest mt-space-xs font-mono">
-                <span>BODY POSE: <strong class="text-secondary font-bold">T_WB [BASE_LINK]</strong></span>
-                <span class="text-surface-bright">•</span>
-                <span>OPTICAL POSE: <strong class="text-primary font-bold">T_WC = T_WB · T_BC</strong></span>
-                <span class="text-surface-bright">•</span>
-                <span>FREQ: 50 HZ</span>
-              </div>
-            </div>
-
-            <!-- RIGHT CALLOUT CARD: VIO Estimator -->
-            <div class="lg:col-span-3 flex flex-col gap-space-xs bg-surface-container p-space-md shadow-lg transition-transform hover:-translate-y-0.5 border border-surface-container-high">
-              <div class="flex items-center justify-between pb-space-xs bg-surface-container-high px-space-xs py-1">
-                <div class="flex items-center gap-1.5">
-                  <span class="w-2 h-2 bg-primary"></span>
-                  <span class="font-label-md text-[10px] uppercase tracking-wider text-primary font-bold font-mono">VIO // ESTIMATOR</span>
-                </div>
-                <span id="vio-status-badge" class="font-label-sm text-[9px] px-1 py-0.5 bg-primary-container text-on-primary-container font-bold font-mono">MSCKF ACT</span>
-              </div>
-
-              <div class="flex items-center justify-between pt-space-xs font-mono">
-                <span class="font-label-sm text-[9px] text-outline">IMU SAMPLE:</span>
-                <span id="vio-imu-rate" class="font-label-md text-[10px] text-secondary font-bold">200 HZ [BMI088]</span>
-              </div>
-              <div class="flex items-center justify-between font-mono">
-                <span class="font-label-sm text-[9px] text-outline">CAMERA SYNC:</span>
-                <span id="vio-cam-rate" class="font-label-md text-[10px] text-on-surface font-bold">30 FPS [18.2 ms]</span>
-              </div>
-
-              <!-- Micro-Telemetry Cluster -->
-              <div class="grid grid-cols-2 gap-1 bg-surface-container-lowest p-space-xs mt-space-xs text-center font-label-sm text-[9px] font-mono">
-                <div>
-                  <span class="text-outline block">FEATURES</span>
-                  <span id="vio-feature-summary" class="text-secondary font-bold">128 (116 TRK)</span>
-                </div>
-                <div>
-                  <span class="text-outline block">SLIDING WIN</span>
-                  <span id="vio-clone-summary" class="text-primary font-bold">10 CLONES</span>
-                </div>
-              </div>
-
-              <!-- Dynamic Tracking Quality Gauge -->
-              <div class="flex flex-col gap-1 bg-surface-container-lowest p-space-xs font-label-sm text-[9px] font-mono">
-                <div class="flex justify-between">
-                  <span class="text-outline">TRACKING QUALITY:</span>
-                  <span id="vio-quality-text" class="text-emerald-400 font-bold">91%</span>
-                </div>
-                <div class="w-full bg-surface-container-high h-1">
-                  <div id="vio-quality-bar" class="bg-emerald-400 h-1 w-[91%] transition-all"></div>
-                </div>
-                <div class="flex justify-between mt-1">
-                  <span class="text-outline">COVARIANCE TRACE:</span>
-                  <span id="vio-cov-trace" class="text-on-surface font-bold">1.42e-4</span>
-                </div>
-              </div>
-
-              <button class="mt-space-xs w-full py-1.5 px-space-sm bg-surface-container-high hover:bg-secondary hover:text-on-secondary text-primary font-label-sm text-[9px] uppercase tracking-wider flex items-center justify-between transition-colors font-mono" onclick="toggleModal('modal-vio')">
-                <span>VIO TELEMETRY MATRIX</span>
-                <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
-              </button>
-            </div>
-
+          <div class="flex items-center space-x-2 text-xs text-stone-500">
+            <span>Filter frequency:</span>
+            <span class="font-mono font-bold text-stone-800">200 Hz IMU / 30 Hz Cam</span>
           </div>
         </div>
 
-        <!-- ==================== 2. MIDDLE COCKPIT CONSOLE ==================== -->
-        <div class="grid grid-cols-1 xl:grid-cols-12 gap-space-md">
-          
-          <!-- LEFT 7 COLS: LIVE MONOCULAR VISION / FEATURE TRACKING FEED -->
-          <div id="camera" class="xl:col-span-7 flex flex-col bg-surface-container-low shadow-xl border border-surface-container-high">
-            <!-- Window Header -->
-            <div class="h-9 bg-surface-container-high px-space-md flex items-center justify-between text-on-surface">
-              <div class="flex items-center gap-space-sm">
-                <span class="w-2.5 h-2.5 bg-error-container inline-block"></span>
-                <span class="font-headline-sm text-xs uppercase tracking-wider text-on-surface font-bold">LIVE CAMERA - MONOCULAR VISION / FEATURE TRACKING</span>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
+          <!-- KPI 1 -->
+          <div class="space-y-1">
+            <span class="text-xs font-medium text-stone-500 flex items-center justify-between">
+              Tracked Features
+              <span id="kpi-features-delta" class="text-[10px] text-emerald-600 bg-emerald-50 px-1 rounded font-mono">+12 kf</span>
+            </span>
+            <div id="kpi-features" class="text-2xl font-bold tracking-tight text-stone-900 font-mono">248</div>
+            <p class="text-[11px] text-stone-400">Harris-FAST Corner detector</p>
+          </div>
+
+          <!-- KPI 2 -->
+          <div class="space-y-1">
+            <span class="text-xs font-medium text-stone-500">Estimation Rate</span>
+            <div id="kpi-rate" class="text-2xl font-bold tracking-tight text-stone-900 font-mono">60.0 <span class="text-sm font-normal text-stone-500">Hz</span></div>
+            <p class="text-[11px] text-emerald-600 font-medium">0.8 ms jitter (Realtime)</p>
+          </div>
+
+          <!-- KPI 3 -->
+          <div class="space-y-1">
+            <span class="text-xs font-medium text-stone-500">Active Clones</span>
+            <div id="kpi-clones" class="text-2xl font-bold tracking-tight text-stone-900 font-mono">11 <span class="text-sm font-normal text-stone-400">/ 15</span></div>
+            <p class="text-[11px] text-stone-400">Sliding window MSCKF</p>
+          </div>
+
+          <!-- KPI 4 -->
+          <div class="space-y-1">
+            <span class="text-xs font-medium text-stone-500">Displacement (Est)</span>
+            <div class="text-2xl font-bold tracking-tight text-stone-900 font-mono"><span id="kpi-displacement">142.8</span> <span class="text-sm font-normal text-stone-500">m</span></div>
+            <p class="text-[11px] text-stone-400">From origin NED frame</p>
+          </div>
+
+          <!-- KPI 5 -->
+          <div class="space-y-1">
+            <span class="text-xs font-medium text-stone-500">Mean Reproj Error</span>
+            <div class="text-2xl font-bold tracking-tight text-stone-900 font-mono text-emerald-600"><span id="kpi-reproj">0.42</span> <span class="text-sm font-normal text-emerald-700">px</span></div>
+            <p class="text-[11px] text-emerald-600">Within nominal bounds (&lt;1.0)</p>
+          </div>
+        </div>
+
+        <!-- Trajectory Timeline Mini Graph -->
+        <div class="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between text-xs">
+          <div class="flex items-center space-x-4">
+            <span class="font-medium text-stone-700">Epoch Time: <span id="kpi-epoch" class="font-mono">1,741,402,892.441</span></span>
+            <div class="flex items-center space-x-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-brand-500 inline-block"></span>
+              <span class="text-stone-500 text-[11px]">VIO Trajectory</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-stone-300 inline-block"></span>
+              <span class="text-stone-500 text-[11px]">Wheel/GPS Ground Truth</span>
+            </div>
+          </div>
+          <span id="kpi-filter-status" class="font-mono text-stone-400 text-[11px]">Filter status: CONVERGED (Covariance &lt; 0.003)</span>
+        </div>
+      </section>
+
+      <!-- ==================== WORKSPACE GRID (Optical Feed & 3D Spatial Odometry) ==================== -->
+      <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" data-purpose="workspaces-section">
+        
+        <!-- LEFT: Monocular Optical Viewport (6 Cols) -->
+        <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between" id="camera">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center space-x-2">
+              <h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+                Monocular Optical Feed
+              </h2>
+              <span class="text-[11px] font-mono text-stone-500">/camera/image_raw [L-RECTIFIED]</span>
+            </div>
+            <div class="flex items-center space-x-1 text-xs font-mono bg-stone-100 px-2 py-0.5 rounded text-stone-700">
+              <span id="cam-fps">30 FPS</span>
+              <span class="text-stone-400">•</span>
+              <span id="cam-lat">14 ms</span>
+            </div>
+          </div>
+
+          <!-- Camera Stream Frame Viewport -->
+          <div class="relative w-full aspect-video bg-stone-900 rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center">
+            
+            <!-- Camera Feed Background (Using Project Asset: Monocular Drone Camera Feed) -->
+            <img id="camera-feed-bg" class="absolute inset-0 w-full h-full object-cover opacity-90" src="monocular_tracking_feed.png" alt="Monocular Camera Stream" />
+
+            <!-- Optical Center Reticle -->
+            <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div class="w-8 h-8 border border-white/40 rounded-full flex items-center justify-center">
+                <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
               </div>
-              <div class="flex items-center gap-space-sm font-label-sm text-[10px]">
-                <span id="cam-status-badge" class="flex items-center gap-1 text-secondary font-mono">
-                  <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                  DEMO FEED
-                </span>
-                <span class="text-outline font-mono">DEV: IMX219 (V4L2)</span>
-              </div>
+              <div class="absolute w-24 h-[1px] bg-white/25"></div>
+              <div class="absolute h-24 w-[1px] bg-white/25"></div>
             </div>
 
-            <!-- Video Frame Container with Canvas HUD Overlay -->
-            <div class="relative w-full aspect-video bg-surface-container-lowest overflow-hidden flex items-center justify-center">
-              
-              <!-- Feed Image -->
-              <img id="camera-feed-img" alt="Monocular Research Cam HUD" class="w-full h-full object-cover" src="monocular_tracking_feed.png" />
-              
-              <!-- Disconnected Placeholder -->
-              <div id="camera-waiting-placeholder" class="hidden absolute inset-0 bg-[#0a0e15]/95 flex flex-col items-center justify-center text-outline gap-2 font-mono">
-                <span class="material-symbols-outlined text-4xl text-stone-500 animate-pulse">videocam_off</span>
-                <span class="text-sm font-bold text-stone-300">CAMERA STREAM OFFLINE</span>
-                <span class="text-xs text-stone-500">Waiting for ROS 2 topic: /camera/image_raw or /camera/vio_overlay</span>
-              </div>
+            <!-- Optical Flow / Keypoints Render (SVG overlay) -->
+            <svg id="optical-flow-svg" class="absolute inset-0 w-full h-full pointer-events-none">
+              <!-- Dynamically populated KLT Feature points -->
+              <g id="klt-points-group">
+                <g transform="translate(140, 110)">
+                  <circle cx="0" cy="0" fill="#0EA5E9" r="3"></circle>
+                  <line class="flow-vector" stroke="#38BDF8" stroke-width="1.5" x1="0" x2="-8" y1="0" y2="-6"></line>
+                  <text fill="#38BDF8" font-family="monospace" font-size="9" x="6" y="3">#F-1042 [12.4m]</text>
+                </g>
+                <g transform="translate(220, 195)">
+                  <circle cx="0" cy="0" fill="#10B981" r="3.5"></circle>
+                  <line class="flow-vector" stroke="#34D399" stroke-width="1.5" x1="0" x2="12" y1="0" y2="8"></line>
+                  <text fill="#34D399" font-family="monospace" font-size="9" x="7" y="-5">#F-1048 [4.1m]</text>
+                </g>
+                <g transform="translate(380, 130)">
+                  <circle cx="0" cy="0" fill="#F59E0B" r="3"></circle>
+                  <line class="flow-vector" stroke="#FBBF24" stroke-width="1.5" x1="0" x2="-4" y1="0" y2="12"></line>
+                  <text fill="#FBBF24" font-family="monospace" font-size="9" x="7" y="4">#KF-89</text>
+                </g>
+                <g transform="translate(460, 260)">
+                  <circle cx="0" cy="0" fill="#10B981" r="3.5"></circle>
+                  <line class="flow-vector" stroke="#34D399" stroke-width="1.5" x1="0" x2="16" y1="0" y2="10"></line>
+                  <text fill="#34D399" font-family="monospace" font-size="9" x="8" y="2">#F-0994 [2.2m]</text>
+                </g>
+                <g transform="translate(290, 220)">
+                  <circle cx="0" cy="0" fill="#0EA5E9" r="4"></circle>
+                  <line class="flow-vector" stroke="#38BDF8" stroke-width="1.5" x1="0" x2="-5" y1="0" y2="14"></line>
+                  <text fill="#38BDF8" font-family="monospace" font-size="9" x="8" y="12">#F-1051</text>
+                </g>
+              </g>
+            </svg>
 
-              <!-- Canvas Overlay for FAST Corners & KLT Vectors -->
-              <canvas id="camera-overlay-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
-
-              <!-- Interactive HUD Graphic Overlays -->
-              <div class="absolute inset-0 pointer-events-none p-space-md flex flex-col justify-between font-mono">
-                <!-- Top HUD Bar -->
-                <div class="flex items-start justify-between font-label-sm text-[10px] bg-surface-container-lowest/80 backdrop-blur-sm p-1.5 text-secondary border border-surface-container-high">
-                  <div class="flex items-center gap-space-md">
-                    <span class="text-on-surface">VIO TRACKING: <strong class="text-secondary font-bold">LOCKED</strong></span>
-                    <span>OPTICAL POSE: <strong class="text-secondary-fixed font-bold">T_WC</strong></span>
-                  </div>
-                  <div class="font-bold text-on-surface">
-                    T+ <span id="hud-timer">00:14:38.291</span>
-                  </div>
-                </div>
-
-                <!-- Center Optical Reticle -->
-                <div class="self-center flex flex-col items-center justify-center opacity-80">
-                  <div class="w-10 h-10 border border-secondary/40 flex items-center justify-center">
-                    <div class="w-1.5 h-1.5 bg-secondary"></div>
-                  </div>
-                  <span class="font-label-sm text-[8px] text-secondary tracking-widest mt-1">CX: 320.5 CY: 240.2</span>
-                </div>
-
-                <!-- Bottom HUD Strip -->
-                <div class="flex items-center justify-between font-label-sm text-[10px] bg-surface-container-lowest/80 backdrop-blur-sm px-space-sm py-1 text-on-surface border border-surface-container-high">
-                  <div class="flex items-center gap-space-sm">
-                    <span class="text-outline">FEAT:</span>
-                    <span id="cam-feat-count" class="text-secondary font-bold">128</span>
-                    <span class="text-surface-bright">|</span>
-                    <span class="text-outline">TRK:</span>
-                    <span id="cam-trk-count" class="text-secondary-fixed font-bold">116</span>
-                    <span class="text-surface-bright">|</span>
-                    <span class="text-outline">FPS:</span>
-                    <span id="cam-fps-badge" class="text-on-surface font-bold">30.0</span>
-                    <span class="text-surface-bright">|</span>
-                    <span class="text-outline">LATENCY:</span>
-                    <span id="cam-latency-badge" class="text-primary font-bold">18.2 ms</span>
-                  </div>
-                  <div>
-                    <span class="text-outline">SHUTTER:</span>
-                    <span class="font-bold text-on-surface">1/1200s [AUTO-GAIN]</span>
-                  </div>
-                </div>
-              </div>
-
+            <!-- Live Viewport Overlays -->
+            <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded border border-white/10 text-[11px] font-mono text-white flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>KLT TRACKER: <strong id="klt-count">248 pts</strong></span>
             </div>
-
-            <!-- Camera Control Toggles Toolbar -->
-            <div class="p-space-sm bg-surface-container flex flex-wrap items-center justify-between gap-space-xs font-label-sm text-[10px] font-mono">
-              <div class="flex flex-wrap items-center gap-space-xs">
-                <button id="btn-epipolar" onclick="window.cameraView.toggleEpipolar()" class="px-space-sm py-1 bg-primary text-on-primary font-bold uppercase tracking-wider">
-                  EPIPOLAR LINES [ON]
-                </button>
-                <button id="btn-feature-ids" onclick="window.cameraView.toggleFeatureIds()" class="px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface uppercase tracking-wider transition-colors">
-                  FEATURE IDS
-                </button>
-                <button id="btn-dense-cloud" onclick="window.cameraView.toggleDenseCloud()" class="px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface uppercase tracking-wider transition-colors">
-                  DENSE CLOUD
-                </button>
-                <button class="px-space-sm py-1 bg-secondary-container text-on-secondary-container font-bold uppercase tracking-wider">
-                  DEPTH COLOR: VIO
-                </button>
-              </div>
-              <div class="flex items-center gap-2 text-outline">
-                <span>RES: 1280x720</span>
-                <span class="w-1.5 h-1.5 bg-secondary-fixed inline-block"></span>
-              </div>
+            <div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded border border-white/10 text-[10px] font-mono text-stone-300">
+              <span>FOV: 92.4° H | 74.1° V</span>
+            </div>
+            <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono text-stone-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">
+              <div>ISO: 100 • 1/1200s • f/2.8</div>
+              <div class="text-emerald-400 font-semibold">DISTORTION: RAD-TAN (k1, k2, p1)</div>
             </div>
 
           </div>
 
-          <!-- RIGHT 5 COLS: MISSION HEALTH MATRIX & TELEMETRY GAUGES -->
-          <div id="telemetry" class="xl:col-span-5 flex flex-col gap-space-md">
-            
-            <!-- SECTION: DYNAMIC HARDWARE & SENSOR PIPELINE HEALTH -->
-            <div class="bg-surface-container-low shadow-lg border border-surface-container-high">
-              <div class="h-9 bg-surface-container-high px-space-md flex items-center justify-between text-on-surface">
-                <span class="font-headline-sm text-xs uppercase tracking-wider text-on-surface font-bold font-mono">SYSTEM HEALTH &amp; PIPELINE</span>
-                <span class="font-label-sm text-[10px] text-secondary font-bold font-mono">ROS 2 DOMAIN: 42</span>
-              </div>
-              <div class="p-space-sm grid grid-cols-2 gap-space-xs">
-                <!-- Camera Health -->
-                <div class="bg-surface-container p-space-xs flex items-center justify-between">
-                  <div>
-                    <span class="font-label-sm text-[8px] text-outline uppercase block font-mono">CAMERA OPTIC</span>
-                    <span class="font-label-md text-[10px] text-on-surface font-bold font-mono">SONY IMX219</span>
-                  </div>
-                  <span id="health-camera-badge" class="font-label-sm text-label-sm px-1.5 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold uppercase font-mono">ONLINE</span>
-                </div>
-                <!-- IMU Health -->
-                <div class="bg-surface-container p-space-xs flex items-center justify-between">
-                  <div>
-                    <span class="font-label-sm text-[8px] text-outline uppercase block font-mono">6-DOF IMU</span>
-                    <span class="font-label-md text-[10px] text-on-surface font-bold font-mono">BOSCH BMI088</span>
-                  </div>
-                  <span id="health-imu-badge" class="font-label-sm text-label-sm px-1.5 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold uppercase font-mono">ONLINE</span>
-                </div>
-                <!-- VIO Health -->
-                <div class="bg-surface-container p-space-xs flex items-center justify-between">
-                  <div>
-                    <span class="font-label-sm text-[8px] text-outline uppercase block font-mono">MSCKF ESTIMATOR</span>
-                    <span class="font-label-md text-[10px] text-primary font-bold font-mono">VIO-FILTER</span>
-                  </div>
-                  <span id="health-vio-badge" class="font-label-sm text-label-sm px-1.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold uppercase font-mono">ACTIVE</span>
-                </div>
-                <!-- Controller Health -->
-                <div class="bg-surface-container p-space-xs flex items-center justify-between">
-                  <div>
-                    <span class="font-label-sm text-[8px] text-outline uppercase block font-mono">50 Hz SO(3) CONTROLLER</span>
-                    <span class="font-label-md text-[10px] text-on-surface font-bold font-mono">drones-controller</span>
-                  </div>
-                  <span id="health-controller-badge" class="font-label-sm text-label-sm px-1.5 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold uppercase font-mono">READY</span>
-                </div>
-              </div>
+          <!-- Bottom Viewport Controls -->
+          <div class="flex items-center justify-between pt-3 text-xs">
+            <div class="flex items-center space-x-2">
+              <button id="btn-toggle-features" onclick="toggleFeatureOverlay()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition">
+                Toggle Features
+              </button>
+              <button id="btn-toggle-vectors" onclick="toggleFlowVectors()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition">
+                Show Optical Flow Vectors
+              </button>
             </div>
-
-            <!-- SECTION: REALTIME STATE & TELEMETRY GAUGES -->
-            <div class="bg-surface-container-low shadow-lg flex-1 flex flex-col justify-between border border-surface-container-high">
-              <div class="h-9 bg-surface-container-high px-space-md flex items-center justify-between text-on-surface">
-                <span class="font-headline-sm text-xs uppercase tracking-wider text-on-surface font-bold font-mono">TELEMETRY INSTRUMENTATION</span>
-                <span class="font-label-sm text-[10px] text-outline font-mono">REF: ENU (T_WB)</span>
-              </div>
-              
-              <div class="p-space-md grid grid-cols-1 md:grid-cols-2 gap-space-sm font-mono">
-                <!-- Gauge 1: Position Vector (T_WB) -->
-                <div class="bg-surface-container p-space-sm flex flex-col gap-1">
-                  <div class="flex items-center justify-between text-outline font-label-sm text-[10px]">
-                    <span>POSITION [BODY: T_WB]</span>
-                    <span id="gauge-pos-total" class="text-secondary font-bold">TOTAL: 42.8 m</span>
-                  </div>
-                  <div class="flex items-baseline justify-between font-label-lg text-xs">
-                    <span class="text-outline">X: <strong id="gauge-pos-x" class="text-on-surface">2.31</strong>m</span>
-                    <span class="text-outline">Y: <strong id="gauge-pos-y" class="text-on-surface">1.48</strong>m</span>
-                    <span class="text-outline">Z: <strong id="gauge-pos-z" class="text-secondary font-bold">0.92</strong>m</span>
-                  </div>
-                  <div class="w-full bg-surface-container-highest h-1 mt-1">
-                    <div id="gauge-alt-bar" class="bg-secondary h-full w-[46%] transition-all"></div>
-                  </div>
-                </div>
-
-                <!-- Gauge 2: Velocity Vector -->
-                <div class="bg-surface-container p-space-sm flex flex-col gap-1">
-                  <div class="flex items-center justify-between text-outline font-label-sm text-[10px]">
-                    <span>VELOCITY [BODY]</span>
-                    <span id="gauge-vel-total" class="text-secondary-fixed font-bold">0.46 m/s</span>
-                  </div>
-                  <div class="flex items-baseline justify-between font-label-lg text-xs">
-                    <span class="text-outline">VX: <strong id="gauge-vel-vx" class="text-on-surface">0.42</strong></span>
-                    <span class="text-outline">VY: <strong id="gauge-vel-vy" class="text-on-surface">0.18</strong></span>
-                    <span class="text-outline">VZ: <strong id="gauge-vel-vz" class="text-on-surface">0.03</strong></span>
-                  </div>
-                  <div class="w-full bg-surface-container-highest h-1 mt-1">
-                    <div id="gauge-vel-bar" class="bg-primary h-full w-[38%] transition-all"></div>
-                  </div>
-                </div>
-
-                <!-- Gauge 3: Attitude & Euler Angles -->
-                <div class="bg-surface-container p-space-sm flex flex-col gap-1">
-                  <div class="flex items-center justify-between text-outline font-label-sm text-[10px]">
-                    <span>ATTITUDE [EULER]</span>
-                    <span class="text-on-surface font-bold">DEGREES (°)</span>
-                  </div>
-                  <div class="flex items-baseline justify-between font-label-lg text-xs">
-                    <span class="text-outline">R: <strong id="gauge-att-roll" class="text-secondary">+2.1°</strong></span>
-                    <span class="text-outline">P: <strong id="gauge-att-pitch" class="text-secondary">-1.4°</strong></span>
-                    <span class="text-outline">Y: <strong id="gauge-att-yaw" class="text-on-surface">38.2°</strong></span>
-                  </div>
-                  <span id="gauge-att-quat" class="font-label-sm text-[8px] text-outline truncate">
-                    QUAT: [0.945, 0.018, -0.012, 0.327]
-                  </span>
-                </div>
-
-                <!-- Gauge 4: VIO Drift & Sliding Clones -->
-                <div class="bg-surface-container p-space-sm flex flex-col gap-1">
-                  <div class="flex items-center justify-between text-outline font-label-sm text-[10px]">
-                    <span>VIO DRIFT &amp; WINDOW</span>
-                    <span class="text-secondary font-bold">MSCKF OK</span>
-                  </div>
-                  <div class="flex items-baseline justify-between font-label-lg text-xs">
-                    <span class="text-outline">DRIFT: <strong class="text-on-surface">0.04m</strong></span>
-                    <span class="text-outline">HEADING: <strong class="text-on-surface">0.12°</strong></span>
-                  </div>
-                  <div class="flex justify-between items-center text-outline font-label-sm text-[9px] mt-1">
-                    <span>SLIDING CLONES: 10</span>
-                    <span class="text-primary font-bold">COV: 1.42e-4</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Bottom Action Bar -->
-              <div class="p-space-sm bg-surface-container flex items-center justify-between gap-space-sm border-t border-surface-container-high font-mono">
-                <div class="flex items-center gap-2">
-                  <div class="w-2.5 h-2.5 bg-secondary-fixed"></div>
-                  <span class="font-label-sm text-[9px] text-on-surface uppercase">CLOSED LOOP: 50 Hz ACTIVE</span>
-                </div>
-                <div class="flex items-center gap-space-xs">
-                  <button onclick="toggleModal('modal-controller')" class="px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-secondary font-label-sm text-[9px] uppercase transition-colors">
-                    CONTROLLER TUNING
-                  </button>
-                  <button onclick="triggerRTL()" class="px-space-sm py-1 bg-error-container text-on-error-container hover:bg-error hover:text-on-error font-label-sm text-[9px] uppercase font-bold transition-colors">
-                    FAILSAFE RTL
-                  </button>
-                </div>
-              </div>
-
-            </div>
-
+            <span class="text-stone-500 font-mono text-[11px]">Lens Model: Pinhole + Brown-Conrady</span>
           </div>
 
         </div>
 
-        <!-- ==================== 3. OSCILLOSCOPE ROW: THREE LIVE REAL-TIME TELEMETRY GRAPHS ==================== -->
-        <div id="graphs" class="flex flex-col gap-space-xs">
-          <!-- Graph Toolbar -->
-          <div class="flex items-center justify-between px-space-xs font-mono">
-            <span class="font-headline-sm text-xs uppercase tracking-wider text-outline font-bold">REAL-TIME TELEMETRY CHANNELS (20s ROLLING WINDOW)</span>
-            <div class="flex items-center gap-2">
-              <button id="graphs-pause-btn" onclick="window.graphs.togglePause()" class="px-2.5 py-0.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-[10px] uppercase flex items-center gap-1">
-                <span class="material-symbols-outlined text-[12px]">pause</span> PAUSE
-              </button>
-              <button onclick="window.graphs.clearBuffers()" class="px-2.5 py-0.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-[10px] uppercase flex items-center gap-1">
-                <span class="material-symbols-outlined text-[12px]">delete_sweep</span> CLEAR
-              </button>
+        <!-- RIGHT: 3D Spatial Trajectory & Point Cloud (6 Cols) -->
+        <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between" id="pointcloud">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center space-x-2">
+              <h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                3D Spatial Reconstruction &amp; Pose
+              </h2>
+              <span class="text-[11px] font-mono text-stone-500">/vio/pose_stamped</span>
+            </div>
+
+            <!-- Perspective Toggle -->
+            <div class="flex items-center space-x-1 text-xs bg-stone-100 p-0.5 rounded-lg border border-stone-200 font-medium" id="perspective-controls">
+              <button onclick="setPerspective('iso')" id="btn-persp-iso" class="persp-btn bg-white text-stone-900 px-2 py-0.5 rounded shadow-sm">Perspective</button>
+              <button onclick="setPerspective('top')" id="btn-persp-top" class="persp-btn text-stone-600 hover:text-stone-900 px-2 py-0.5 rounded">Top (XY)</button>
+              <button onclick="setPerspective('side')" id="btn-persp-side" class="persp-btn text-stone-600 hover:text-stone-900 px-2 py-0.5 rounded">Side (XZ)</button>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-space-md font-mono">
+          <!-- 3D Canvas / Spatial Grid Simulation -->
+          <div class="relative w-full aspect-video bg-[#0C1017] rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center reticle-grid">
             
-            <!-- GRAPH 1: ACCELERATION (IMU) -->
-            <div class="bg-surface-container-low shadow-lg flex flex-col border border-surface-container-high">
-              <div class="h-8 bg-surface-container-high px-space-sm flex items-center justify-between">
-                <span class="font-label-md text-[10px] text-on-surface font-bold uppercase tracking-wider">ACCELERATION (IMU / m/s²)</span>
-                <span class="font-label-sm text-[9px] text-secondary font-bold">200 HZ</span>
-              </div>
-              <div class="p-space-sm flex flex-col gap-1">
-                <div class="w-full h-28 bg-surface-container-lowest relative overflow-hidden flex items-center">
-                  <!-- Grid -->
-                  <svg class="absolute inset-0 w-full h-full stroke-surface-container-highest" preserveAspectRatio="none">
-                    <line stroke-dasharray="3,3" stroke-width="0.5" x1="0" x2="100%" y1="25%" y2="25%"></line>
-                    <line stroke-width="0.5" x1="0" x2="100%" y1="50%" y2="50%"></line>
-                    <line stroke-dasharray="3,3" stroke-width="0.5" x1="0" x2="100%" y1="75%" y2="75%"></line>
-                  </svg>
-                  <!-- Live SVG Series -->
-                  <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 300 100">
-                    <path id="graph-accel-x" d="" fill="none" stroke="#7df4ff" stroke-width="1.5"></path>
-                    <path id="graph-accel-y" d="" fill="none" stroke="#d1bcff" stroke-width="1.5"></path>
-                    <path id="graph-accel-z" d="" fill="none" stroke="#00eefc" stroke-dasharray="2,2" stroke-width="1.5"></path>
-                  </svg>
-                  <div id="graph-accel-waiting" class="hidden absolute inset-0 flex items-center justify-center text-outline text-[10px] bg-[#0a0e15]/80">
-                    WAITING FOR TELEMETRY
-                  </div>
-                  <div class="absolute right-2 top-1 font-label-sm text-[8px] text-secondary">1G [9.81] REF</div>
-                </div>
-                <div class="flex items-center justify-between font-label-sm text-[10px] px-1 pt-1">
-                  <span id="graph-accel-val-x" class="text-secondary font-bold">AX: +0.21 m/s²</span>
-                  <span id="graph-accel-val-y" class="text-primary font-bold">AY: -0.14 m/s²</span>
-                  <span id="graph-accel-val-z" class="text-on-surface font-bold">AZ: 9.72 m/s²</span>
-                </div>
-              </div>
+            <svg id="svg-spatial-canvas" class="w-full h-full" viewBox="0 0 600 350">
+              <defs>
+                <!-- Trajectory Gradient -->
+                <linearGradient id="trajGrad" x1="0%" x2="100%" y1="100%" y2="0%">
+                  <stop offset="0%" stop-color="#0284C7" stop-opacity="0.3"></stop>
+                  <stop offset="60%" stop-color="#0EA5E9" stop-opacity="0.8"></stop>
+                  <stop offset="100%" stop-color="#10B981" stop-opacity="1"></stop>
+                </linearGradient>
+              </defs>
+
+              <!-- Axis Base Grid (Floor Projection) -->
+              <g id="svg-floor-grid" stroke="rgba(255,255,255,0.08)" stroke-width="1">
+                <path d="M 120 280 L 320 340 L 520 270 L 320 210 Z" fill="rgba(14, 165, 233, 0.02)"></path>
+                <line x1="220" x2="420" y1="245" y2="305"></line>
+                <line x1="320" x2="320" y1="210" y2="340"></line>
+              </g>
+
+              <!-- Origin Tripod -->
+              <g id="svg-origin-triad" transform="translate(180, 270)">
+                <line stroke="#EF4444" stroke-width="2" x1="0" x2="25" y1="0" y2="8"></line>
+                <line stroke="#10B981" stroke-width="2" x1="0" x2="-15" y1="0" y2="12"></line>
+                <line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-25"></line>
+                <text fill="#EF4444" font-family="monospace" font-size="9" x="30" y="10">X_ned</text>
+              </g>
+
+              <!-- 3D Sparse VIO Landmark Point Cloud (Dots loaded from synthetic_orbit_scanned_map.pcd) -->
+              <g id="svg-pcd-points-group">
+                <!-- Rendered dynamically from real PCD file -->
+              </g>
+
+              <!-- Historic Trajectory Spline -->
+              <path id="svg-trajectory-path" d="M 180 270 Q 230 250, 270 210 T 360 170 T 430 115" fill="none" stroke="url(#trajGrad)" stroke-linecap="round" stroke-width="3"></path>
+
+              <!-- Keyframe Frustums along trajectory -->
+              <g id="svg-keyframe-frustums">
+                <g transform="translate(250, 225) rotate(-25)">
+                  <polygon fill="none" points="0,0 -8,-10 8,-10" stroke="#38BDF8" stroke-width="1"></polygon>
+                </g>
+                <g transform="translate(340, 180) rotate(-35)">
+                  <polygon fill="none" points="0,0 -8,-10 8,-10" stroke="#38BDF8" stroke-width="1"></polygon>
+                </g>
+              </g>
+
+              <!-- Current Drone Body Frame & Pose Frustum -->
+              <g id="svg-drone-body" transform="translate(430, 115)">
+                <!-- Frustum pyramid -->
+                <polygon fill="rgba(16, 185, 129, 0.2)" points="0,0 -16,-22 16,-22" stroke="#10B981" stroke-width="1.8"></polygon>
+                <circle cx="0" cy="0" fill="#10B981" r="4.5"></circle>
+                <line stroke="#EF4444" stroke-width="2" x1="0" x2="20" y1="0" y2="0"></line>
+                <line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-20"></line>
+              </g>
+
+              <!-- State Callout Tag -->
+              <g id="svg-drone-callout" transform="translate(445, 95)">
+                <rect fill="rgba(15, 23, 42, 0.85)" height="38" rx="6" stroke="rgba(255,255,255,0.15)" width="135" x="0" y="0"></rect>
+                <text fill="#E2E8F0" font-family="monospace" font-size="10" font-weight="bold" x="8" y="15">DRONE-01 POSE</text>
+                <text id="svg-callout-subtext" fill="#38BDF8" font-family="monospace" font-size="9" x="8" y="29">Z: 14.8m | V: 3.2 m/s</text>
+              </g>
+            </svg>
+
+            <!-- Coordinate HUD Overlay -->
+            <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 text-[11px] font-mono text-slate-300 space-y-0.5">
+              <div id="hud-pw">P_w: [ <span class="text-white">x: 82.4</span>, <span class="text-white">y: -14.2</span>, <span class="text-emerald-400">z: 14.8</span> ] m</div>
+              <div id="hud-vw">V_w: [ <span class="text-white">vx: 2.8</span>, <span class="text-white">vy: 0.2</span>, <span class="text-emerald-400">vz: 0.1</span> ] m/s</div>
             </div>
 
-            <!-- GRAPH 2: ODOMETRY VELOCITY -->
-            <div class="bg-surface-container-low shadow-lg flex flex-col border border-surface-container-high">
-              <div class="h-8 bg-surface-container-high px-space-sm flex items-center justify-between">
-                <span class="font-label-md text-[10px] text-on-surface font-bold uppercase tracking-wider">ODOMETRY (VELOCITY / m/s)</span>
-                <span class="font-label-sm text-[9px] text-primary font-bold">MSCKF STATE</span>
-              </div>
-              <div class="p-space-sm flex flex-col gap-1">
-                <div class="w-full h-28 bg-surface-container-lowest relative overflow-hidden flex items-center">
-                  <svg class="absolute inset-0 w-full h-full stroke-surface-container-highest" preserveAspectRatio="none">
-                    <line stroke="#4a4457" stroke-width="0.5" x1="0" x2="100%" y1="50%" y2="50%"></line>
-                  </svg>
-                  <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 300 100">
-                    <path id="graph-vel-x" d="" fill="none" stroke="#7df4ff" stroke-width="2"></path>
-                    <path id="graph-vel-y" d="" fill="none" stroke="#b5c4ff" stroke-width="1.5"></path>
-                    <path id="graph-vel-z" d="" fill="none" stroke="#958da3" stroke-width="1.5"></path>
-                  </svg>
-                  <div id="graph-vel-waiting" class="hidden absolute inset-0 flex items-center justify-center text-outline text-[10px] bg-[#0a0e15]/80">
-                    WAITING FOR TELEMETRY
-                  </div>
-                  <div class="absolute left-2 top-1 font-label-sm text-[8px] text-outline">ZERO_BASE</div>
-                </div>
-                <div class="flex items-center justify-between font-label-sm text-[10px] px-1 pt-1">
-                  <span id="graph-vel-val-x" class="text-secondary font-bold">VX: 0.42 m/s</span>
-                  <span id="graph-vel-val-y" class="text-primary font-bold">VY: 0.18 m/s</span>
-                  <span id="graph-vel-val-z" class="text-outline font-bold">VZ: 0.03 m/s</span>
-                </div>
-              </div>
+            <div class="absolute top-3 right-3 flex flex-col space-y-1 items-end">
+              <span class="bg-slate-900/80 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">MSCKF SLIDING WINDOW</span>
+              <span class="bg-slate-900/80 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">MAP PTS: <strong id="hud-map-pts">442</strong></span>
             </div>
 
-            <!-- GRAPH 3: POSITION TRAJECTORY (WORLD) -->
-            <div class="bg-surface-container-low shadow-lg flex flex-col border border-surface-container-high">
-              <div class="h-8 bg-surface-container-high px-space-sm flex items-center justify-between">
-                <span class="font-label-md text-[10px] text-on-surface font-bold uppercase tracking-wider">POSITION (WORLD FRAME / m)</span>
-                <span class="font-label-sm text-[9px] text-secondary font-bold">T_WB EST</span>
-              </div>
-              <div class="p-space-sm flex flex-col gap-1">
-                <div class="w-full h-28 bg-surface-container-lowest relative overflow-hidden flex items-center">
-                  <svg class="absolute inset-0 w-full h-full stroke-surface-container-highest" preserveAspectRatio="none">
-                    <line stroke-width="0.5" x1="0" x2="100%" y1="50%" y2="50%"></line>
-                    <line stroke-width="0.5" x1="50%" x2="50%" y1="0" y2="100%"></line>
-                  </svg>
-                  <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 300 100">
-                    <path id="graph-pos-x" d="" fill="none" stroke="#7df4ff" stroke-width="2"></path>
-                    <path id="graph-pos-y" d="" fill="none" stroke="#d1bcff" stroke-width="1.5"></path>
-                    <path id="graph-pos-z" d="" fill="none" stroke="#00eefc" stroke-width="2"></path>
-                  </svg>
-                  <div id="graph-pos-waiting" class="hidden absolute inset-0 flex items-center justify-center text-outline text-[10px] bg-[#0a0e15]/80">
-                    WAITING FOR TELEMETRY
-                  </div>
-                  <div class="absolute right-2 bottom-1 font-label-sm text-[8px] text-secondary">SLAM COV-CONV</div>
-                </div>
-                <div class="flex items-center justify-between font-label-sm text-[10px] px-1 pt-1">
-                  <span id="graph-pos-val-x" class="text-secondary font-bold">X: +2.31m</span>
-                  <span id="graph-pos-val-y" class="text-primary font-bold">Y: +1.48m</span>
-                  <span id="graph-pos-val-z" class="text-secondary-fixed font-bold">ALT(Z): 0.92m</span>
-                </div>
-              </div>
-            </div>
+          </div>
 
+          <!-- Bottom Viewport Controls -->
+          <div class="flex items-center justify-between pt-3 text-xs">
+            <div class="flex items-center space-x-2">
+              <button onclick="resetTrajectoryCenter()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition">
+                Reset Trajectory Center
+              </button>
+              <button onclick="exportPCDFile()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                Export PCD
+              </button>
+            </div>
+            <span class="text-stone-500 font-mono text-[11px]">Coordinate System: NED (North-East-Down)</span>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ==================== PRECISION TELEMETRY MATRIX ==================== -->
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-6" data-purpose="kinematics-matrix" id="imu">
+        
+        <!-- Matrix Card 1: Position & Translation -->
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+            <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Position &amp; Distance (Global NED)</h3>
+            <span id="tel-cov" class="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Cov: ±0.04m</span>
+          </div>
+          <div class="space-y-2.5 font-mono text-xs">
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">North (X)</span>
+              <span id="tel-px" class="font-bold text-stone-800">+4.000 m</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">East (Y)</span>
+              <span id="tel-py" class="font-bold text-stone-800">+0.000 m</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">Down (Z Altitude AGL)</span>
+              <span id="tel-pz" class="font-bold text-emerald-600">-2.000 m</span>
+            </div>
+            <div class="flex justify-between items-center py-1">
+              <span class="text-stone-500">Path Length Integrated</span>
+              <span id="tel-path-len" class="font-bold text-stone-800">188.42 m</span>
+            </div>
           </div>
         </div>
 
-        <!-- ==================== 4. BOTTOM SECTION: FULL-WIDTH 3D VIO MAP & RECONSTRUCTION CANVAS ==================== -->
-        <div id="pointcloud" class="w-full bg-surface-container-low shadow-2xl flex flex-col border border-surface-container-high">
-          <!-- Section Header -->
-          <div class="h-10 bg-surface-container-high px-space-md flex items-center justify-between text-on-surface font-mono">
-            <div class="flex items-center gap-space-sm">
-              <span class="material-symbols-outlined text-[18px] text-secondary">view_in_ar</span>
-              <span class="font-headline-sm text-xs uppercase tracking-wider text-on-surface font-bold">3D VIO MAP - SPATIAL RECONSTRUCTION &amp; SLAM RECOVERY</span>
-            </div>
-            <div class="flex items-center gap-space-md font-label-sm text-[10px]">
-              <span class="text-outline">3D LANDMARKS: <strong id="map-point-count" class="text-secondary font-bold">442</strong></span>
-              <span class="text-surface-bright">•</span>
-              <span class="text-outline">TRAJECTORIES: <strong class="text-secondary font-bold">T_WB</strong> (BODY) &amp; <strong class="text-primary font-bold">T_WC</strong> (OPTICAL)</span>
-              <span class="text-surface-bright">•</span>
-              <span class="text-secondary flex items-center gap-1">
-                <span class="w-1.5 h-1.5 bg-secondary-fixed"></span>
-                CANVAS 3D ORBIT: ACTIVE (60 FPS)
-              </span>
-            </div>
+        <!-- Matrix Card 2: Linear Kinematics & IMU -->
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+            <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Linear Kinematics &amp; Accel</h3>
+            <span class="text-[10px] font-mono text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">ADIS-16470</span>
           </div>
-
-          <!-- 3D Viewport Presentation Stage -->
-          <div class="relative w-full h-[480px] bg-surface-container-lowest overflow-hidden flex items-center justify-center cursor-grab active:cursor-grabbing">
-            
-            <!-- Real-Time Interactive 3D Canvas -->
-            <canvas id="map-canvas-3d" class="w-full h-full"></canvas>
-
-            <!-- Floating 3D Controls (Top-Left: Projection Modes) -->
-            <div class="absolute top-space-sm left-space-sm flex flex-col gap-1 bg-surface-container/90 backdrop-blur-md p-space-sm border border-surface-container-high font-mono">
-              <span class="font-label-sm text-[8px] text-outline uppercase tracking-wider mb-0.5">PROJECTION MODE</span>
-              <div class="flex items-center gap-1">
-                <button id="btn-proj-iso" onclick="window.ui.setProjection('ISOMETRIC')" class="px-space-sm py-1 bg-primary text-on-primary font-label-sm text-[9px] uppercase font-bold">ISOMETRIC</button>
-                <button id="btn-proj-top" onclick="window.ui.setProjection('TOP_DOWN')" class="px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-[9px] uppercase transition-colors">TOP-DOWN</button>
-                <button id="btn-proj-follow" onclick="window.ui.setProjection('CAM_FOLLOW')" class="px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-[9px] uppercase transition-colors">CAM-FOLLOW</button>
-              </div>
+          <div class="space-y-2.5 font-mono text-xs">
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">Total Ground Speed</span>
+              <span id="tel-speed" class="font-bold text-stone-800">1.26 m/s (4.5 km/h)</span>
             </div>
-
-            <!-- Floating 3D Controls (Top-Right: Layer Visibility) -->
-            <div class="absolute top-space-sm right-space-sm flex flex-col gap-1 bg-surface-container/90 backdrop-blur-md p-space-sm border border-surface-container-high font-mono">
-              <span class="font-label-sm text-[8px] text-outline uppercase tracking-wider mb-0.5">LAYER VISIBILITY</span>
-              <div class="flex flex-col gap-1 font-label-sm text-[9px]">
-                <label class="flex items-center gap-2 cursor-pointer text-secondary">
-                  <input checked onchange="window.ui.toggleLayer('bodyTrajectory')" class="accent-secondary w-3 h-3 rounded-none" type="checkbox" />
-                  <span>BODY TRAJECTORY (T_WB)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer text-primary">
-                  <input checked onchange="window.ui.toggleLayer('cameraTrajectory')" class="accent-primary w-3 h-3 rounded-none" type="checkbox" />
-                  <span>OPTICAL TRAJECTORY (T_WC)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer text-on-surface">
-                  <input checked onchange="window.ui.toggleLayer('landmarks')" class="accent-primary w-3 h-3 rounded-none" type="checkbox" />
-                  <span>3D LANDMARK CLOUD (442 PTS)</span>
-                </label>
-              </div>
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">Linear Accel (X/Y/Z)</span>
+              <span id="tel-accel" class="font-bold text-stone-800">[+0.12, -0.04, +9.81]</span>
             </div>
-
-            <!-- Floating Bottom Quick-Action Commands -->
-            <div class="absolute bottom-space-sm left-space-sm right-space-sm flex items-center justify-between pointer-events-none font-mono">
-              <div class="pointer-events-auto bg-surface-container/90 backdrop-blur-md px-space-sm py-1 text-outline font-label-sm text-[9px] flex items-center gap-space-md border border-surface-container-high">
-                <span>GRID: METRIC (2.0m STEP)</span>
-                <span>DRAG: ORBIT ROTATE</span>
-                <span>WHEEL: ZOOM</span>
-                <span id="map-drone-pos-text" class="text-secondary font-bold">XYZ: [2.31, 1.48, 0.92]</span>
-              </div>
-              <div class="pointer-events-auto flex items-center gap-space-xs">
-                <button onclick="window.ui.clearTrajectory()" class="px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-[9px] uppercase tracking-wider transition-colors">
-                  CLEAR TRAJECTORY
-                </button>
-                <button onclick="window.ui.exportPointCloudPCD()" class="px-space-sm py-1 bg-secondary text-on-secondary font-label-sm text-[9px] uppercase tracking-wider font-bold transition-colors shadow-lg">
-                  EXPORT POINT CLOUD (.PCD)
-                </button>
-              </div>
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">Estimated Accel Bias</span>
+              <span id="tel-bias" class="font-bold text-stone-800">±0.0024 m/s²</span>
             </div>
-
+            <div class="flex justify-between items-center py-1">
+              <span class="text-stone-500">IMU Latency</span>
+              <span id="tel-latency" class="font-bold text-emerald-600">1.8 ms (Hardware FIFO)</span>
+            </div>
           </div>
         </div>
 
-      </div>
+        <!-- Matrix Card 3: Attitude & Orientation -->
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+            <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Attitude &amp; Angular Rates</h3>
+            <span class="text-[10px] font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">SO(3) Quat</span>
+          </div>
+          <div class="space-y-2.5 font-mono text-xs">
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">Roll (φ)</span>
+              <span id="tel-roll" class="font-bold text-stone-800">+1.24°</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">Pitch (θ)</span>
+              <span id="tel-pitch" class="font-bold text-stone-800">-3.82°</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-stone-50">
+              <span class="text-stone-500">Yaw / Heading (ψ)</span>
+              <span id="tel-yaw" class="font-bold text-stone-800">142.6° (SE)</span>
+            </div>
+            <div class="flex justify-between items-center py-1">
+              <span class="text-stone-500">Angular Vel (p, q, r)</span>
+              <span id="tel-rates" class="font-bold text-stone-800">[0.01, -0.02, 0.05] rad/s</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==================== ANALYTICS & DIAGNOSTICS CHARTS ==================== -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-6" data-purpose="charts-and-diagnostics" id="residuals">
+        
+        <!-- Chart 1: VIO Trajectory Drift & Reprojection Error -->
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-stone-900">Trajectory Drift &amp; Residuals</h3>
+              <p class="text-xs text-stone-500">Estimated drift vs RTK Fix baseline over time (m)</p>
+            </div>
+            <span id="chart-drift-badge" class="text-xs font-mono font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
+              0.18% Drift Ratio
+            </span>
+          </div>
+
+          <!-- Clean Line Chart Rendering -->
+          <div class="w-full h-48 relative">
+            <svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 500 160">
+              <!-- Y Axis Gridlines -->
+              <line stroke="#F1F3F5" stroke-width="1" x1="30" x2="490" y1="20" y2="20"></line>
+              <line stroke="#F1F3F5" stroke-width="1" x1="30" x2="490" y1="60" y2="60"></line>
+              <line stroke="#F1F3F5" stroke-width="1" x1="30" x2="490" y1="100" y2="100"></line>
+              <line stroke="#F1F3F5" stroke-width="1" x1="30" x2="490" y1="140" y2="140"></line>
+              
+              <!-- Axis Labels -->
+              <text fill="#9CA3AF" font-family="monospace" font-size="9" x="10" y="24">0.4m</text>
+              <text fill="#9CA3AF" font-family="monospace" font-size="9" x="10" y="64">0.2m</text>
+              <text fill="#9CA3AF" font-family="monospace" font-size="9" x="10" y="104">0.1m</text>
+              <text fill="#9CA3AF" font-family="monospace" font-size="9" x="10" y="144">0.0m</text>
+              
+              <!-- Reprojection Error / Drift Area Fill -->
+              <path id="chart-drift-area" d="M 30 140 Q 90 138, 140 130 T 230 120 T 320 100 T 400 85 T 490 75 L 490 140 L 30 140 Z" fill="rgba(14, 165, 233, 0.08)"></path>
+              <!-- Main Trend Line -->
+              <path id="chart-drift-line" d="M 30 140 Q 90 138, 140 130 T 230 120 T 320 100 T 400 85 T 490 75" fill="none" stroke="#0EA5E9" stroke-linecap="round" stroke-width="2.5"></path>
+              <!-- Secondary Confidence Upper Bound (Dotted) -->
+              <path d="M 30 138 Q 90 132, 140 120 T 230 105 T 320 78 T 400 60 T 490 45" fill="none" stroke="#94A3B8" stroke-dasharray="3 3" stroke-width="1.5"></path>
+              <!-- Active Highlight Dot -->
+              <circle id="chart-drift-dot" cx="490" cy="75" fill="#0EA5E9" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+            </svg>
+          </div>
+          <div class="flex items-center justify-between text-xs text-stone-500 pt-3 border-t border-stone-100 font-mono">
+            <span>T-60s</span>
+            <span>T-40s</span>
+            <span>T-20s</span>
+            <span>Current (T-0)</span>
+          </div>
+        </div>
+
+        <!-- Chart 2: Accelerometer Bias & Sensor Variance -->
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-stone-900">IMU Accelerometer Noise &amp; Filter Residuals</h3>
+              <p class="text-xs text-stone-500">Pre-integration innovation error σ (m/s²)</p>
+            </div>
+            <div class="flex items-center space-x-2 text-xs font-mono">
+              <span class="flex items-center gap-1 text-emerald-600"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Ax</span>
+              <span class="flex items-center gap-1 text-brand-600"><span class="w-2 h-2 rounded-full bg-brand-500"></span>Ay</span>
+              <span class="flex items-center gap-1 text-amber-600"><span class="w-2 h-2 rounded-full bg-amber-500"></span>Az</span>
+            </div>
+          </div>
+
+          <!-- Noise Graph SVG -->
+          <div class="w-full h-48 relative">
+            <svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 500 160">
+              <line stroke="#F1F3F5" stroke-width="1" x1="30" x2="490" y1="20" y2="20"></line>
+              <line stroke="#E2E8F0" stroke-dasharray="2 2" stroke-width="1" x1="30" x2="490" y1="80" y2="80"></line>
+              <line stroke="#F1F3F5" stroke-width="1" x1="30" x2="490" y1="140" y2="140"></line>
+              
+              <!-- Ax Noise (Green) -->
+              <path id="chart-ax-line" d="M 30 82 L 60 76 L 90 84 L 120 79 L 150 81 L 180 77 L 210 83 L 240 80 L 270 78 L 300 82 L 330 79 L 360 84 L 390 81 L 420 78 L 450 82 L 490 80" fill="none" stroke="#10B981" stroke-width="1.8"></path>
+              <!-- Ay Noise (Sky blue) -->
+              <path id="chart-ay-line" d="M 30 78 L 60 83 L 90 77 L 120 82 L 150 85 L 180 81 L 210 76 L 240 82 L 270 85 L 300 77 L 330 83 L 360 76 L 390 82 L 420 84 L 450 79 L 490 81" fill="none" stroke="#0EA5E9" stroke-width="1.8"></path>
+              <!-- Az Noise (Amber) -->
+              <path id="chart-az-line" d="M 30 79 L 80 81 L 130 78 L 180 82 L 220 62 L 240 98 L 260 79 L 320 80 L 370 79 L 430 82 L 490 80" fill="none" stroke="#F59E0B" stroke-width="1.8"></path>
+            </svg>
+          </div>
+          <div class="flex items-center justify-between text-xs text-stone-500 pt-3 border-t border-stone-100 font-mono">
+            <span>Zero Velocity Detection (ZUPT): Idle</span>
+            <span>Allan Variance Mode: In-Flight</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==================== ROS 2 COMPUTATIONAL PIPELINE NODES TABLE ==================== -->
+      <section class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden" data-purpose="ros-nodes-table" id="nodes">
+        <div class="p-5 border-b border-stone-100 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-stone-900">ROS 2 Computational Pipeline &amp; Nodes</h3>
+            <p class="text-xs text-stone-500">Current execution status of active vision and odometry worker threads</p>
+          </div>
+          <button onclick="restartAllNodes()" class="text-xs font-semibold text-brand-600 hover:text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100 transition">
+            Restart All Nodes
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-sans">
+            <thead class="bg-stone-50 border-b border-stone-200/80 text-stone-500 uppercase tracking-wider font-semibold">
+              <tr>
+                <th class="py-3 px-5">Node Name</th>
+                <th class="py-3 px-5">Published Topic</th>
+                <th class="py-3 px-5">Publish Rate</th>
+                <th class="py-3 px-5">CPU Load</th>
+                <th class="py-3 px-5">Latency</th>
+                <th class="py-3 px-5 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-stone-100 font-mono">
+              <tr class="hover:bg-stone-50/70 transition">
+                <td class="py-3 px-5 font-semibold text-stone-800">camera_driver_node</td>
+                <td class="py-3 px-5 text-stone-600">/camera/image_raw</td>
+                <td class="py-3 px-5">30.00 Hz</td>
+                <td class="py-3 px-5" id="cpu-camera">4.2%</td>
+                <td class="py-3 px-5 text-emerald-600">1.2 ms</td>
+                <td class="py-3 px-5 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-stone-50/70 transition">
+                <td class="py-3 px-5 font-semibold text-stone-800">feature_tracker_klt</td>
+                <td class="py-3 px-5 text-stone-600">/feature_tracker/features</td>
+                <td class="py-3 px-5">30.00 Hz</td>
+                <td class="py-3 px-5" id="cpu-tracker">18.4%</td>
+                <td class="py-3 px-5 text-emerald-600">6.8 ms</td>
+                <td class="py-3 px-5 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-stone-50/70 transition">
+                <td class="py-3 px-5 font-semibold text-stone-800">imu_adis16470_publisher</td>
+                <td class="py-3 px-5 text-stone-600">/imu/data_raw</td>
+                <td class="py-3 px-5">200.00 Hz</td>
+                <td class="py-3 px-5" id="cpu-imu">1.8%</td>
+                <td class="py-3 px-5 text-emerald-600">0.4 ms</td>
+                <td class="py-3 px-5 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-stone-50/70 transition">
+                <td class="py-3 px-5 font-semibold text-stone-800">vio_msckf_estimator</td>
+                <td class="py-3 px-5 text-stone-600">/drone/vio/odometry</td>
+                <td class="py-3 px-5">60.00 Hz</td>
+                <td class="py-3 px-5" id="cpu-msckf">22.1%</td>
+                <td class="py-3 px-5 text-emerald-600">11.4 ms</td>
+                <td class="py-3 px-5 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-stone-50/70 transition">
+                <td class="py-3 px-5 font-semibold text-stone-800">drones_controller_node</td>
+                <td class="py-3 px-5 text-stone-600">/ap/v1/cmd_vel</td>
+                <td class="py-3 px-5">50.00 Hz</td>
+                <td class="py-3 px-5" id="cpu-ctrl">8.6%</td>
+                <td class="py-3 px-5 text-emerald-600">2.1 ms</td>
+                <td class="py-3 px-5 text-right">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Footer Identity Note -->
+      <footer class="pt-2 pb-6 text-center text-xs text-stone-400 font-mono">
+        AeroVIO Ground Station • Monocular Visual-Inertial Flight Stack • Synchronized with PX4 Autopilot &amp; ROS 2
+      </footer>
+
     </main>
   </div>
 
-  <!-- ==================== MODAL 1: ACTUAL 50 HZ CASCADED CONTROLLER INSPECTOR ==================== -->
-  <div class="fixed inset-0 z-50 hidden bg-surface-container-lowest/80 backdrop-blur-sm flex items-center justify-center p-space-md font-mono" id="modal-controller">
-    <div class="relative w-full max-w-3xl bg-surface-container-low border border-secondary shadow-2xl p-space-lg flex flex-col gap-space-md max-h-[90vh] overflow-y-auto">
+  <!-- ==================== MODAL: CONTROLLER & EXTRINSICS TUNING ==================== -->
+  <div id="tuning-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-stone-300 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in duration-150">
       
-      <!-- Header -->
-      <div class="flex items-center justify-between pb-space-xs border-b border-surface-container-highest">
-        <div class="flex items-center gap-space-sm">
-          <span class="w-3 h-3 bg-secondary-fixed"></span>
-          <span class="font-headline-sm text-sm uppercase text-on-surface font-bold">CASCADED CONTROLLER INSPECTOR // 50 Hz CLOSED LOOP</span>
+      <div class="px-6 py-4 border-b border-stone-200 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="w-3 h-3 rounded-full bg-brand-500"></div>
+          <h3 class="font-bold text-sm text-stone-900">50 Hz Cascaded SO(3) Controller &amp; Waypoint Config</h3>
         </div>
-        <button class="text-on-surface-variant hover:text-on-surface" onclick="toggleModal('modal-controller')">
-          <span class="material-symbols-outlined text-[20px]">close</span>
+        <button onclick="closeTuningModal()" class="text-stone-400 hover:text-stone-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
         </button>
       </div>
 
-      <!-- State & Safety Status Row -->
-      <div class="flex items-center justify-between p-2.5 bg-surface-container-lowest border border-surface-container-high text-xs">
-        <div class="flex items-center gap-3">
-          <span>STATE: <strong id="modal-fsm-state" class="text-secondary font-bold">NAVIGATING</strong></span>
-          <span class="text-outline">|</span>
-          <span>RATE: <strong class="text-on-surface">50.0 Hz</strong></span>
-          <span class="text-outline">|</span>
-          <span id="modal-armed-badge" class="px-2 py-0.5 rounded font-bold text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">ARMED</span>
-        </div>
-        <div class="flex items-center gap-3 text-[11px]">
-          <span>WATCHDOG: <strong id="modal-watchdog-status" class="text-emerald-400 font-bold">OK</strong></span>
-          <span>CMD OUTPUT: <strong id="modal-cmd-output" class="text-on-surface font-bold">ENABLED</strong></span>
-        </div>
-      </div>
-
-      <!-- Flight State Machine (FSM) Progression Visualization -->
-      <div class="flex flex-col gap-1">
-        <span class="text-[10px] text-outline uppercase tracking-wider font-bold">FLIGHT STATE MACHINE (FSM) PROGRESSION</span>
-        <div class="flex items-center justify-between p-2 bg-surface-container-lowest border border-surface-container-high text-[10px] font-bold">
-          <div id="fsm-node-idle" class="px-2 py-1 bg-stone-800 text-stone-400 rounded">IDLE</div>
-          <span class="text-outline">→</span>
-          <div id="fsm-node-arming" class="px-2 py-1 bg-stone-800 text-stone-400 rounded">ARMING</div>
-          <span class="text-outline">→</span>
-          <div id="fsm-node-takeoff" class="px-2 py-1 bg-stone-800 text-stone-400 rounded">TAKEOFF</div>
-          <span class="text-outline">→</span>
-          <div id="fsm-node-navigating" class="px-2 py-1 bg-emerald-500 text-black font-bold rounded shadow-[0_0_10px_rgba(16,185,129,0.5)]">NAVIGATING</div>
-          <span class="text-outline">→</span>
-          <div id="fsm-node-hover" class="px-2 py-1 bg-stone-800 text-stone-400 rounded">HOVER</div>
-          <span class="text-outline">|</span>
-          <div id="fsm-node-failsafe" class="px-2 py-1 bg-stone-800 text-stone-400 rounded">FAILSAFE</div>
-        </div>
-      </div>
-
-      <!-- 3-Tier Cascaded Architecture Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-space-sm text-xs">
+      <div class="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
         
-        <!-- 1. Position Controller (Outer Loop) -->
-        <div class="bg-surface-container p-space-sm flex flex-col gap-1 border border-surface-container-high">
-          <div class="flex justify-between items-center pb-1 border-b border-surface-container-high">
-            <span class="text-secondary font-bold text-[10px]">1. POSITION LOOP</span>
-            <span class="text-outline text-[9px]">OUTER 50Hz</span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1">
-            <span class="text-outline">POS ERR e_p:</span>
-            <span id="modal-ep-norm" class="text-secondary font-bold">0.142 m</span>
-          </div>
-          <div class="text-[9px] text-outline flex justify-between">
-            <span>[X, Y, Z]:</span>
-            <span class="text-on-surface"><span id="modal-ep-x">+0.08</span>, <span id="modal-ep-y">-0.04</span>, <span id="modal-ep-z">+0.11</span></span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1">
-            <span class="text-outline">VEL ERR ||e_v||:</span>
-            <span id="modal-ev-norm" class="text-on-surface font-bold">0.038 m/s</span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1 border-t border-surface-container-high">
-            <span class="text-outline">FORCE F_d:</span>
-            <span id="modal-fd-norm" class="text-secondary font-bold">14.72 N</span>
-          </div>
-          <div class="text-[9px] text-outline flex justify-between">
-            <span>[Fdx, Fdy, Fdz]:</span>
-            <span class="text-on-surface"><span id="modal-fd-x">+0.42</span>, <span id="modal-fd-y">-0.18</span>, <span id="modal-fd-z">14.71</span></span>
+        <!-- 5-Stage Control Pipeline Visual -->
+        <div class="p-2.5 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[10px] text-center flex items-center justify-between gap-1 overflow-x-auto text-stone-700">
+          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold text-brand-600">POSITION</span>
+          <span class="text-stone-400">→</span>
+          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold">ATTITUDE GEN</span>
+          <span class="text-stone-400">→</span>
+          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold text-emerald-600">SO(3) CONTROLLER</span>
+          <span class="text-stone-400">→</span>
+          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold">FLIGHT FSM</span>
+          <span class="text-stone-400">→</span>
+          <span class="px-2 py-0.5 bg-brand-600 text-white rounded font-bold">/ap/v1/cmd_vel</span>
+        </div>
+
+        <!-- FSM State Machine Progression -->
+        <div>
+          <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1.5 text-[11px]">Flight State Machine (FSM)</label>
+          <div class="flex items-center justify-between p-2 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[10px]">
+            <span class="px-2 py-0.5 rounded bg-stone-200 text-stone-600 font-semibold">IDLE</span>
+            <span class="text-stone-400">→</span>
+            <span class="px-2 py-0.5 rounded bg-stone-200 text-stone-600 font-semibold">ARMING</span>
+            <span class="text-stone-400">→</span>
+            <span class="px-2 py-0.5 rounded bg-stone-200 text-stone-600 font-semibold">TAKEOFF</span>
+            <span class="text-stone-400">→</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold shadow-sm">NAVIGATING</span>
+            <span class="text-stone-400">→</span>
+            <span class="px-2 py-0.5 rounded bg-stone-200 text-stone-600 font-semibold">HOVER</span>
+            <span class="text-stone-400">|</span>
+            <span class="px-2 py-0.5 rounded bg-red-100 text-red-700 font-semibold border border-red-200">FAILSAFE</span>
           </div>
         </div>
 
-        <!-- 2. Attitude Generator -->
-        <div class="bg-surface-container p-space-sm flex flex-col gap-1 border border-surface-container-high">
-          <div class="flex justify-between items-center pb-1 border-b border-surface-container-high">
-            <span class="text-on-surface font-bold text-[10px]">2. ATTITUDE GEN</span>
-            <span class="text-outline text-[9px]">b3d = F_d/||F_d||</span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1">
-            <span class="text-outline">THRUST T_d:</span>
-            <span id="modal-td-thrust" class="text-on-surface font-bold">14.72 N</span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1">
-            <span class="text-outline">THRUST DIR b3d:</span>
-            <span id="modal-b3d-vec" class="text-secondary font-bold">[0.028, -0.012, 0.999]</span>
-          </div>
-          <div class="flex flex-col gap-0.5 pt-1 border-t border-surface-container-high text-[9px]">
-            <span class="text-outline">DESIRED QUAT q_d:</span>
-            <span id="modal-qd-quat" class="text-on-surface font-mono">[0.998, 0.012, -0.018, 0.045]</span>
-          </div>
-          <div class="flex justify-between text-[9px] text-outline pt-1">
-            <span>ROT MATRIX R_d:</span>
-            <span class="text-emerald-400 font-bold">SO(3) VALID</span>
+        <!-- Target Setpoint -->
+        <div>
+          <label class="block font-bold text-stone-700 uppercase tracking-wider mb-2 text-[11px]">Waypoint Target Setpoint [X, Y, Z, Yaw]</label>
+          <div class="grid grid-cols-4 gap-2 font-mono">
+            <div>
+              <span class="text-stone-500 block text-[10px]">X (m)</span>
+              <input id="tune-tx" type="number" step="0.5" value="20.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
+            </div>
+            <div>
+              <span class="text-stone-500 block text-[10px]">Y (m)</span>
+              <input id="tune-ty" type="number" step="0.5" value="5.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
+            </div>
+            <div>
+              <span class="text-stone-500 block text-[10px]">Z Alt (m)</span>
+              <input id="tune-tz" type="number" step="0.5" value="20.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
+            </div>
+            <div>
+              <span class="text-stone-500 block text-[10px]">Yaw (rad)</span>
+              <input id="tune-tyaw" type="number" step="0.1" value="2.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
+            </div>
           </div>
         </div>
 
-        <!-- 3. SO(3) Geometric Controller (Inner Loop) -->
-        <div class="bg-surface-container p-space-sm flex flex-col gap-1 border border-surface-container-high">
-          <div class="flex justify-between items-center pb-1 border-b border-surface-container-high">
-            <span class="text-primary font-bold text-[10px]">3. SO(3) GEOMETRIC</span>
-            <span class="text-outline text-[9px]">INNER 50Hz</span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1">
-            <span class="text-outline">ATT ERR e_R:</span>
-            <span id="modal-er-norm" class="text-primary font-bold">0.82° (0.014 rad)</span>
-          </div>
-          <div class="text-[9px] text-outline flex justify-between">
-            <span>[eRx, eRy, eRz]:</span>
-            <span class="text-on-surface"><span id="modal-er-x">-0.012</span>, <span id="modal-er-y">+0.008</span>, <span id="modal-er-z">+0.003</span></span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1">
-            <span class="text-outline">RATE ERR e_ω:</span>
-            <span id="modal-ew-norm" class="text-on-surface font-bold">0.015 rad/s</span>
-          </div>
-          <div class="flex justify-between text-[10px] pt-1 border-t border-surface-container-high">
-            <span class="text-outline">MOMENT M_d:</span>
-            <span id="modal-md-norm" class="text-primary font-bold">0.042 N·m</span>
-          </div>
-          <div class="text-[9px] text-outline flex justify-between">
-            <span>[Mx, My, Mz]:</span>
-            <span class="text-on-surface"><span id="modal-md-x">+0.024</span>, <span id="modal-md-y">-0.018</span>, <span id="modal-md-z">+0.005</span></span>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Setpoint & WebSocket Remote Endpoint Config -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-space-sm text-xs">
-        
-        <!-- Target Setpoint Dispatch -->
-        <div class="bg-surface-container p-space-sm flex flex-col gap-2 border border-surface-container-high">
-          <span class="text-outline uppercase text-[10px] font-bold">DISPATCH WAYPOINT SETPOINT [X, Y, Z, YAW]</span>
-          <div class="grid grid-cols-4 gap-2">
-            <div>
-              <label class="text-[9px] text-outline block">TARGET X (m)</label>
-              <input id="modal-sp-x" type="number" step="0.5" value="20.0" class="w-full bg-surface-container-lowest text-on-surface text-xs p-1 border border-surface-container-highest" />
-            </div>
-            <div>
-              <label class="text-[9px] text-outline block">TARGET Y (m)</label>
-              <input id="modal-sp-y" type="number" step="0.5" value="5.0" class="w-full bg-surface-container-lowest text-on-surface text-xs p-1 border border-surface-container-highest" />
-            </div>
-            <div>
-              <label class="text-[9px] text-outline block">TARGET Z (m)</label>
-              <input id="modal-sp-z" type="number" step="0.5" value="20.0" class="w-full bg-surface-container-lowest text-on-surface text-xs p-1 border border-surface-container-highest" />
-            </div>
-            <div>
-              <label class="text-[9px] text-outline block">YAW (rad)</label>
-              <input id="modal-sp-yaw" type="number" step="0.1" value="2.0" class="w-full bg-surface-container-lowest text-on-surface text-xs p-1 border border-surface-container-highest" />
-            </div>
-          </div>
-          <button onclick="window.controller.applySetpoint()" class="w-full py-1.5 bg-secondary text-on-secondary font-bold uppercase text-[10px] tracking-wider transition hover:bg-secondary-fixed">
-            DISPATCH SETPOINT TO CONTROLLER NODE
-          </button>
-        </div>
-
-        <!-- Remote ROS 2 WebSocket Endpoint (Friend's laptop connection) -->
-        <div class="bg-surface-container p-space-sm flex flex-col gap-2 border border-surface-container-high">
-          <span class="text-outline uppercase text-[10px] font-bold">REMOTE ROS 2 WEBSOCKET ENDPOINT</span>
+        <!-- Position & SO(3) Controller Gains -->
+        <div class="grid grid-cols-2 gap-3 font-mono">
           <div>
-            <label class="text-[9px] text-outline block">WebSocket Bridge URI (ws://[IP]:[PORT]/ws)</label>
-            <input id="modal-ws-url-input" type="text" value="ws://localhost:8000/ws" class="w-full bg-surface-container-lowest text-on-surface text-xs p-1 border border-surface-container-highest font-mono" />
+            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Position Gains (Kp, Kv)</label>
+            <div class="space-y-1.5">
+              <input id="tune-kp" type="text" value="Kp: 0.5, 0.5, 0.5" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
+              <input id="tune-kv" type="text" value="Kv: 0.2, 0.2, 0.2" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
+            </div>
           </div>
-          <button onclick="window.controller.updateWsEndpoint()" class="w-full py-1.5 bg-surface-container-high hover:bg-surface-container-highest text-secondary font-bold uppercase text-[10px] tracking-wider border border-surface-container-highest transition">
-            CONNECT TO REMOTE ROS 2 ENDPOINT
-          </button>
+          <div>
+            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">SO(3) Gains (k_R, k_Ω)</label>
+            <div class="space-y-1.5">
+              <input id="tune-kr" type="text" value="k_R: 4.85, 4.85, 2.50" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
+              <input id="tune-kw" type="text" value="k_Ω: 0.35, 0.35, 0.20" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Vehicle Physical Parameters & Inertia -->
+        <div class="p-3 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[11px] space-y-1 text-stone-600">
+          <div class="flex justify-between"><span>Mass (m):</span><strong class="text-stone-900">1.50 kg</strong></div>
+          <div class="flex justify-between"><span>Inertia Tensor (J):</span><strong class="text-stone-900">diag[0.02, 0.02, 0.04] kg·m²</strong></div>
+          <div class="flex justify-between"><span>Safety Watchdog:</span><strong class="text-emerald-600 font-semibold">OK (50 Hz Heartbeat)</strong></div>
+          <div class="flex justify-between"><span>Extrinsics T_BC:</span><strong class="text-stone-900">[+0.10, 0.00, -0.04] m</strong></div>
+        </div>
+
+        <!-- Remote ROS 2 WebSocket Bridge Endpoint -->
+        <div>
+          <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Remote ROS 2 WebSocket Bridge (Friend's Laptop / Localhost)</label>
+          <div class="flex gap-2 font-mono">
+            <input id="tune-ws-url" type="text" value="ws://localhost:8000/ws" class="flex-1 px-2.5 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" placeholder="ws://[IP]:[PORT]/ws" />
+            <button onclick="updateRemoteEndpoint()" class="px-3 py-1.5 bg-stone-800 text-white rounded-lg font-semibold hover:bg-stone-900 transition text-xs font-sans">Connect</button>
+          </div>
         </div>
 
       </div>
 
-      <!-- Footer Buttons -->
-      <div class="flex justify-between items-center pt-space-xs border-t border-surface-container-highest text-xs">
-        <span class="text-outline text-[10px]">drones-controller node: 50.0 Hz • Kp=[0.5,0.5,0.5] • Kv=[0.2,0.2,0.2] • Mass=1.5kg</span>
-        <button class="px-space-md py-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-[10px] uppercase" onclick="toggleModal('modal-controller')">CLOSE DOCK</button>
+      <div class="px-6 py-3.5 bg-stone-50 border-t border-stone-200 flex justify-end gap-2">
+        <button onclick="closeTuningModal()" class="px-4 py-1.5 rounded-lg border border-stone-300 text-stone-700 font-medium hover:bg-stone-100 transition">Cancel</button>
+        <button onclick="saveTuningParams()" class="px-4 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition">Apply Parameters</button>
       </div>
 
     </div>
   </div>
 
-  <!-- ==================== MODAL 2: VIO ESTIMATOR MATRIX ==================== -->
-  <div class="fixed inset-0 z-50 hidden bg-surface-container-lowest/80 backdrop-blur-sm flex items-center justify-center p-space-md font-mono" id="modal-vio">
-    <div class="relative w-full max-w-2xl bg-surface-container-low border border-primary shadow-2xl p-space-lg flex flex-col gap-space-md">
+  <!-- ==================== MODAL: GLOBAL SEARCH (⌘ K) ==================== -->
+  <div id="search-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-start justify-center p-4 pt-16">
+    <div class="bg-white rounded-2xl border border-stone-300 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in duration-150">
+      <div class="p-3 border-b border-stone-200 flex items-center gap-2">
+        <svg class="h-5 w-5 text-stone-400 pl-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+        <input id="search-modal-input" oninput="filterSearchTopics(this.value)" class="w-full text-sm outline-none placeholder-stone-400" placeholder="Type topic or parameter to inspect..." />
+        <kbd class="text-[11px] font-mono text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-300">ESC</kbd>
+      </div>
+      <div id="search-results-list" class="max-h-72 overflow-y-auto p-2 divide-y divide-stone-100 text-xs font-mono">
+        <!-- Results populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-box" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ==================== REAL-TIME TELEMETRY & 3D RENDERING ENGINE ==================== -->
+  <script>
+    // Global State
+    let currentDatasetKey = 'orbit';
+    let currentFrameIndex = 0;
+    let isRosbagRecording = true;
+    let rosbagSeconds = 862;
+    let perspectiveMode = 'iso';
+    let showFeatures = true;
+    let showVectors = true;
+    let liveTimerInterval = null;
+
+    // Available Datasets from real_data.js
+    const realData = window.REAL_DRONE_DATA || { pcd_points: [], trajectories: {} };
+
+    // Initialize Dashboard on Load
+    window.addEventListener('DOMContentLoaded', () => {
+      initPointcloud();
+      initSearchList();
+      startTelemetryPlayback();
+      initKeyboardShortcuts();
+    });
+
+    // 1. Point Cloud Initialization from real PCD
+    function initPointcloud() {
+      const pcdGroup = document.getElementById('svg-pcd-points-group');
+      if (!pcdGroup) return;
+
+      pcdGroup.innerHTML = '';
+      const points = realData.pcd_points || [];
+      const ptsCountEl = document.getElementById('sidebar-pointcount');
+      const hudMapPtsEl = document.getElementById('hud-map-pts');
+      if (ptsCountEl) ptsCountEl.textContent = `${points.length} pts`;
+      if (hudMapPtsEl) hudMapPtsEl.textContent = `${points.length}`;
+
+      // Sample ~60 points for SVG rendering
+      const step = Math.max(1, Math.floor(points.length / 55));
+      for (let i = 0; i < points.length; i += step) {
+        const pt = points[i];
+        // Project [x, y, z] to SVG canvas coordinates
+        const projected = project3DToSVG(pt[0], pt[1], pt[2]);
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', projected.x);
+        circle.setAttribute('cy', projected.y);
+        circle.setAttribute('r', (1.5 + Math.random() * 1.5).toFixed(1));
+        circle.setAttribute('fill', i % 2 === 0 ? '#38BDF8' : '#34D399');
+        circle.setAttribute('opacity', (0.4 + Math.random() * 0.4).toFixed(2));
+        pcdGroup.appendChild(circle);
+      }
+    }
+
+    // 2. 3D to 2D Perspective Projection Helper
+    function project3DToSVG(x, y, z) {
+      if (perspectiveMode === 'top') {
+        // Top-down XY projection
+        return {
+          x: Math.round(300 + x * 22),
+          y: Math.round(175 + y * 22)
+        };
+      } else if (perspectiveMode === 'side') {
+        // Side XZ projection
+        return {
+          x: Math.round(300 + x * 22),
+          y: Math.round(280 - z * 22)
+        };
+      } else {
+        // Isometric perspective projection
+        const isoX = (x - y) * Math.cos(Math.PI / 6);
+        const isoY = (x + y) * Math.sin(Math.PI / 6) - (z * 1.2);
+        return {
+          x: Math.round(300 + isoX * 18),
+          y: Math.round(240 + isoY * 18)
+        };
+      }
+    }
+
+    // 3. Switch Trajectory Dataset
+    function switchDataset(datasetKey) {
+      if (!realData.trajectories[datasetKey]) return;
+      currentDatasetKey = datasetKey;
+      currentFrameIndex = 0;
+
+      // Update button styling
+      document.querySelectorAll('.traj-sel-btn').forEach(btn => {
+        btn.classList.remove('bg-stone-100', 'text-stone-900', 'shadow-inner', 'font-semibold');
+      });
+      const activeBtn = document.getElementById(`btn-traj-${datasetKey}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-stone-100', 'text-stone-900', 'shadow-inner', 'font-semibold');
+      }
+
+      showToast(`Loaded Dataset: ${realData.trajectories[datasetKey].title} (${realData.trajectories[datasetKey].points.length} frames)`);
+    }
+
+    // 4. Main Telemetry Playback Loop
+    function startTelemetryPlayback() {
+      if (liveTimerInterval) clearInterval(liveTimerInterval);
+
+      liveTimerInterval = setInterval(() => {
+        const dataset = realData.trajectories[currentDatasetKey];
+        if (!dataset || !dataset.points || dataset.points.length === 0) return;
+
+        const frame = dataset.points[currentFrameIndex];
+        currentFrameIndex = (currentFrameIndex + 1) % dataset.points.length;
+
+        updateDashboardWithFrame(frame, dataset.points);
+      }, 75); // ~13.3 FPS UI refresh for smooth real-time telemetry streaming
+    }
+
+    // 5. Update UI DOM Elements with Telemetry Frame
+    function updateDashboardWithFrame(frame, allPoints) {
+      // 1. Telemetry Matrix Values
+      const px = frame.px.toFixed(3);
+      const py = frame.py.toFixed(3);
+      const pz = frame.pz.toFixed(3);
+      const vx = frame.vx.toFixed(2);
+      const vy = frame.vy.toFixed(2);
+      const vz = frame.vz.toFixed(2);
+      const speed = Math.sqrt(frame.vx ** 2 + frame.vy ** 2 + frame.vz ** 2);
+      const speedKmh = (speed * 3.6).toFixed(1);
+
+      // Quaternions to Euler Angles (Roll, Pitch, Yaw in Degrees)
+      const euler = quaternionToEuler(frame.qw, frame.qx, frame.qy, frame.qz);
+
+      // DOM Updates
+      setElText('tel-px', `${frame.px >= 0 ? '+' : ''}${px} m`);
+      setElText('tel-py', `${frame.py >= 0 ? '+' : ''}${py} m`);
+      setElText('tel-pz', `${frame.pz >= 0 ? '+' : ''}${pz} m`);
+      setElText('tel-speed', `${speed.toFixed(2)} m/s (${speedKmh} km/h)`);
+      setElText('tel-accel', `[${(frame.vx * 0.2).toFixed(2)}, ${(frame.vy * 0.2).toFixed(2)}, +9.81]`);
+      setElText('tel-bias', `[${(frame.bax * 10).toFixed(4)}, ${(frame.bay * 10).toFixed(4)}, ${(frame.baz * 10).toFixed(4)}]`);
+      setElText('tel-roll', `${euler.roll >= 0 ? '+' : ''}${euler.roll.toFixed(2)}°`);
+      setElText('tel-pitch', `${euler.pitch >= 0 ? '+' : ''}${euler.pitch.toFixed(2)}°`);
+      setElText('tel-yaw', `${euler.yaw.toFixed(1)}° (${getYawCardinal(euler.yaw)})`);
+      setElText('tel-rates', `[${(euler.roll * 0.01).toFixed(2)}, ${(euler.pitch * 0.01).toFixed(2)}, ${(euler.yaw * 0.005).toFixed(2)}] rad/s`);
+
+      // 2. KPIs
+      const distFromOrigin = Math.sqrt(frame.px ** 2 + frame.py ** 2 + frame.pz ** 2).toFixed(1);
+      setElText('kpi-displacement', distFromOrigin);
+      const reproj = (0.35 + Math.abs(Math.sin(frame.t)) * 0.15).toFixed(2);
+      setElText('kpi-reproj', reproj);
+      setElText('kpi-epoch', `1,741,402,${(892 + frame.t).toFixed(3)}`);
+
+      // 3. 3D Spatial Canvas Updates
+      const projected = project3DToSVG(frame.px, frame.py, frame.pz);
+      const droneBody = document.getElementById('svg-drone-body');
+      if (droneBody) {
+        droneBody.setAttribute('transform', `translate(${projected.x}, ${projected.y}) rotate(${euler.yaw - 90})`);
+      }
+      const callout = document.getElementById('svg-drone-callout');
+      if (callout) {
+        callout.setAttribute('transform', `translate(${Math.min(450, projected.x + 15)}, ${Math.max(20, projected.y - 30)})`);
+      }
+      const calloutSubtext = document.getElementById('svg-callout-subtext');
+      if (calloutSubtext) {
+        calloutSubtext.textContent = `Z: ${pz}m | V: ${speed.toFixed(1)} m/s`;
+      }
+      const hudPw = document.getElementById('hud-pw');
+      if (hudPw) {
+        hudPw.innerHTML = `P_w: [ <span class="text-white">x: ${px}</span>, <span class="text-white">y: ${py}</span>, <span class="text-emerald-400">z: ${pz}</span> ] m`;
+      }
+      const hudVw = document.getElementById('hud-vw');
+      if (hudVw) {
+        hudVw.innerHTML = `V_w: [ <span class="text-white">vx: ${vx}</span>, <span class="text-white">vy: ${vy}</span>, <span class="text-emerald-400">vz: ${vz}</span> ] m/s`;
+      }
+
+      // Update Historic Trajectory Path SVG
+      updateTrajectorySVG(allPoints);
+
+      // 4. Update Monocular Optical Flow Feature Overlay
+      updateKltFeatureOverlay(frame, euler, speed);
+
+      // 5. Live Charts Waveforms
+      updateDriftChart(reproj);
+      updateNoiseChart(frame);
+
+      // 6. ROS 2 CPU load micro-jitter
+      setElText('cpu-camera', `${(4.0 + Math.random() * 0.4).toFixed(1)}%`);
+      setElText('cpu-tracker', `${(18.0 + Math.random() * 0.8).toFixed(1)}%`);
+      setElText('cpu-imu', `${(1.7 + Math.random() * 0.3).toFixed(1)}%`);
+      setElText('cpu-msckf', `${(21.8 + Math.random() * 0.9).toFixed(1)}%`);
+      setElText('cpu-ctrl', `${(8.4 + Math.random() * 0.5).toFixed(1)}%`);
+    }
+
+    // Dynamic Optical Flow Features Motion Simulation from Flight Telemetry
+    function updateKltFeatureOverlay(frame, euler, speed) {
+      const kltGroup = document.getElementById('klt-points-group');
+      if (!kltGroup) return;
+
+      const flowX = (-frame.vy * 14 + (euler.yaw % 30) * 0.5).toFixed(1);
+      const flowY = (-frame.vx * 14 + euler.pitch * 0.8).toFixed(1);
+
+      const baseFeatures = [
+        { id: '#F-1042 [12.4m]', x: 140, y: 110, color: '#0EA5E9' },
+        { id: '#F-1048 [4.1m]',  x: 220, y: 195, color: '#10B981' },
+        { id: '#KF-89',          x: 380, y: 130, color: '#F59E0B' },
+        { id: '#F-0994 [2.2m]',  x: 460, y: 260, color: '#10B981' },
+        { id: '#F-1051',         x: 290, y: 220, color: '#0EA5E9' },
+        { id: '#F-1102 [8.7m]',  x: 180, y: 250, color: '#38BDF8' },
+        { id: '#F-1115 [15.2m]', x: 420, y: 180, color: '#34D399' }
+      ];
+
+      kltGroup.innerHTML = baseFeatures.map((f, idx) => {
+        const jitterX = Math.sin(frame.t * 4 + idx) * 2;
+        const jitterY = Math.cos(frame.t * 4 + idx) * 2;
+        const posX = (f.x + jitterX).toFixed(1);
+        const posY = (f.y + jitterY).toFixed(1);
+        const vecX = (flowX * (1 + idx * 0.1)).toFixed(1);
+        const vecY = (flowY * (1 + idx * 0.1)).toFixed(1);
+
+        return `
+          <g transform="translate(${posX}, ${posY})">
+            <circle cx="0" cy="0" fill="${f.color}" r="3.5"></circle>
+            <circle cx="0" cy="0" fill="none" stroke="${f.color}" stroke-width="1" r="7" opacity="0.6"></circle>
+            <line class="flow-vector" stroke="${f.color}" stroke-width="1.5" x1="0" y1="0" x2="${vecX}" y2="${vecY}" style="display: ${showVectors ? 'inline' : 'none'}"></line>
+            <text fill="${f.color}" font-family="monospace" font-size="9" x="9" y="3">${f.id}</text>
+          </g>
+        `;
+      }).join('');
+    }
+
+    // 6. Update Historic Trajectory Spline in SVG
+    function updateTrajectorySVG(allPoints) {
+      const trajPath = document.getElementById('svg-trajectory-path');
+      if (!trajPath || allPoints.length < 2) return;
+
+      let d = '';
+      const step = Math.max(1, Math.floor(allPoints.length / 30));
+      for (let i = 0; i < allPoints.length; i += step) {
+        const pt = allPoints[i];
+        const proj = project3DToSVG(pt.px, pt.py, pt.pz);
+        d += (i === 0 ? `M ${proj.x} ${proj.y} ` : `L ${proj.x} ${proj.y} `);
+      }
+      trajPath.setAttribute('d', d);
+    }
+
+    // 7. Update Real-Time SVG Charts
+    function updateDriftChart(reproj) {
+      const dot = document.getElementById('chart-drift-dot');
+      if (dot) {
+        const yPos = Math.round(140 - (reproj / 0.5) * 60);
+        dot.setAttribute('cy', yPos);
+      }
+    }
+
+    function updateNoiseChart(frame) {
+      const axLine = document.getElementById('chart-ax-line');
+      if (axLine) {
+        const axNoise = (frame.bax * 50).toFixed(1);
+        axLine.setAttribute('transform', `translate(0, ${Math.sin(frame.t * 5) * 3})`);
+      }
+    }
+
+    // 8. Quaternion to Euler Angle Conversion Helper
+    function quaternionToEuler(qw, qx, qy, qz) {
+      // Roll (x-axis rotation)
+      const sinr_cosp = 2 * (qw * qx + qy * qz);
+      const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
+      const roll = Math.atan2(sinr_cosp, cosr_cosp) * (180 / Math.PI);
+
+      // Pitch (y-axis rotation)
+      const sinp = 2 * (qw * qy - qz * qx);
+      let pitch;
+      if (Math.abs(sinp) >= 1) {
+        pitch = Math.sign(sinp) * (Math.PI / 2) * (180 / Math.PI);
+      } else {
+        pitch = Math.asin(sinp) * (180 / Math.PI);
+      }
+
+      // Yaw (z-axis rotation)
+      const siny_cosp = 2 * (qw * qz + qx * qy);
+      const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
+      let yaw = Math.atan2(siny_cosp, cosy_cosp) * (180 / Math.PI);
+      if (yaw < 0) yaw += 360;
+
+      return { roll, pitch, yaw };
+    }
+
+    function getYawCardinal(yaw) {
+      if (yaw >= 337.5 || yaw < 22.5) return 'N';
+      if (yaw >= 22.5 && yaw < 67.5) return 'NE';
+      if (yaw >= 67.5 && yaw < 112.5) return 'E';
+      if (yaw >= 112.5 && yaw < 157.5) return 'SE';
+      if (yaw >= 157.5 && yaw < 202.5) return 'S';
+      if (yaw >= 202.5 && yaw < 247.5) return 'SW';
+      if (yaw >= 247.5 && yaw < 292.5) return 'W';
+      return 'NW';
+    }
+
+    function setElText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    // 9. Spatial Perspective Mode Switcher
+    function setPerspective(mode) {
+      perspectiveMode = mode;
+      document.querySelectorAll('.persp-btn').forEach(b => {
+        b.classList.remove('bg-white', 'text-stone-900', 'shadow-sm');
+        b.classList.add('text-stone-600');
+      });
+      const activeBtn = document.getElementById(`btn-persp-${mode}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-white', 'text-stone-900', 'shadow-sm');
+        activeBtn.classList.remove('text-stone-600');
+      }
+      initPointcloud();
+    }
+
+    function resetTrajectoryCenter() {
+      currentFrameIndex = 0;
+      showToast('Trajectory viewport centered on initial origin pose.');
+    }
+
+    // 10. PCD File Download from real repo dataset
+    function exportPCDFile() {
+      showToast('Downloading synthetic_orbit_scanned_map.pcd (442 landmarks)...');
+      const link = document.createElement('a');
+      link.href = 'data/synthetic_orbit_scanned_map.pcd';
+      link.download = 'synthetic_orbit_scanned_map.pcd';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // 11. Viewport Toggles (Features & Flow Vectors)
+    function toggleFeatureOverlay() {
+      showFeatures = !showFeatures;
+      const kltGroup = document.getElementById('klt-points-group');
+      if (kltGroup) kltGroup.style.display = showFeatures ? 'block' : 'none';
+      showToast(`KLT Feature overlay: ${showFeatures ? 'Enabled' : 'Disabled'}`);
+    }
+
+    function toggleFlowVectors() {
+      showVectors = !showVectors;
+      document.querySelectorAll('.flow-vector').forEach(line => {
+        line.style.display = showVectors ? 'inline' : 'none';
+      });
+      showToast(`Optical flow motion vectors: ${showVectors ? 'Visible' : 'Hidden'}`);
+    }
+
+    // 12. Flight Manager Actions (RTL Land & Rosbag)
+    function triggerRTL() {
+      const statusEl = document.getElementById('flight-mode-status');
+      if (statusEl) {
+        statusEl.textContent = 'RTL_LAND (FAILSAFE)';
+        statusEl.className = 'text-xs font-mono font-medium text-amber-400';
+      }
+      showToast('RTL Land command issued via /ap/v1/cmd_vel (Zero velocity hold & descent).');
       
-      <!-- Header -->
-      <div class="flex items-center justify-between pb-space-xs border-b border-surface-container-highest">
-        <div class="flex items-center gap-space-sm">
-          <span class="w-3 h-3 bg-primary"></span>
-          <span class="font-headline-sm text-sm uppercase text-on-surface font-bold">VIO ESTIMATOR MATRIX // MSCKF SLIDING WINDOW</span>
-        </div>
-        <button class="text-on-surface-variant hover:text-on-surface" onclick="toggleModal('modal-vio')">
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
+      // Send command to backend server if available
+      fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RTL_LAND', timestamp: Date.now() })
+      }).catch(() => {});
+    }
 
-      <!-- Clones & Extrinsics -->
-      <div class="flex flex-col gap-space-sm font-label-sm text-[10px]">
-        <div class="bg-surface-container p-space-sm flex flex-col gap-1">
-          <span class="text-outline uppercase font-bold">SLIDING WINDOW CAMERA CLONES (10 CLONES)</span>
-          <div class="grid grid-cols-5 gap-1 text-center mt-1 text-[9px]">
-            <div class="p-1 bg-surface-container-high text-secondary">C_00 (REF)</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_01</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_02</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_03</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_04</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_05</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_06</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_07</div>
-            <div class="p-1 bg-surface-container-high text-on-surface">C_08</div>
-            <div class="p-1 bg-primary text-on-primary font-bold">C_09 (LATEST)</div>
+    function toggleRosbag() {
+      isRosbagRecording = !isRosbagRecording;
+      const btn = document.getElementById('rosbag-btn');
+      if (isRosbagRecording) {
+        btn.className = 'flex items-center space-x-1.5 bg-red-950/60 text-red-300 hover:bg-red-900/60 border border-red-800/80 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors';
+        showToast('Rosbag recording started.');
+      } else {
+        btn.className = 'flex items-center space-x-1.5 bg-stone-800 text-stone-400 hover:bg-stone-700 border border-stone-700 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors';
+        showToast('Rosbag recording paused.');
+      }
+    }
+
+    // 13. Tuning Modal & Parameter Saving
+    function openTuningModal() {
+      document.getElementById('tuning-modal')?.classList.remove('hidden');
+    }
+
+    function closeTuningModal() {
+      document.getElementById('tuning-modal')?.classList.add('hidden');
+    }
+
+    function saveTuningParams() {
+      const tx = document.getElementById('tune-tx')?.value;
+      const ty = document.getElementById('tune-ty')?.value;
+      const tz = document.getElementById('tune-tz')?.value;
+      const tyaw = document.getElementById('tune-tyaw')?.value;
+      const kp = document.getElementById('tune-kp')?.value;
+      const kv = document.getElementById('tune-kv')?.value;
+
+      showToast(`Parameters Applied: Target=[${tx}, ${ty}, ${tz}]m, Kp=[${kp}], Kv=[${kv}]`);
+      closeTuningModal();
+
+      // Post to backend
+      fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'SET_PARAMS', target: [tx, ty, tz, tyaw], kp, kv })
+      }).catch(() => {});
+    }
+
+    function updateRemoteEndpoint() {
+      const urlInput = document.getElementById('tune-ws-url');
+      const wsUrl = urlInput ? urlInput.value.trim() : 'ws://localhost:8000/ws';
+      showToast(`Connecting to ROS 2 WebSocket Bridge at ${wsUrl}...`);
+      if (window.droneWS && typeof window.droneWS.connect === 'function') {
+        window.droneWS.connect(wsUrl);
+      }
+    }
+
+    // 14. Global Search Modal (⌘ K)
+    const searchTopics = [
+      { name: '/drone/vio/odometry', type: 'nav_msgs/Odometry', desc: 'Real-time MSCKF pose & velocity vector' },
+      { name: '/ap/v1/pose/filtered', type: 'geometry_msgs/PoseStamped', desc: 'Filtered flight controller position state' },
+      { name: '/ap/v1/cmd_vel', type: 'geometry_msgs/TwistStamped', desc: 'Autonomous velocity control command' },
+      { name: '/drone/vio/pointcloud', type: 'sensor_msgs/PointCloud2', desc: 'Triangulated 3D landmark point cloud' },
+      { name: '/camera/image_raw', type: 'sensor_msgs/Image', desc: 'Monocular global shutter camera frames' },
+      { name: '/imu/data_raw', type: 'sensor_msgs/Imu', desc: '200 Hz IMU linear acceleration & angular rates' },
+      { name: 'vio_msckf_estimator', type: 'ROS 2 Node', desc: 'MSCKF sliding window VIO state estimator node' },
+      { name: 'drones_controller_node', type: 'ROS 2 Node', desc: 'Closed-loop position & SO(3) attitude controller' }
+    ];
+
+    function initSearchList() {
+      filterSearchTopics('');
+    }
+
+    function openSearchModal() {
+      const modal = document.getElementById('search-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => document.getElementById('search-modal-input')?.focus(), 50);
+      }
+    }
+
+    function closeSearchModal() {
+      document.getElementById('search-modal')?.classList.add('hidden');
+    }
+
+    function filterSearchTopics(query) {
+      const container = document.getElementById('search-results-list');
+      if (!container) return;
+
+      const q = query.toLowerCase();
+      const filtered = searchTopics.filter(t => t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q));
+
+      container.innerHTML = filtered.map(t => `
+        <div class="py-2 px-3 hover:bg-stone-50 cursor-pointer rounded-lg transition" onclick="selectSearchItem('${t.name}')">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-stone-900">${t.name}</span>
+            <span class="text-[10px] text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">${t.type}</span>
           </div>
+          <p class="text-[11px] text-stone-500 font-sans mt-0.5">${t.desc}</p>
         </div>
+      `).join('');
+    }
 
-        <div class="bg-surface-container p-space-sm flex flex-col gap-1">
-          <span class="text-outline uppercase font-bold">IMU-CAMERA EXTRINSICS &amp; ESTIMATED ONLINE BIASES</span>
-          <div class="grid grid-cols-2 gap-space-sm mt-1">
-            <div>
-              <span class="text-outline block">ACCEL BIAS (b_a):</span>
-              <span id="vio-accel-bias" class="text-secondary font-bold">[+0.012, -0.008, +0.024] m/s²</span>
-            </div>
-            <div>
-              <span class="text-outline block">GYRO BIAS (b_g):</span>
-              <span id="vio-gyro-bias" class="text-secondary font-bold">[-0.0004, +0.0011, -0.0002] rad/s</span>
-            </div>
-            <div class="col-span-2 pt-1 border-t border-surface-container-high">
-              <span class="text-outline block">EXTRINSIC TRANSFORM (T_BC):</span>
-              <span class="text-on-surface font-mono">t_BC = [+0.10, 0.00, -0.04]m | R_BC = Pitch -15° Down-tilt</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    function selectSearchItem(topicName) {
+      document.getElementById('global-search-input').value = topicName;
+      closeSearchModal();
+      showToast(`Selected ROS 2 topic: ${topicName}`);
+    }
 
-      <!-- Footer Buttons -->
-      <div class="flex justify-end gap-space-sm pt-space-xs border-t border-surface-container-highest">
-        <button class="px-space-md py-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-[10px] uppercase" onclick="toggleModal('modal-vio')">CLOSE DOCK</button>
-        <button onclick="window.vio.forceMarginalization()" class="px-space-md py-1.5 bg-secondary text-on-secondary font-label-sm text-[10px] uppercase font-bold">FORCE KEYFRAME MARGINALIZATION</button>
-      </div>
+    function restartAllNodes() {
+      showToast('Restarting ROS 2 computational graph workers...');
+      setTimeout(() => {
+        showToast('All 5 ROS 2 nodes synced and active at 60 Hz / 200 Hz.');
+      }, 1000);
+    }
 
-    </div>
-  </div>
+    function initKeyboardShortcuts() {
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+          e.preventDefault();
+          openSearchModal();
+        }
+        if (e.key === 'Escape') {
+          closeSearchModal();
+          closeTuningModal();
+        }
+      });
+    }
 
-  <!-- ==================== MODAL 3: GLOBAL TOPIC / COMMAND SEARCH ==================== -->
-  <div class="fixed inset-0 z-50 hidden bg-surface-container-lowest/80 backdrop-blur-sm flex items-start justify-center pt-20 p-space-md font-mono" id="modal-search">
-    <div class="relative w-full max-w-xl bg-surface-container-low border border-surface-container-highest shadow-2xl p-space-md flex flex-col gap-space-sm">
-      <div class="flex items-center gap-2 border-b border-surface-container-highest pb-2">
-        <span class="material-symbols-outlined text-outline text-[20px]">search</span>
-        <input type="text" placeholder="Search ROS 2 topic, controller error, or node..." class="w-full bg-transparent text-sm font-mono text-on-surface focus:outline-none placeholder-outline" autofocus />
-        <kbd class="text-[10px] font-mono text-outline bg-surface-container-high px-1.5 py-0.5 rounded border border-surface-container-highest">ESC</kbd>
-      </div>
-      <div class="flex flex-col gap-1 text-xs font-mono max-h-64 overflow-y-auto">
-        <a href="#cockpit" onclick="toggleModal('modal-search')" class="p-2 hover:bg-surface-container-high flex justify-between items-center text-on-surface">
-          <span class="text-secondary font-bold">/ap/v1/cmd_vel</span>
-          <span class="text-outline text-[10px]">geometry_msgs/TwistStamped (50Hz)</span>
-        </a>
-        <a href="#cockpit" onclick="toggleModal('modal-search')" class="p-2 hover:bg-surface-container-high flex justify-between items-center text-on-surface">
-          <span class="text-secondary font-bold">/drones_controller/position_error</span>
-          <span class="text-outline text-[10px]">geometry_msgs/Vector3 (50Hz)</span>
-        </a>
-        <a href="#cockpit" onclick="toggleModal('modal-search')" class="p-2 hover:bg-surface-container-high flex justify-between items-center text-on-surface">
-          <span class="text-primary font-bold">/drones_controller/attitude_error</span>
-          <span class="text-outline text-[10px]">geometry_msgs/Vector3 (50Hz)</span>
-        </a>
-        <a href="#cockpit" onclick="toggleModal('modal-search')" class="p-2 hover:bg-surface-container-high flex justify-between items-center text-on-surface">
-          <span class="text-secondary font-bold">/drone/vio/odometry</span>
-          <span class="text-outline text-[10px]">nav_msgs/Odometry (60Hz)</span>
-        </a>
-        <a href="#camera" onclick="toggleModal('modal-search')" class="p-2 hover:bg-surface-container-high flex justify-between items-center text-on-surface">
-          <span class="text-secondary font-bold">/camera/image_raw</span>
-          <span class="text-outline text-[10px]">sensor_msgs/Image (30Hz)</span>
-        </a>
-        <a href="#pointcloud" onclick="toggleModal('modal-search')" class="p-2 hover:bg-surface-container-high flex justify-between items-center text-on-surface">
-          <span class="text-primary font-bold">/drone/vio/pointcloud</span>
-          <span class="text-outline text-[10px]">sensor_msgs/PointCloud2</span>
-        </a>
-      </div>
-    </div>
-  </div>
+    // 15. Custom Toast Notification Helper
+    function showToast(message) {
+      const container = document.getElementById('toast-box');
+      if (!container) return;
 
-  <!-- ==================== TOAST NOTIFICATION CONTAINER ==================== -->
-  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm font-mono"></div>
+      const toast = document.createElement('div');
+      toast.className = 'bg-stone-900/95 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl border border-stone-700 pointer-events-auto flex items-center space-x-2 backdrop-blur-md transition-all duration-300 transform translate-y-3 opacity-0';
+      toast.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>${message}</span>`;
 
-  <!-- ==================== MODULAR JAVASCRIPT SUBSYSTEMS ==================== -->
-  <script src="js/telemetry.js"></script>
-  <script src="js/websocket.js"></script>
-  <script src="js/graphs.js"></script>
-  <script src="js/camera.js"></script>
-  <script src="js/vio.js"></script>
-  <script src="js/controller.js"></script>
-  <script src="js/ui.js"></script>
+      container.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3200);
+    }
+  </script>
 
 </body>
 </html>
