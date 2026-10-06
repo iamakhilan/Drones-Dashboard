@@ -623,16 +623,19 @@
 
       <!-- ==================== REAL-TIME ROLLING OSCILLOSCOPE GRAPHS ==================== -->
       <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4" id="graphs-section">
-        <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-stone-100 pb-3 gap-2">
           <div>
-            <h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider">Live Kinematic Waveforms (Rolling 20-Second Window)</h2>
-            <p class="text-xs text-stone-500">Real-time linear acceleration $(a_x, a_y, a_z)$, velocity $(v_x, v_y, v_z)$, and position $(x, y, z)$</p>
+            <h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2">
+              <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+              Live Kinematic Waveforms (Rolling 20-Second Window)
+            </h2>
+            <p class="text-xs text-stone-500 mt-0.5">Real-time linear acceleration (a<sub>x</sub>, a<sub>y</sub>, a<sub>z</sub>), velocity (v<sub>x</sub>, v<sub>y</sub>, v<sub>z</sub>), and world position (x, y, z)</p>
           </div>
-          <div class="flex items-center space-x-2">
-            <button id="graphs-pause-btn" onclick="toggleGraphsPause()" class="text-xs font-semibold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg border border-stone-200 transition font-mono">
+          <div class="flex items-center space-x-2 font-mono">
+            <button id="graphs-pause-btn" onclick="toggleGraphsPause()" class="text-xs font-semibold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg border border-stone-200 transition">
               PAUSE
             </button>
-            <button onclick="clearGraphBuffers()" class="text-xs font-semibold text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-2.5 py-1.5 rounded-lg border border-stone-200 transition font-mono">
+            <button onclick="clearGraphBuffers()" class="text-xs font-semibold text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-2.5 py-1.5 rounded-lg border border-stone-200 transition">
               CLEAR
             </button>
           </div>
@@ -641,77 +644,284 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           <!-- Graph 1: Linear Acceleration -->
-          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
-            <div class="flex items-center justify-between text-xs font-mono">
-              <span class="font-bold text-stone-800 font-sans">Linear Acceleration (m/s²)</span>
-              <div class="flex space-x-2 text-[10px]">
-                <span class="text-emerald-600 font-bold">Ax</span>
-                <span class="text-brand-600 font-bold">Ay</span>
-                <span class="text-amber-600 font-bold">Az (+1g)</span>
+          <div class="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Linear Acceleration (m/s²)
+              </span>
+              <!-- Channel Toggle Chips -->
+              <div class="flex items-center space-x-1 font-mono text-[10px]">
+                <button id="btn-chip-accel-x" onclick="toggleGraphChannel('accel', 'x')" class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 hover:opacity-80 transition cursor-pointer">● Ax</button>
+                <button id="btn-chip-accel-y" onclick="toggleGraphChannel('accel', 'y')" class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300 hover:opacity-80 transition cursor-pointer">● Ay</button>
+                <button id="btn-chip-accel-z" onclick="toggleGraphChannel('accel', 'z')" class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold border border-amber-300 hover:opacity-80 transition cursor-pointer">● Az (+1g)</button>
               </div>
             </div>
-            <div class="w-full h-36 relative bg-stone-900 rounded-lg overflow-hidden border border-stone-800">
-              <svg id="svg-graph-accel" class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 300 100">
-                <line x1="0" x2="300" y1="50" y2="50" stroke="#334155" stroke-dasharray="2 2" stroke-width="1"></line>
-                <path id="graph-accel-x" fill="none" stroke="#10B981" stroke-width="1.8" d=""></path>
-                <path id="graph-accel-y" fill="none" stroke="#0EA5E9" stroke-width="1.8" d=""></path>
-                <path id="graph-accel-z" fill="none" stroke="#F59E0B" stroke-width="1.8" d=""></path>
+
+            <!-- SVG Oscilloscope Surface -->
+            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner">
+              <svg id="svg-graph-accel" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160">
+                <defs>
+                  <linearGradient id="accelGradX" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#10B981" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                  <linearGradient id="accelGradY" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                  <linearGradient id="accelGradZ" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                </defs>
+
+                <!-- Gridlines: Horizontal (Y-Ticks) -->
+                <line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="104" y2="104" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+
+                <!-- Y-Axis Labels -->
+                <text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+14</text>
+                <text x="40" y="45" fill="#F59E0B" font-family="monospace" font-size="8.5" text-anchor="end">+9.8</text>
+                <text x="40" y="76" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+5.0</text>
+                <text x="40" y="107" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text>
+                <text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-4.0</text>
+
+                <!-- Gridlines: Vertical (Time-Ticks) -->
+                <line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+                <line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"></line>
+
+                <!-- X-Axis Time Labels -->
+                <text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text>
+                <text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text>
+                <text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text>
+                <text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text>
+                <text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s (Now)</text>
+
+                <!-- Area Fills -->
+                <path id="graph-accel-area-x" fill="url(#accelGradX)" d=""></path>
+                <path id="graph-accel-area-y" fill="url(#accelGradY)" d=""></path>
+                <path id="graph-accel-area-z" fill="url(#accelGradZ)" d=""></path>
+
+                <!-- Data Stroke Lines -->
+                <path id="graph-accel-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""></path>
+                <path id="graph-accel-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""></path>
+                <path id="graph-accel-z" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" d=""></path>
+
+                <!-- Leading Edge Glow Dots -->
+                <circle id="graph-accel-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+                <circle id="graph-accel-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+                <circle id="graph-accel-dot-z" r="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+
+                <!-- Interactive Hover Crosshair & Tooltip -->
+                <line id="graph-accel-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"></line>
+                <g id="graph-accel-tooltip" opacity="0" pointer-events="none">
+                  <rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"></rect>
+                  <text id="graph-accel-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"></text>
+                </g>
               </svg>
             </div>
-            <div class="flex justify-between text-[11px] font-mono text-stone-600">
-              <span id="graph-accel-val-x">AX: +0.12 m/s²</span>
-              <span id="graph-accel-val-y">AY: -0.04 m/s²</span>
-              <span id="graph-accel-val-z">AZ: 9.81 m/s²</span>
+
+            <!-- Value Footer -->
+            <div class="grid grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700">
+              <span id="graph-accel-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1 rounded-lg font-bold border border-emerald-200">AX: +0.12</span>
+              <span id="graph-accel-val-y" class="bg-sky-50 text-sky-900 px-2 py-1 rounded-lg font-bold border border-sky-200">AY: -0.04</span>
+              <span id="graph-accel-val-z" class="bg-amber-50 text-amber-900 px-2 py-1 rounded-lg font-bold border border-amber-200">AZ: 9.81</span>
+              <span id="graph-accel-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1 rounded-lg font-bold border border-stone-200 text-right">‖A‖: 9.81</span>
             </div>
           </div>
 
           <!-- Graph 2: Linear Velocity -->
-          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
-            <div class="flex items-center justify-between text-xs font-mono">
-              <span class="font-bold text-stone-800 font-sans">Linear Velocity (m/s)</span>
-              <div class="flex space-x-2 text-[10px]">
-                <span class="text-emerald-600 font-bold">Vx</span>
-                <span class="text-brand-600 font-bold">Vy</span>
-                <span class="text-purple-600 font-bold">Vz</span>
+          <div class="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+                Linear Velocity (m/s)
+              </span>
+              <!-- Channel Toggle Chips -->
+              <div class="flex items-center space-x-1 font-mono text-[10px]">
+                <button id="btn-chip-vel-x" onclick="toggleGraphChannel('vel', 'x')" class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 hover:opacity-80 transition cursor-pointer">● Vx</button>
+                <button id="btn-chip-vel-y" onclick="toggleGraphChannel('vel', 'y')" class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300 hover:opacity-80 transition cursor-pointer">● Vy</button>
+                <button id="btn-chip-vel-z" onclick="toggleGraphChannel('vel', 'z')" class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold border border-purple-300 hover:opacity-80 transition cursor-pointer">● Vz</button>
               </div>
             </div>
-            <div class="w-full h-36 relative bg-stone-900 rounded-lg overflow-hidden border border-stone-800">
-              <svg id="svg-graph-vel" class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 300 100">
-                <line x1="0" x2="300" y1="50" y2="50" stroke="#334155" stroke-dasharray="2 2" stroke-width="1"></line>
-                <path id="graph-vel-x" fill="none" stroke="#10B981" stroke-width="1.8" d=""></path>
-                <path id="graph-vel-y" fill="none" stroke="#0EA5E9" stroke-width="1.8" d=""></path>
-                <path id="graph-vel-z" fill="none" stroke="#A855F7" stroke-width="1.8" d=""></path>
+
+            <!-- SVG Oscilloscope Surface -->
+            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner">
+              <svg id="svg-graph-vel" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160">
+                <defs>
+                  <linearGradient id="velGradX" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#10B981" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                  <linearGradient id="velGradY" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                  <linearGradient id="velGradZ" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#A855F7" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#A855F7" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                </defs>
+
+                <!-- Gridlines: Horizontal (Y-Ticks) -->
+                <line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="104" y2="104" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+
+                <!-- Y-Axis Labels -->
+                <text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+3.0</text>
+                <text x="40" y="45" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+1.5</text>
+                <text x="40" y="76" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text>
+                <text x="40" y="107" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-1.5</text>
+                <text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-3.0</text>
+
+                <!-- Gridlines: Vertical (Time-Ticks) -->
+                <line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+                <line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"></line>
+
+                <!-- X-Axis Time Labels -->
+                <text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text>
+                <text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text>
+                <text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text>
+                <text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text>
+                <text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s (Now)</text>
+
+                <!-- Area Fills -->
+                <path id="graph-vel-area-x" fill="url(#velGradX)" d=""></path>
+                <path id="graph-vel-area-y" fill="url(#velGradY)" d=""></path>
+                <path id="graph-vel-area-z" fill="url(#velGradZ)" d=""></path>
+
+                <!-- Data Stroke Lines -->
+                <path id="graph-vel-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""></path>
+                <path id="graph-vel-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""></path>
+                <path id="graph-vel-z" fill="none" stroke="#A855F7" stroke-width="2" stroke-linecap="round" d=""></path>
+
+                <!-- Leading Edge Glow Dots -->
+                <circle id="graph-vel-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+                <circle id="graph-vel-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+                <circle id="graph-vel-dot-z" r="4" fill="#A855F7" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+
+                <!-- Interactive Hover Crosshair & Tooltip -->
+                <line id="graph-vel-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"></line>
+                <g id="graph-vel-tooltip" opacity="0" pointer-events="none">
+                  <rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"></rect>
+                  <text id="graph-vel-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"></text>
+                </g>
               </svg>
             </div>
-            <div class="flex justify-between text-[11px] font-mono text-stone-600">
-              <span id="graph-vel-val-x">VX: +1.25 m/s</span>
-              <span id="graph-vel-val-y">VY: +0.10 m/s</span>
-              <span id="graph-vel-val-z">VZ: +0.02 m/s</span>
+
+            <!-- Value Footer -->
+            <div class="grid grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700">
+              <span id="graph-vel-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1 rounded-lg font-bold border border-emerald-200">VX: +1.25</span>
+              <span id="graph-vel-val-y" class="bg-sky-50 text-sky-900 px-2 py-1 rounded-lg font-bold border border-sky-200">VY: +0.10</span>
+              <span id="graph-vel-val-z" class="bg-purple-50 text-purple-900 px-2 py-1 rounded-lg font-bold border border-purple-200">VZ: +0.02</span>
+              <span id="graph-vel-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1 rounded-lg font-bold border border-stone-200 text-right">‖V‖: 1.25</span>
             </div>
           </div>
 
           <!-- Graph 3: World Position -->
-          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
-            <div class="flex items-center justify-between text-xs font-mono">
-              <span class="font-bold text-stone-800 font-sans">World Position (m)</span>
-              <div class="flex space-x-2 text-[10px]">
-                <span class="text-emerald-600 font-bold">X</span>
-                <span class="text-brand-600 font-bold">Y</span>
-                <span class="text-emerald-500 font-bold">Z Alt</span>
+          <div class="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-teal-500"></span>
+                World Position (m)
+              </span>
+              <!-- Channel Toggle Chips -->
+              <div class="flex items-center space-x-1 font-mono text-[10px]">
+                <button id="btn-chip-pos-x" onclick="toggleGraphChannel('pos', 'x')" class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 hover:opacity-80 transition cursor-pointer">● X</button>
+                <button id="btn-chip-pos-y" onclick="toggleGraphChannel('pos', 'y')" class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300 hover:opacity-80 transition cursor-pointer">● Y</button>
+                <button id="btn-chip-pos-z" onclick="toggleGraphChannel('pos', 'z')" class="px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-bold border border-teal-300 hover:opacity-80 transition cursor-pointer">● Z Alt</button>
               </div>
             </div>
-            <div class="w-full h-36 relative bg-stone-900 rounded-lg overflow-hidden border border-stone-800">
-              <svg id="svg-graph-pos" class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 300 100">
-                <line x1="0" x2="300" y1="50" y2="50" stroke="#334155" stroke-dasharray="2 2" stroke-width="1"></line>
-                <path id="graph-pos-x" fill="none" stroke="#10B981" stroke-width="1.8" d=""></path>
-                <path id="graph-pos-y" fill="none" stroke="#0EA5E9" stroke-width="1.8" d=""></path>
-                <path id="graph-pos-z" fill="none" stroke="#34D399" stroke-width="1.8" d=""></path>
+
+            <!-- SVG Oscilloscope Surface -->
+            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner">
+              <svg id="svg-graph-pos" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160">
+                <defs>
+                  <linearGradient id="posGradX" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#10B981" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                  <linearGradient id="posGradY" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                  <linearGradient id="posGradZ" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#14B8A6" stop-opacity="0.25"></stop>
+                    <stop offset="100%" stop-color="#14B8A6" stop-opacity="0.0"></stop>
+                  </linearGradient>
+                </defs>
+
+                <!-- Gridlines: Horizontal (Y-Ticks) -->
+                <line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="99" y2="99" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"></line>
+                <line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+
+                <!-- Y-Axis Labels -->
+                <text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+25</text>
+                <text x="40" y="45" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+15</text>
+                <text x="40" y="76" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+5.0</text>
+                <text x="40" y="103" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text>
+                <text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-10</text>
+
+                <!-- Gridlines: Vertical (Time-Ticks) -->
+                <line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+                <line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
+                <line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"></line>
+
+                <!-- X-Axis Time Labels -->
+                <text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text>
+                <text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text>
+                <text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text>
+                <text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text>
+                <text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s (Now)</text>
+
+                <!-- Area Fills -->
+                <path id="graph-pos-area-x" fill="url(#posGradX)" d=""></path>
+                <path id="graph-pos-area-y" fill="url(#posGradY)" d=""></path>
+                <path id="graph-pos-area-z" fill="url(#posGradZ)" d=""></path>
+
+                <!-- Data Stroke Lines -->
+                <path id="graph-pos-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""></path>
+                <path id="graph-pos-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""></path>
+                <path id="graph-pos-z" fill="none" stroke="#14B8A6" stroke-width="2" stroke-linecap="round" d=""></path>
+
+                <!-- Leading Edge Glow Dots -->
+                <circle id="graph-pos-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+                <circle id="graph-pos-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+                <circle id="graph-pos-dot-z" r="4" fill="#14B8A6" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
+
+                <!-- Interactive Hover Crosshair & Tooltip -->
+                <line id="graph-pos-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"></line>
+                <g id="graph-pos-tooltip" opacity="0" pointer-events="none">
+                  <rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"></rect>
+                  <text id="graph-pos-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"></text>
+                </g>
               </svg>
             </div>
-            <div class="flex justify-between text-[11px] font-mono text-stone-600">
-              <span id="graph-pos-val-x">X: +4.00 m</span>
-              <span id="graph-pos-val-y">Y: +0.00 m</span>
-              <span id="graph-pos-val-z">ALT(Z): -2.00 m</span>
+
+            <!-- Value Footer -->
+            <div class="grid grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700">
+              <span id="graph-pos-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1 rounded-lg font-bold border border-emerald-200">X: +4.00</span>
+              <span id="graph-pos-val-y" class="bg-sky-50 text-sky-900 px-2 py-1 rounded-lg font-bold border border-sky-200">Y: +0.00</span>
+              <span id="graph-pos-val-z" class="bg-teal-50 text-teal-900 px-2 py-1 rounded-lg font-bold border border-teal-200">Z: -2.00</span>
+              <span id="graph-pos-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1 rounded-lg font-bold border border-stone-200 text-right">‖P‖: 4.47</span>
             </div>
           </div>
 
@@ -1087,141 +1297,41 @@
         hudVw.innerHTML = `V_WB: [ <span class="text-white">vx: ${vx.toFixed(2)}</span>, <span class="text-white">vy: ${vy.toFixed(2)}</span>, <span class="text-emerald-400">vz: ${vz.toFixed(2)}</span> ] m/s`;
       }
 
-      // Update Historic Trajectory Path SVG
-      updateTrajectorySVG(allPoints);
-
-      // Update KLT Feature overlay
-      updateKltFeatureOverlay(frame, euler, speed);
-
-      // Update Oscilloscope Graphs
-      if (!graphsPaused) {
-        updateKinematicGraphs(frame, speed);
+      // Push live frame to Kinematic Oscilloscope Graph Engine
+      if (window.graphs && typeof window.graphs.pushTelemetry === 'function' && !graphsPaused) {
+        const ax = frame.vx * 0.2;
+        const ay = frame.vy * 0.2;
+        const az = 9.81 + (frame.vz * 0.1);
+        window.graphs.pushTelemetry({
+          timestamp: Date.now(),
+          acceleration: { ax, ay, az },
+          velocity: { vx: frame.vx, vy: frame.vy, vz: frame.vz },
+          position: { x: frame.px, y: frame.py, z: frame.pz }
+        });
       }
     }
 
-    function updateKltFeatureOverlay(frame, euler, speed) {
-      const kltGroup = document.getElementById('klt-points-group');
-      if (!kltGroup) return;
-
-      const flowX = (-frame.vy * 14 + (euler.yaw % 30) * 0.5).toFixed(1);
-      const flowY = (-frame.vx * 14 + euler.pitch * 0.8).toFixed(1);
-
-      const baseFeatures = [
-        { id: '#F-1042 [12.4m]', x: 140, y: 110, color: '#0EA5E9' },
-        { id: '#F-1048 [4.1m]',  x: 220, y: 195, color: '#10B981' },
-        { id: '#KF-89',          x: 380, y: 130, color: '#F59E0B' },
-        { id: '#F-0994 [2.2m]',  x: 460, y: 260, color: '#10B981' },
-        { id: '#F-1051',         x: 290, y: 220, color: '#0EA5E9' },
-        { id: '#F-1102 [8.7m]',  x: 180, y: 250, color: '#38BDF8' },
-        { id: '#F-1115 [15.2m]', x: 420, y: 180, color: '#34D399' }
-      ];
-
-      kltGroup.innerHTML = baseFeatures.map((f, idx) => {
-        const jitterX = Math.sin(frame.t * 4 + idx) * 2;
-        const jitterY = Math.cos(frame.t * 4 + idx) * 2;
-        const posX = (f.x + jitterX).toFixed(1);
-        const posY = (f.y + jitterY).toFixed(1);
-        const vecX = (flowX * (1 + idx * 0.1)).toFixed(1);
-        const vecY = (flowY * (1 + idx * 0.1)).toFixed(1);
-
-        return `
-          <g transform="translate(${posX}, ${posY})">
-            <circle cx="0" cy="0" fill="${f.color}" r="3.5"></circle>
-            <circle cx="0" cy="0" fill="none" stroke="${f.color}" stroke-width="1" r="7" opacity="0.6"></circle>
-            <line class="flow-vector" stroke="${f.color}" stroke-width="1.5" x1="0" y1="0" x2="${vecX}" y2="${vecY}" style="display: ${showVectors ? 'inline' : 'none'}"></line>
-            <text fill="${f.color}" font-family="monospace" font-size="9" x="9" y="3">${f.id}</text>
-          </g>
-        `;
-      }).join('');
-    }
-
-    function updateTrajectorySVG(allPoints) {
-      const trajPath = document.getElementById('svg-trajectory-path');
-      if (!trajPath || allPoints.length < 2) return;
-
-      let d = '';
-      const step = Math.max(1, Math.floor(allPoints.length / 30));
-      for (let i = 0; i < allPoints.length; i += step) {
-        const pt = allPoints[i];
-        const proj = project3DToSVG(pt.px, pt.py, pt.pz);
-        d += (i === 0 ? `M ${proj.x} ${proj.y} ` : `L ${proj.x} ${proj.y} `);
+    function toggleGraphChannel(chartKey, axis) {
+      if (window.graphs && typeof window.graphs.toggleChannel === 'function') {
+        window.graphs.toggleChannel(chartKey, axis);
       }
-      trajPath.setAttribute('d', d);
-    }
-
-    // Oscilloscope Graphs Update
-    let accelHistory = [];
-    let velHistory = [];
-    let posHistory = [];
-
-    function updateKinematicGraphs(frame, speed) {
-      const ax = frame.vx * 0.2;
-      const ay = frame.vy * 0.2;
-      const az = 9.81 + (frame.vz * 0.1);
-
-      accelHistory.push({ ax, ay, az });
-      velHistory.push({ vx: frame.vx, vy: frame.vy, vz: frame.vz });
-      posHistory.push({ x: frame.px, y: frame.py, z: frame.pz });
-
-      if (accelHistory.length > 50) accelHistory.shift();
-      if (velHistory.length > 50) velHistory.shift();
-      if (posHistory.length > 50) posHistory.shift();
-
-      renderSvgSeries('graph-accel-x', accelHistory, 'ax', -2, 2);
-      renderSvgSeries('graph-accel-y', accelHistory, 'ay', -2, 2);
-      renderSvgSeries('graph-accel-z', accelHistory, 'az', 5, 15);
-
-      renderSvgSeries('graph-vel-x', velHistory, 'vx', -2, 2);
-      renderSvgSeries('graph-vel-y', velHistory, 'vy', -2, 2);
-      renderSvgSeries('graph-vel-z', velHistory, 'vz', -2, 2);
-
-      renderSvgSeries('graph-pos-x', posHistory, 'x', -10, 10);
-      renderSvgSeries('graph-pos-y', posHistory, 'y', -10, 10);
-      renderSvgSeries('graph-pos-z', posHistory, 'z', -10, 10);
-
-      setElText('graph-accel-val-x', `AX: ${(ax>=0?'+':'')+ax.toFixed(2)} m/s²`);
-      setElText('graph-accel-val-y', `AY: ${(ay>=0?'+':'')+ay.toFixed(2)} m/s²`);
-      setElText('graph-accel-val-z', `AZ: ${az.toFixed(2)} m/s²`);
-
-      setElText('graph-vel-val-x', `VX: ${(frame.vx>=0?'+':'')+frame.vx.toFixed(2)} m/s`);
-      setElText('graph-vel-val-y', `VY: ${(frame.vy>=0?'+':'')+frame.vy.toFixed(2)} m/s`);
-      setElText('graph-vel-val-z', `VZ: ${(frame.vz>=0?'+':'')+frame.vz.toFixed(2)} m/s`);
-
-      setElText('graph-pos-val-x', `X: ${(frame.px>=0?'+':'')+frame.px.toFixed(2)} m`);
-      setElText('graph-pos-val-y', `Y: ${(frame.py>=0?'+':'')+frame.py.toFixed(2)} m`);
-      setElText('graph-pos-val-z', `ALT(Z): ${frame.pz.toFixed(2)} m`);
-    }
-
-    function renderSvgSeries(elementId, history, key, minVal, maxVal) {
-      const el = document.getElementById(elementId);
-      if (!el || history.length < 2) return;
-
-      const width = 300;
-      const height = 100;
-      const range = (maxVal - minVal) || 1;
-
-      let d = '';
-      for (let i = 0; i < history.length; i++) {
-        const x = (i / (history.length - 1)) * width;
-        const normY = (history[i][key] - minVal) / range;
-        const y = height - (Math.max(0, Math.min(1, normY)) * height);
-        d += (i === 0 ? `M ${x.toFixed(1)} ${y.toFixed(1)} ` : `L ${x.toFixed(1)} ${y.toFixed(1)} `);
-      }
-      el.setAttribute('d', d);
     }
 
     function toggleGraphsPause() {
       graphsPaused = !graphsPaused;
+      if (window.graphs && typeof window.graphs.togglePause === 'function') {
+        window.graphs.togglePause();
+      }
       const btn = document.getElementById('graphs-pause-btn');
       if (btn) btn.textContent = graphsPaused ? 'RESUME' : 'PAUSE';
-      showToast(`Graphs ${graphsPaused ? 'Paused' : 'Resumed'}`);
+      showToast(`Oscilloscope Waveforms: ${graphsPaused ? 'Paused' : 'Active'}`);
     }
 
     function clearGraphBuffers() {
-      accelHistory = [];
-      velHistory = [];
-      posHistory = [];
-      showToast('Graph time-series buffers cleared.');
+      if (window.graphs && typeof window.graphs.clearBuffers === 'function') {
+        window.graphs.clearBuffers();
+      }
+      showToast('Oscilloscope waveform buffers cleared.');
     }
 
     function toggleTelemetryMode() {

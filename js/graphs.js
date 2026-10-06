@@ -1,61 +1,82 @@
 /**
  * ============================================================================
- * AeroVIO Ground Control Station - Live Oscilloscope Graphs
+ * AeroVIO Ground Control Station - Precision Kinematic Waveform Oscilloscope
  * Renders 3 real-time rolling 20-second window charts:
- * 1. Acceleration (IMU / m/s²) - Ax, Ay, Az + 1G Reference
- * 2. Odometry (Velocity / m/s) - Vx, Vy, Vz
- * 3. Position (World Frame / m) - X, Y, Z
- * Supports LIVE / PAUSE / CLEAR controls.
+ * 1. Linear Acceleration (IMU / m/s²) - Ax, Ay, Az + 1g Reference
+ * 2. Linear Velocity (m/s) - Vx, Vy, Vz
+ * 3. World Position (m) - X, Y, Z Altitude
+ *
+ * Features:
+ * - Calibrated Cartesian grid with explicit Y-axis and X-axis ticks
+ * - Semi-transparent gradient area fills and antialiased spline curves
+ * - Interactive Channel Visibility Toggles (Ax, Ay, Az / Vx, Vy, Vz / X, Y, Z)
+ * - Leading-edge live pulse dots
+ * - Interactive mouse hover crosshair & instantaneous tooltip inspection
+ * - LIVE / PAUSE / CLEAR buffer controls
  * ============================================================================
  */
 
 (function(window) {
   'use strict';
 
-  class GraphController {
+  class KinematicGraphEngine {
     constructor() {
       this.isPaused = false;
       this.windowDurationSec = 20.0;
-      this.maxPoints = 400; // Rolling buffer size
+      this.maxPoints = 250; // Rolling buffer size (~12.5 Hz sampling over 20s)
 
-      // Data buffers
-      this.accelData = []; // { t, ax, ay, az }
-      this.velData = [];   // { t, vx, vy, vz }
-      this.posData = [];   // { t, x, y, z }
-
-      // Elements
-      this.elements = {
-        // SVG paths
-        accelPathX: null,
-        accelPathY: null,
-        accelPathZ: null,
-        accelValX: null,
-        accelValY: null,
-        accelValZ: null,
-        accelWaiting: null,
-
-        velPathX: null,
-        velPathY: null,
-        velPathZ: null,
-        velValX: null,
-        velValY: null,
-        velValZ: null,
-        velWaiting: null,
-
-        posPathX: null,
-        posPathY: null,
-        posPathZ: null,
-        posValX: null,
-        posValY: null,
-        posValZ: null,
-        posWaiting: null
+      // Time series buffers: { t, x, y, z }
+      this.buffers = {
+        accel: [], // ax, ay, az
+        vel: [],   // vx, vy, vz
+        pos: []    // x, y, z
       };
 
-      // Animation frame handle
+      // Channel Visibility State
+      this.channelVisibility = {
+        accel: { x: true, y: true, z: true },
+        vel: { x: true, y: true, z: true },
+        pos: { x: true, y: true, z: true }
+      };
+
+      // Hover Inspection State
+      this.hoverState = {
+        activeChart: null,
+        cursorX: null,
+        hoverIndex: null
+      };
+
+      // Chart Configs & Fixed Engineering Ranges
+      this.chartConfigs = {
+        accel: {
+          svgId: 'svg-graph-accel',
+          yMin: -4.0,
+          yMax: 14.0,
+          unit: 'm/s²',
+          colors: { x: '#10B981', y: '#0EA5E9', z: '#F59E0B' },
+          fillGradients: { x: 'accelGradX', y: 'accelGradY', z: 'accelGradZ' }
+        },
+        vel: {
+          svgId: 'svg-graph-vel',
+          yMin: -3.0,
+          yMax: 3.0,
+          unit: 'm/s',
+          colors: { x: '#10B981', y: '#0EA5E9', z: '#A855F7' },
+          fillGradients: { x: 'velGradX', y: 'velGradY', z: 'velGradZ' }
+        },
+        pos: {
+          svgId: 'svg-graph-pos',
+          yMin: -10.0,
+          yMax: 25.0,
+          unit: 'm',
+          colors: { x: '#10B981', y: '#0EA5E9', z: '#14B8A6' },
+          fillGradients: { x: 'posGradX', y: 'posGradY', z: 'posGradZ' }
+        }
+      };
+
       this.animFrameId = null;
       this.lastRenderTime = 0;
 
-      // Initialize on DOM ready
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => this.init());
       } else {
@@ -64,243 +85,281 @@
     }
 
     init() {
-      this._bindElements();
-      
-      // Subscribe to telemetry engine
+      this._bindHoverEvents();
+
+      // Subscribe to telemetry engine if available
       if (window.telemetry) {
         window.telemetry.onTelemetry((state) => this.pushTelemetry(state));
       }
 
-      // Start render loop
       this._startRenderLoop();
     }
 
-    _bindElements() {
-      this.elements.accelPathX = document.getElementById('graph-accel-x');
-      this.elements.accelPathY = document.getElementById('graph-accel-y');
-      this.elements.accelPathZ = document.getElementById('graph-accel-z');
-      this.elements.accelValX = document.getElementById('graph-accel-val-x');
-      this.elements.accelValY = document.getElementById('graph-accel-val-y');
-      this.elements.accelValZ = document.getElementById('graph-accel-val-z');
-      this.elements.accelWaiting = document.getElementById('graph-accel-waiting');
+    _bindHoverEvents() {
+      ['accel', 'vel', 'pos'].forEach(chartKey => {
+        const svg = document.getElementById(this.chartConfigs[chartKey].svgId);
+        if (!svg) return;
 
-      this.elements.velPathX = document.getElementById('graph-vel-x');
-      this.elements.velPathY = document.getElementById('graph-vel-y');
-      this.elements.velPathZ = document.getElementById('graph-vel-z');
-      this.elements.velValX = document.getElementById('graph-vel-val-x');
-      this.elements.velValY = document.getElementById('graph-vel-val-y');
-      this.elements.velValZ = document.getElementById('graph-vel-val-z');
-      this.elements.velWaiting = document.getElementById('graph-vel-waiting');
+        svg.addEventListener('mousemove', (e) => {
+          const rect = svg.getBoundingClientRect();
+          const svgX = ((e.clientX - rect.left) / rect.width) * 400;
+          this.hoverState.activeChart = chartKey;
+          this.hoverState.cursorX = Math.max(45, Math.min(390, svgX));
+        });
 
-      this.elements.posPathX = document.getElementById('graph-pos-x');
-      this.elements.posPathY = document.getElementById('graph-pos-y');
-      this.elements.posPathZ = document.getElementById('graph-pos-z');
-      this.elements.posValX = document.getElementById('graph-pos-val-x');
-      this.elements.posValY = document.getElementById('graph-pos-val-y');
-      this.elements.posValZ = document.getElementById('graph-pos-val-z');
-      this.elements.posWaiting = document.getElementById('graph-pos-waiting');
+        svg.addEventListener('mouseleave', () => {
+          if (this.hoverState.activeChart === chartKey) {
+            this.hoverState.activeChart = null;
+            this.hoverState.cursorX = null;
+          }
+        });
+      });
     }
 
     /**
-     * Push incoming normalized state into buffers
+     * Push incoming normalized telemetry frame into rolling buffers
      */
     pushTelemetry(state) {
       if (this.isPaused) return;
 
-      const t = state.timestamp || Date.now();
+      const t = (state.timestamp || Date.now()) / 1000.0;
 
-      // Accel
-      if (state.acceleration.ax !== null) {
-        this.accelData.push({
+      // 1. Acceleration
+      if (state.acceleration && state.acceleration.ax !== null) {
+        this.buffers.accel.push({
           t: t,
-          ax: state.acceleration.ax,
-          ay: state.acceleration.ay,
-          az: state.acceleration.az
+          x: state.acceleration.ax,
+          y: state.acceleration.ay,
+          z: state.acceleration.az
         });
-        if (this.accelData.length > this.maxPoints) this.accelData.shift();
+        if (this.buffers.accel.length > this.maxPoints) this.buffers.accel.shift();
       }
 
-      // Vel
-      if (state.velocity.vx !== null) {
-        this.velData.push({
+      // 2. Velocity
+      if (state.velocity && state.velocity.vx !== null) {
+        this.buffers.vel.push({
           t: t,
-          vx: state.velocity.vx,
-          vy: state.velocity.vy,
-          vz: state.velocity.vz
+          x: state.velocity.vx,
+          y: state.velocity.vy,
+          z: state.velocity.vz
         });
-        if (this.velData.length > this.maxPoints) this.velData.shift();
+        if (this.buffers.vel.length > this.maxPoints) this.buffers.vel.shift();
       }
 
-      // Pos
-      if (state.position.x !== null) {
-        this.posData.push({
+      // 3. Position
+      if (state.position && state.position.x !== null) {
+        this.buffers.pos.push({
           t: t,
           x: state.position.x,
           y: state.position.y,
           z: state.position.z
         });
-        if (this.posData.length > this.maxPoints) this.posData.shift();
+        if (this.buffers.pos.length > this.maxPoints) this.buffers.pos.shift();
       }
 
-      // Update text values
-      this._updateNumericReadouts(state);
-    }
-
-    _updateNumericReadouts(state) {
-      // Accel
-      if (this.elements.accelValX) {
-        this.elements.accelValX.textContent = state.acceleration.ax !== null ? `AX: ${(state.acceleration.ax >= 0 ? '+' : '') + state.acceleration.ax.toFixed(2)} m/s²` : 'AX: --';
-      }
-      if (this.elements.accelValY) {
-        this.elements.accelValY.textContent = state.acceleration.ay !== null ? `AY: ${(state.acceleration.ay >= 0 ? '+' : '') + state.acceleration.ay.toFixed(2)} m/s²` : 'AY: --';
-      }
-      if (this.elements.accelValZ) {
-        this.elements.accelValZ.textContent = state.acceleration.az !== null ? `AZ: ${state.acceleration.az.toFixed(2)} m/s²` : 'AZ: --';
-      }
-
-      // Vel
-      if (this.elements.velValX) {
-        this.elements.velValX.textContent = state.velocity.vx !== null ? `VX: ${(state.velocity.vx >= 0 ? '+' : '') + state.velocity.vx.toFixed(2)} m/s` : 'VX: --';
-      }
-      if (this.elements.velValY) {
-        this.elements.velValY.textContent = state.velocity.vy !== null ? `VY: ${(state.velocity.vy >= 0 ? '+' : '') + state.velocity.vy.toFixed(2)} m/s` : 'VY: --';
-      }
-      if (this.elements.velValZ) {
-        this.elements.velValZ.textContent = state.velocity.vz !== null ? `VZ: ${(state.velocity.vz >= 0 ? '+' : '') + state.velocity.vz.toFixed(2)} m/s` : 'VZ: --';
-      }
-
-      // Pos
-      if (this.elements.posValX) {
-        this.elements.posValX.textContent = state.position.x !== null ? `X: ${(state.position.x >= 0 ? '+' : '') + state.position.x.toFixed(2)}m` : 'X: --';
-      }
-      if (this.elements.posValY) {
-        this.elements.posValY.textContent = state.position.y !== null ? `Y: ${(state.position.y >= 0 ? '+' : '') + state.position.y.toFixed(2)}m` : 'Y: --';
-      }
-      if (this.elements.posValZ) {
-        this.elements.posValZ.textContent = state.position.z !== null ? `ALT(Z): ${state.position.z.toFixed(2)}m` : 'ALT(Z): --';
-      }
+      this._updateValueBadges(state);
     }
 
     /**
-     * Controls
+     * Update numerical footer badges
+     */
+    _updateValueBadges(state) {
+      // Acceleration
+      if (state.acceleration) {
+        const ax = state.acceleration.ax;
+        const ay = state.acceleration.ay;
+        const az = state.acceleration.az;
+        const aNorm = Math.sqrt((ax||0)**2 + (ay||0)**2 + (az||0)**2);
+        this._setText('graph-accel-val-x', `AX: ${(ax>=0?'+':'')+(ax||0).toFixed(2)} m/s²`);
+        this._setText('graph-accel-val-y', `AY: ${(ay>=0?'+':'')+(ay||0).toFixed(2)} m/s²`);
+        this._setText('graph-accel-val-z', `AZ: ${(az||0).toFixed(2)} m/s²`);
+        this._setText('graph-accel-val-norm', `‖A‖: ${aNorm.toFixed(2)} m/s²`);
+      }
+
+      // Velocity
+      if (state.velocity) {
+        const vx = state.velocity.vx;
+        const vy = state.velocity.vy;
+        const vz = state.velocity.vz;
+        const vNorm = Math.sqrt((vx||0)**2 + (vy||0)**2 + (vz||0)**2);
+        this._setText('graph-vel-val-x', `VX: ${(vx>=0?'+':'')+(vx||0).toFixed(2)} m/s`);
+        this._setText('graph-vel-val-y', `VY: ${(vy>=0?'+':'')+(vy||0).toFixed(2)} m/s`);
+        this._setText('graph-vel-val-z', `VZ: ${(vz>=0?'+':'')+(vz||0).toFixed(2)} m/s`);
+        this._setText('graph-vel-val-norm', `‖V‖: ${vNorm.toFixed(2)} m/s`);
+      }
+
+      // Position
+      if (state.position) {
+        const px = state.position.x;
+        const py = state.position.y;
+        const pz = state.position.z;
+        const pNorm = Math.sqrt((px||0)**2 + (py||0)**2 + (pz||0)**2);
+        this._setText('graph-pos-val-x', `X: ${(px>=0?'+':'')+(px||0).toFixed(2)} m`);
+        this._setText('graph-pos-val-y', `Y: ${(py>=0?'+':'')+(py||0).toFixed(2)} m`);
+        this._setText('graph-pos-val-z', `ALT(Z): ${(pz||0).toFixed(2)} m`);
+        this._setText('graph-pos-val-norm', `‖P‖: ${pNorm.toFixed(2)} m`);
+      }
+    }
+
+    _setText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    /**
+     * Toggle individual channel (X, Y, Z) visibility
+     */
+    toggleChannel(chartKey, axis) {
+      if (!this.channelVisibility[chartKey]) return;
+      this.channelVisibility[chartKey][axis] = !this.channelVisibility[chartKey][axis];
+
+      const btnId = `btn-chip-${chartKey}-${axis}`;
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        const isVis = this.channelVisibility[chartKey][axis];
+        btn.classList.toggle('opacity-40', !isVis);
+        btn.classList.toggle('line-through', !isVis);
+      }
+      this.render();
+    }
+
+    /**
+     * Pause / Resume controls
      */
     togglePause() {
       this.isPaused = !this.isPaused;
-      const pauseBtn = document.getElementById('graphs-pause-btn');
-      if (pauseBtn) {
-        pauseBtn.innerHTML = this.isPaused 
-          ? '<span class="material-symbols-outlined text-[14px]">play_arrow</span> RESUME'
-          : '<span class="material-symbols-outlined text-[14px]">pause</span> PAUSE';
-        pauseBtn.classList.toggle('bg-primary', this.isPaused);
-        pauseBtn.classList.toggle('text-on-primary', this.isPaused);
+      const btn = document.getElementById('graphs-pause-btn');
+      if (btn) {
+        btn.textContent = this.isPaused ? 'RESUME' : 'PAUSE';
+        btn.classList.toggle('bg-amber-100', this.isPaused);
+        btn.classList.toggle('text-amber-800', this.isPaused);
       }
     }
 
     clearBuffers() {
-      this.accelData = [];
-      this.velData = [];
-      this.posData = [];
+      this.buffers.accel = [];
+      this.buffers.vel = [];
+      this.buffers.pos = [];
       this.render();
     }
 
     _startRenderLoop() {
-      const renderTick = (time) => {
-        // Limit rendering to ~30 FPS for optimal UI responsiveness
-        if (time - this.lastRenderTime >= 30) {
+      const loop = (timestamp) => {
+        if (timestamp - this.lastRenderTime >= 25) { // ~40 FPS render limit
           this.render();
-          this.lastRenderTime = time;
+          this.lastRenderTime = timestamp;
         }
-        this.animFrameId = requestAnimationFrame(renderTick);
+        this.animFrameId = requestAnimationFrame(loop);
       };
-      this.animFrameId = requestAnimationFrame(renderTick);
+      this.animFrameId = requestAnimationFrame(loop);
     }
 
     /**
-     * Generate SVG path string from series
-     */
-    _buildSvgPath(data, field, minY, maxY, width = 300, height = 100) {
-      if (!data || data.length < 2) return '';
-      
-      const count = data.length;
-      const rangeY = (maxY - minY) || 1.0;
-      let d = '';
-
-      for (let i = 0; i < count; i++) {
-        const px = (i / (count - 1)) * width;
-        const val = data[i][field];
-        const normY = (val - minY) / rangeY;
-        const py = height - (Math.max(0, Math.min(1, normY)) * height);
-
-        if (i === 0) {
-          d += `M ${px.toFixed(1)},${py.toFixed(1)}`;
-        } else {
-          d += ` L ${px.toFixed(1)},${py.toFixed(1)}`;
-        }
-      }
-
-      return d;
-    }
-
-    /**
-     * Render all three graphs
+     * Primary Render Pipeline
      */
     render() {
-      // 1. Acceleration Graph
-      if (this.accelData.length > 1) {
-        if (this.elements.accelWaiting) this.elements.accelWaiting.classList.add('hidden');
-        // Min/Max for Accel (centered around 0 for X, Y and 9.8 for Z)
-        const pathX = this._buildSvgPath(this.accelData, 'ax', -2.5, 2.5);
-        const pathY = this._buildSvgPath(this.accelData, 'ay', -2.5, 2.5);
-        const pathZ = this._buildSvgPath(this.accelData, 'az', 5.0, 15.0);
+      this._renderChart('accel');
+      this._renderChart('vel');
+      this._renderChart('pos');
+    }
 
-        if (this.elements.accelPathX) this.elements.accelPathX.setAttribute('d', pathX);
-        if (this.elements.accelPathY) this.elements.accelPathY.setAttribute('d', pathY);
-        if (this.elements.accelPathZ) this.elements.accelPathZ.setAttribute('d', pathZ);
+    _renderChart(chartKey) {
+      const cfg = this.chartConfigs[chartKey];
+      const data = this.buffers[chartKey];
+      const vis = this.channelVisibility[chartKey];
+
+      const plotLeft = 45;
+      const plotRight = 390;
+      const plotTop = 10;
+      const plotBottom = 135;
+      const plotWidth = plotRight - plotLeft;
+      const plotHeight = plotBottom - plotTop;
+
+      const yMin = cfg.yMin;
+      const yMax = cfg.yMax;
+      const yRange = (yMax - yMin) || 1.0;
+
+      // Coordinate converter helper
+      const toSvgCoords = (index, total, val) => {
+        const x = plotLeft + (index / Math.max(1, total - 1)) * plotWidth;
+        const normY = (val - yMin) / yRange;
+        const clampedNormY = Math.max(0, Math.min(1, normY));
+        const y = plotBottom - (clampedNormY * plotHeight);
+        return { x, y };
+      };
+
+      const axes = ['x', 'y', 'z'];
+      axes.forEach(axis => {
+        const lineEl = document.getElementById(`graph-${chartKey}-${axis}`);
+        const areaEl = document.getElementById(`graph-${chartKey}-area-${axis}`);
+        const dotEl = document.getElementById(`graph-${chartKey}-dot-${axis}`);
+
+        if (!vis[axis] || !data || data.length < 2) {
+          if (lineEl) lineEl.setAttribute('d', '');
+          if (areaEl) areaEl.setAttribute('d', '');
+          if (dotEl) dotEl.setAttribute('opacity', '0');
+          return;
+        }
+
+        let linePath = '';
+        let lastPt = null;
+
+        for (let i = 0; i < data.length; i++) {
+          const pt = toSvgCoords(i, data.length, data[i][axis]);
+          linePath += (i === 0 ? `M ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}` : ` L ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`);
+          if (i === data.length - 1) lastPt = pt;
+        }
+
+        if (lineEl) lineEl.setAttribute('d', linePath);
+
+        // Area fill under curve
+        if (areaEl && data.length > 1) {
+          const firstPt = toSvgCoords(0, data.length, data[0][axis]);
+          const zeroY = plotBottom - ((0 - yMin) / yRange) * plotHeight;
+          const clampedZeroY = Math.max(plotTop, Math.min(plotBottom, zeroY));
+          const areaPath = `${linePath} L ${lastPt.x.toFixed(1)} ${clampedZeroY.toFixed(1)} L ${firstPt.x.toFixed(1)} ${clampedZeroY.toFixed(1)} Z`;
+          areaEl.setAttribute('d', areaPath);
+        }
+
+        // Leading edge live pulse dot
+        if (dotEl && lastPt) {
+          dotEl.setAttribute('cx', lastPt.x.toFixed(1));
+          dotEl.setAttribute('cy', lastPt.y.toFixed(1));
+          dotEl.setAttribute('opacity', '1');
+        }
+      });
+
+      // Render Hover Inspection Crosshair
+      const crosshair = document.getElementById(`graph-${chartKey}-crosshair`);
+      const tooltip = document.getElementById(`graph-${chartKey}-tooltip`);
+      const tooltipText = document.getElementById(`graph-${chartKey}-tooltip-text`);
+
+      if (this.hoverState.activeChart === chartKey && this.hoverState.cursorX && data.length > 1) {
+        const cursorRatio = (this.hoverState.cursorX - plotLeft) / plotWidth;
+        const sampleIdx = Math.max(0, Math.min(data.length - 1, Math.round(cursorRatio * (data.length - 1))));
+        const sample = data[sampleIdx];
+
+        if (crosshair) {
+          crosshair.setAttribute('x1', this.hoverState.cursorX.toFixed(1));
+          crosshair.setAttribute('x2', this.hoverState.cursorX.toFixed(1));
+          crosshair.setAttribute('opacity', '1');
+        }
+
+        if (tooltip && tooltipText && sample) {
+          const tRel = ((sampleIdx - (data.length - 1)) * (20.0 / data.length)).toFixed(1);
+          tooltipText.textContent = `T${tRel}s: [${sample.x.toFixed(2)}, ${sample.y.toFixed(2)}, ${sample.z.toFixed(2)}]`;
+          const ttX = Math.min(260, Math.max(50, this.hoverState.cursorX - 60));
+          tooltip.setAttribute('transform', `translate(${ttX}, 18)`);
+          tooltip.setAttribute('opacity', '1');
+        }
       } else {
-        if (this.elements.accelWaiting) this.elements.accelWaiting.classList.remove('hidden');
-      }
-
-      // 2. Velocity Graph
-      if (this.velData.length > 1) {
-        if (this.elements.velWaiting) this.elements.velWaiting.classList.add('hidden');
-        let minV = -1.5, maxV = 1.5;
-        this.velData.forEach(d => {
-          minV = Math.min(minV, d.vx, d.vy, d.vz);
-          maxV = Math.max(maxV, d.vx, d.vy, d.vz);
-        });
-        const pathX = this._buildSvgPath(this.velData, 'vx', minV - 0.2, maxV + 0.2);
-        const pathY = this._buildSvgPath(this.velData, 'vy', minV - 0.2, maxV + 0.2);
-        const pathZ = this._buildSvgPath(this.velData, 'vz', minV - 0.2, maxV + 0.2);
-
-        if (this.elements.velPathX) this.elements.velPathX.setAttribute('d', pathX);
-        if (this.elements.velPathY) this.elements.velPathY.setAttribute('d', pathY);
-        if (this.elements.velPathZ) this.elements.velPathZ.setAttribute('d', pathZ);
-      } else {
-        if (this.elements.velWaiting) this.elements.velWaiting.classList.remove('hidden');
-      }
-
-      // 3. Position Graph
-      if (this.posData.length > 1) {
-        if (this.elements.posWaiting) this.elements.posWaiting.classList.add('hidden');
-        let minP = -5, maxP = 25;
-        this.posData.forEach(d => {
-          minP = Math.min(minP, d.x, d.y, d.z);
-          maxP = Math.max(maxP, d.x, d.y, d.z);
-        });
-        const pathX = this._buildSvgPath(this.posData, 'x', minP - 1, maxP + 1);
-        const pathY = this._buildSvgPath(this.posData, 'y', minP - 1, maxP + 1);
-        const pathZ = this._buildSvgPath(this.posData, 'z', minP - 1, maxP + 1);
-
-        if (this.elements.posPathX) this.elements.posPathX.setAttribute('d', pathX);
-        if (this.elements.posPathY) this.elements.posPathY.setAttribute('d', pathY);
-        if (this.elements.posPathZ) this.elements.posPathZ.setAttribute('d', pathZ);
-      } else {
-        if (this.elements.posWaiting) this.elements.posWaiting.classList.remove('hidden');
+        if (crosshair) crosshair.setAttribute('opacity', '0');
+        if (tooltip) tooltip.setAttribute('opacity', '0');
       }
     }
   }
 
   // Expose singleton on window
-  window.graphs = new GraphController();
+  window.graphs = new KinematicGraphEngine();
 
 })(window);
