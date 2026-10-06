@@ -191,7 +191,7 @@
       <div class="p-3 border-t border-[#E1E3E5] space-y-1">
         <button onclick="openTuningModal()" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-200/60 transition text-left">
           <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-          <span>Extrinsics Config (T_BC)</span>
+          <span>Extrinsics Config (T<sub>BC</sub>)</span>
         </button>
         <div class="px-3 py-1 flex items-center justify-between text-[11px] text-stone-400 font-mono">
           <span>Bridge: <strong id="sidebar-bridge-status" class="text-emerald-600">ACTIVE</strong></span>
@@ -212,7 +212,7 @@
               MSCKF Nominal
             </span>
           </div>
-          <p class="text-xs text-stone-500 mt-0.5">Monocular visual-inertial state estimation with explicit body $T_{WB}$ vs camera $T_{WC}$ frame decomposition and cascaded closed-loop $\mathrm{SO}(3)$ geometric tracking.</p>
+          <p class="text-xs text-stone-500 mt-0.5">Monocular visual-inertial state estimation with explicit body <span class="font-mono font-medium text-stone-700">T<sub>WB</sub></span> vs camera <span class="font-mono font-medium text-stone-700">T<sub>WC</sub></span> frame decomposition and cascaded closed-loop <span class="font-mono font-medium text-stone-700">SO(3)</span> geometric tracking.</p>
         </div>
 
         <!-- Real Trajectory Dataset Filter Selector (DEMO Mode) -->
@@ -230,7 +230,7 @@
         <div class="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
           <div class="flex space-x-8 text-xs font-medium text-stone-500">
             <div class="text-stone-900 font-semibold border-b-2 border-stone-900 pb-3 -mb-3.5">VIO Estimator Telemetry</div>
-            <div class="cursor-pointer hover:text-stone-800" onclick="openTuningModal()">Extrinsics $T_{BC}$</div>
+            <div class="cursor-pointer hover:text-stone-800" onclick="openTuningModal()">Extrinsics <span class="font-mono">T<sub>BC</sub></span></div>
             <div class="cursor-pointer hover:text-stone-800" onclick="showToast('Camera Matrix: fx=615.2, fy=615.4, cx=320.0, cy=240.0')">Camera Intrinsics</div>
           </div>
           <div class="flex items-center space-x-2 text-xs text-stone-500 font-mono">
@@ -268,7 +268,7 @@
           <div class="space-y-1">
             <span class="text-xs font-medium text-stone-500">Total Path Length</span>
             <div class="text-2xl font-bold tracking-tight text-stone-900 font-mono"><span id="kpi-displacement">142.8</span> <span class="text-sm font-normal text-stone-500">m</span></div>
-            <p class="text-[11px] text-stone-400">Integrated Body $T_{WB}$</p>
+            <p class="text-[11px] text-stone-400">Integrated Body <span class="font-mono">T<sub>WB</sub></span></p>
           </div>
 
           <!-- KPI 5 -->
@@ -283,9 +283,9 @@
         <div class="mt-6 pt-4 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-between text-xs gap-2">
           <div class="flex items-center space-x-3 font-mono text-[11px] text-stone-600">
             <span class="font-bold text-stone-800">Frame Relationship:</span>
-            <span class="bg-stone-100 px-2 py-0.5 rounded border border-stone-200">T_WC = T_WB · T_BC</span>
+            <span class="bg-stone-100 px-2 py-0.5 rounded border border-stone-200">T<sub>WC</sub> = T<sub>WB</sub> &middot; T<sub>BC</sub></span>
             <span class="text-stone-400">|</span>
-            <span>T_BC: [+0.10, 0.00, -0.04]m</span>
+            <span>T<sub>BC</sub>: [+0.10, 0.00, -0.04]m</span>
           </div>
           <span id="kpi-filter-status" class="font-mono text-stone-400 text-[11px]">Covariance Trace: 1.42e-4 • Scale Drift: 0.18%</span>
         </div>
@@ -343,7 +343,7 @@
             </div>
             <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono text-stone-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">
               <div>Pinhole Model (fx=615, fy=615)</div>
-              <div class="text-emerald-400 font-semibold">T_WC CAMERA OPTICAL FRAME</div>
+              <div class="text-emerald-400 font-semibold">T<sub>WC</sub> CAMERA OPTICAL FRAME</div>
             </div>
 
           </div>
@@ -369,7 +369,7 @@
             <div class="flex items-center space-x-2">
               <h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5">
                 <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-                3D Spatial Map &amp; Trajectories (T_WB / T_WC)
+                3D Spatial Map &amp; Trajectories (T<sub>WB</sub> / T<sub>WC</sub>)
               </h2>
               <span class="text-[11px] font-mono text-stone-500">/drone/vio/pointcloud</span>
             </div>
@@ -475,15 +475,15 @@
           </div>
           <div class="space-y-2.5 font-mono text-xs">
             <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Body Pos (T_WB) [X, Y, Z]</span>
+              <span class="text-stone-500">Body Pos (T<sub>WB</sub>) [X, Y, Z]</span>
               <span id="tel-pos-wb" class="font-bold text-stone-800">[+4.00, +0.00, -2.00] m</span>
             </div>
             <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Camera Pos (T_WC) [X, Y, Z]</span>
+              <span class="text-stone-500">Camera Pos (T<sub>WC</sub>) [X, Y, Z]</span>
               <span id="tel-pos-wc" class="font-bold text-brand-600">[+4.10, +0.00, -2.04] m</span>
             </div>
             <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Extrinsic Offset T_BC</span>
+              <span class="text-stone-500">Extrinsic Offset T<sub>BC</sub></span>
               <span class="font-bold text-stone-700">[+0.10, 0.00, -0.04] m</span>
             </div>
             <div class="flex justify-between items-center py-1">
@@ -555,7 +555,7 @@
               <h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider">50 Hz Cascaded Closed-Loop Flight Controller</h2>
               <span class="text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">50 Hz Active</span>
             </div>
-            <p class="text-xs text-stone-500 mt-0.5">Position Error $(e_p, e_v) \to F_d \to \text{Attitude Generator } (b_{3d}, R_d) \to \text{Geometric }\mathrm{SO}(3) \ (e_R, e_\omega) \to M_d \to \text{FSM} \to /ap/v1/cmd\_vel$</p>
+            <p class="text-xs text-stone-500 mt-0.5 font-mono text-[11px] text-stone-600">Position Error (e<sub>p</sub>, e<sub>v</sub>) &rarr; Desired Force F<sub>d</sub> &rarr; Attitude Gen (b<sub>3d</sub>, R<sub>d</sub>) &rarr; SO(3) (e<sub>R</sub>, e<sub>&omega;</sub>) &rarr; Moment M<sub>d</sub> &rarr; FSM &rarr; <span class="font-bold text-stone-800">/ap/v1/cmd_vel</span></p>
           </div>
           <div class="flex items-center space-x-2 font-mono text-xs">
             <span class="text-stone-500">FSM State:</span>
@@ -570,12 +570,12 @@
           <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
             <div class="flex justify-between items-center text-stone-500 font-sans text-xs">
               <span class="font-bold text-stone-800">1. Position Loop</span>
-              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e_p = p - p_d</span>
+              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e<sub>p</sub> = p &minus; p<sub>d</sub></span>
             </div>
             <div class="space-y-1 text-[11px]">
-              <div class="flex justify-between"><span class="text-stone-500">Pos Error ‖e_p‖:</span><strong id="ctrl-ep-norm" class="text-stone-800">0.42 m</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Vel Error ‖e_v‖:</span><strong id="ctrl-ev-norm" class="text-stone-800">0.18 m/s</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Target p_d:</span><span class="text-stone-700">[20.0, 5.0, 20.0]m</span></div>
+              <div class="flex justify-between"><span class="text-stone-500">Pos Error ‖e<sub>p</sub>‖:</span><strong id="ctrl-ep-norm" class="text-stone-800">0.42 m</strong></div>
+              <div class="flex justify-between"><span class="text-stone-500">Vel Error ‖e<sub>v</sub>‖:</span><strong id="ctrl-ev-norm" class="text-stone-800">0.18 m/s</strong></div>
+              <div class="flex justify-between"><span class="text-stone-500">Target p<sub>d</sub>:</span><span class="text-stone-700">[20.0, 5.0, 20.0]m</span></div>
             </div>
           </div>
 
@@ -583,12 +583,12 @@
           <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
             <div class="flex justify-between items-center text-stone-500 font-sans text-xs">
               <span class="font-bold text-stone-800">2. Attitude Generator</span>
-              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">b_3d = F_d / ‖F_d‖</span>
+              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">b<sub>3d</sub> = F<sub>d</sub> / ‖F<sub>d</sub>‖</span>
             </div>
             <div class="space-y-1 text-[11px]">
-              <div class="flex justify-between"><span class="text-stone-500">Desired Force ‖F_d‖:</span><strong id="ctrl-fd-norm" class="text-brand-600">14.72 N</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Thrust Direction b_3d:</span><span id="ctrl-b3d-vec" class="text-stone-700">[0.02, -0.01, 1.00]</span></div>
-              <div class="flex justify-between"><span class="text-stone-500">Desired Quat q_d:</span><span class="text-stone-700">[1.0, 0.0, 0.0, 0.0]</span></div>
+              <div class="flex justify-between"><span class="text-stone-500">Desired Force ‖F<sub>d</sub>‖:</span><strong id="ctrl-fd-norm" class="text-brand-600">14.72 N</strong></div>
+              <div class="flex justify-between"><span class="text-stone-500">Thrust Direction b<sub>3d</sub>:</span><span id="ctrl-b3d-vec" class="text-stone-700">[0.02, -0.01, 1.00]</span></div>
+              <div class="flex justify-between"><span class="text-stone-500">Desired Quat q<sub>d</sub>:</span><span class="text-stone-700">[1.0, 0.0, 0.0, 0.0]</span></div>
             </div>
           </div>
 
@@ -596,12 +596,12 @@
           <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
             <div class="flex justify-between items-center text-stone-500 font-sans text-xs">
               <span class="font-bold text-stone-800">3. Geometric SO(3)</span>
-              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e_R = 1/2(R_d^T R - R^T R_d)^∨</span>
+              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e<sub>R</sub> = &frac12;(R<sub>d</sub><sup>T</sup>R &minus; R<sup>T</sup>R<sub>d</sub>)<sup>&or;</sup></span>
             </div>
             <div class="space-y-1 text-[11px]">
-              <div class="flex justify-between"><span class="text-stone-500">Attitude Error ‖e_R‖:</span><strong id="ctrl-er-norm" class="text-emerald-600">0.024 rad</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Rate Error ‖e_ω‖:</span><strong id="ctrl-ew-norm" class="text-stone-800">0.015 rad/s</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Desired Moment ‖M_d‖:</span><strong id="ctrl-md-norm" class="text-stone-800">0.118 N·m</strong></div>
+              <div class="flex justify-between"><span class="text-stone-500">Attitude Error ‖e<sub>R</sub>‖:</span><strong id="ctrl-er-norm" class="text-emerald-600">0.024 rad</strong></div>
+              <div class="flex justify-between"><span class="text-stone-500">Rate Error ‖e<sub>&omega;</sub>‖:</span><strong id="ctrl-ew-norm" class="text-stone-800">0.015 rad/s</strong></div>
+              <div class="flex justify-between"><span class="text-stone-500">Desired Moment ‖M<sub>d</sub>‖:</span><strong id="ctrl-md-norm" class="text-stone-800">0.118 N·m</strong></div>
             </div>
           </div>
 
@@ -1081,14 +1081,14 @@
         <!-- Position & SO(3) Controller Gains -->
         <div class="grid grid-cols-2 gap-3 font-mono">
           <div>
-            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Position Gains (Kp, Kv)</label>
+            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Position Gains (K<sub>p</sub>, K<sub>v</sub>)</label>
             <div class="space-y-1.5">
               <input id="tune-kp" type="text" value="Kp: 0.5, 0.5, 0.5" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
               <input id="tune-kv" type="text" value="Kv: 0.2, 0.2, 0.2" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
             </div>
           </div>
           <div>
-            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">SO(3) Gains (k_R, k_Ω)</label>
+            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">SO(3) Gains (k<sub>R</sub>, k<sub>&Omega;</sub>)</label>
             <div class="space-y-1.5">
               <input id="tune-kr" type="text" value="k_R: 4.85, 4.85, 2.50" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
               <input id="tune-kw" type="text" value="k_Ω: 0.35, 0.35, 0.20" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
@@ -1100,7 +1100,7 @@
         <div class="p-3 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[11px] space-y-1 text-stone-600">
           <div class="flex justify-between"><span>Airframe Mass (m):</span><strong class="text-stone-900">1.50 kg</strong></div>
           <div class="flex justify-between"><span>Inertia Tensor (J):</span><strong class="text-stone-900">diag[0.02, 0.02, 0.04] kg·m²</strong></div>
-          <div class="flex justify-between"><span>Extrinsics T_BC:</span><strong class="text-stone-900">[+0.10, 0.00, -0.04] m</strong></div>
+          <div class="flex justify-between"><span>Extrinsics T<sub>BC</sub>:</span><strong class="text-stone-900">[+0.10, 0.00, -0.04] m</strong></div>
         </div>
 
         <!-- Remote ROS 2 WebSocket Bridge Endpoint -->

@@ -19,7 +19,7 @@ Designed to interface with the [Autonomous Drone VIO & Controller Architecture](
   - Outer Loop: Position error $e_p = p - p_d$, velocity error $e_v = v - v_d$, desired force $F_d = -K_p e_p - K_v e_v + m g e_3 + m a_d$.
   - Attitude Generator: Thrust direction $b_{3d} = F_d / \|F_d\|$, collective thrust $T_d = \|F_d\|$, desired attitude $R_d$ ($q_d$).
   - Inner Loop: Geometric $\mathrm{SO}(3)$ attitude error $e_R = \frac{1}{2}(R_d^T R - R^T R_d)^\vee$, angular velocity error $e_\omega = \omega - R^T R_d \omega_d$, desired moment $M_d = -k_R e_R - k_\Omega e_\omega + \omega \times J \omega$.
-  - Flight FSM state tracker (`IDLE` $\to$ `ARMING` $\to$ `TAKEOFF` $\to$ `NAVIGATING` $\to$ `HOVER` / `FAILSAFE`).
+  - Flight FSM state tracker (`IDLE` &rarr; `ARMING` &rarr; `TAKEOFF` &rarr; `NAVIGATING` &rarr; `HOVER` / `FAILSAFE`).
   - Safety watchdog heartbeat monitor.
 - **Live Kinematic Oscilloscope Graphs**:
   - 3 real-time rolling 20-second SVG charts for Linear Acceleration ($a_x, a_y, a_z$), Velocity ($v_x, v_y, v_z$), and Position ($x, y, z$).
