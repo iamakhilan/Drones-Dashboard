@@ -70,9 +70,9 @@
 <td width="33%" valign="top">
 
 #### 🎛️ 50 Hz Cascaded Control
-- **Outer:** $F_d = -K_p e_p - K_v e_v + m g e_3 + m a_d$
-- **Generator:** $b_{3d} = F_d/\lVert F_d \rVert$, $T_d = \lVert F_d \rVert$, $R_d / q_d$
-- **Inner:** $e_R = \tfrac{1}{2}(R_d^T R - R^T R_d)^{\vee}$, $M_d = -k_R e_R - k_{\Omega} e_{\omega} + \omega \times J \omega$
+- **Outer loop:** Position/velocity tracking and desired-force computation
+- **Attitude generator:** Desired thrust axis, thrust magnitude, rotation $R_d$ and quaternion $q_d$
+- **Inner loop:** Geometric SO(3) attitude and angular-rate control
 - FSM: `IDLE → ARMING → TAKEOFF → NAVIGATING → HOVER / FAILSAFE`
 - Watchdog heartbeat + failsafe
 
@@ -95,69 +95,65 @@
 
 ## 🏗️ Architecture
 
-<div align="center">
-
-*End-to-end 50 Hz cascaded pipeline — from photons & IMU to actuation*
-
-</div>
+*Follow the data from sensing to estimation, control, transport, and visualization. The controller runs at 50 Hz; the dashboard consumes the bridge's normalized telemetry.*
 
 ```mermaid
-flowchart TB
-    subgraph SENSORS["📡 Sensors & Inputs"]
-        CAM["📷 Monocular Camera<br/>30 Hz · /camera/image_raw"]
-        IMU["🧭 6-DOF IMU<br/>200 Hz · /imu/data_raw<br/>ADIS16470 / BMI088"]
-        AP["✈️ ArduPilot Status<br/>10 Hz · /ap/v1/status"]
-    end
+flowchart LR
+  %% Keep this overview deliberately compact: details live in the sections below.
+  subgraph INPUTS["1 · Sensors"]
+    direction TB
+    CAM["Camera<br/>30 Hz"]
+    IMU["IMU<br/>200 Hz"]
+    AP["Autopilot status<br/>10 Hz"]
+  end
 
-    subgraph EST["🔬 State Estimation — VIO (MSCKF)"]
-        VIO["VIO Node<br/>/drone/vio/odometry → T_WB<br/>/drone/vio/camera_pose → T_WC<br/>/drone/vio/pointcloud → 442 pts"]
-        STATE["Vehicle State<br/>/ap/v1/pose/filtered · 50 Hz<br/>/ap/v1/twist/filtered · 50 Hz"]
-    end
-
-    subgraph SAFETY["🛡️ Safety & Adapter"]
-        WD["Watchdog<br/>Heartbeat · Failsafe Monitor"]
-        ADAPT["State Adapter<br/>Frame & Rate Transform"]
-    end
-
-    subgraph CTRL["⚡ 50 Hz Cascaded Controller — drones-controller"]
-        POS["① Position Controller (Outer)<br/>e_p = p − p_d · e_v = v − v_d<br/>F_d = −K_p e_p − K_v e_v + m g e₃ + m a_d"]
-        ATTG["② Attitude Generator<br/>b₃d = F_d / ‖F_d‖ · T_d = ‖F_d‖<br/>→ R_d ∈ SO(3) · q_d"]
-        SO3["③ Geometric SO(3) (Inner)<br/>e_R = ½(R_dᵀR − RᵀR_d)∨<br/>e_ω = ω − RᵀR_d ω_d<br/>M_d = −k_R e_R − k_Ω e_ω + ω×Jω"]
-        FSM["④ Flight State Manager<br/>IDLE → ARMING → TAKEOFF<br/>→ NAVIGATING → HOVER / FAILSAFE"]
-    end
-
-    subgraph BRIDGE["🌉 Transport & Ground Station"]
-        CMD["/ap/v1/cmd_vel<br/>TwistStamped @ 50 Hz"]
-        BR["bridge_server.py<br/>HTTP :8000 + WS /ws<br/>DEMO replay / LIVE forward"]
-        GCS["🖥️ AeroVIO Dashboard<br/>KPI · 3D Map · Oscilloscope · Camera HUD"]
-    end
-
-    CAM --> VIO
-    IMU --> VIO
+  subgraph EST["2 · State estimation"]
+    direction TB
+    VIO["Monocular VIO / MSCKF<br/>Body pose · camera pose<br/>Sparse map (442 points)"]
+    STATE["Filtered pose + twist<br/>50 Hz"]
     VIO --> STATE
-    STATE --> WD
-    AP --> WD
-    WD --> ADAPT
-    ADAPT --> POS --> ATTG --> SO3 --> FSM --> CMD
-    STATE -.-> BR
-    POS -.-> BR
-    ATTG -.-> BR
-    SO3 -.-> BR
-    VIO -.-> BR
-    BR <==>|"JSON @ ~50 Hz"| GCS
+  end
 
-    style POS fill:#0EA5E9,stroke:#0284C7,color:#fff
-    style SO3 fill:#10B981,stroke:#059669,color:#fff
-    style VIO fill:#8B5CF6,stroke:#7C3AED,color:#fff
-    style BR fill:#F59E0B,stroke:#D97706,color:#fff
+  subgraph CONTROL["3 · Flight control · 50 Hz"]
+    direction TB
+    POS["Position loop<br/>Position / velocity error"]
+    GEN["Attitude generator<br/>Desired thrust · R₍d₎ · q₍d₎"]
+    SO3["Geometric SO(3) loop<br/>Attitude / rate error"]
+    FSM["Flight state machine<br/>Arm · takeoff · navigate · failsafe"]
+    POS --> GEN --> SO3 --> FSM
+  end
+
+  subgraph GROUND["4 · Ground station"]
+    direction TB
+    BRIDGE["Python bridge<br/>HTTP :8000 · WebSocket /ws"]
+    UI["AeroVIO dashboard<br/>3D map · camera HUD · telemetry scopes"]
+    BRIDGE <--> |"Normalized JSON · ~50 Hz"| UI
+  end
+
+  CAM --> VIO
+  IMU --> VIO
+  AP --> STATE
+  STATE --> POS
+  FSM -->|"Command / telemetry contract"| BRIDGE
+  STATE -. "State telemetry" .-> BRIDGE
+  VIO -. "VIO telemetry" .-> BRIDGE
+
+  classDef sensor fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:1.5px;
+  classDef estimate fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:1.5px;
+  classDef control fill:#D1FAE5,stroke:#059669,color:#064E3B,stroke-width:1.5px;
+  classDef bridge fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:1.5px;
+  class CAM,IMU,AP sensor;
+  class VIO,STATE estimate;
+  class POS,GEN,SO3,FSM control;
+  class BRIDGE,UI bridge;
 ```
 
 <details>
-<summary><b>🔍 Data-flow notes</b></summary>
+<summary><b>🔎 Data-flow notes</b></summary>
 
-- **DEMO mode** — `bridge_server.py` replays CSV trajectories, synthesizes $T_{WB}$/$T_{WC}$, computes controller outputs on-the-fly @ 50 Hz, broadcasts normalized JSON to all `/ws` clients.
-- **LIVE mode** — bridge forwards frames from a companion `rclpy` adapter subscribing to real ROS 2 topics. Dashboard unchanged.
-- **Truthful status** — header pills show `Bridge: ● Connected` vs `ROS 2: ○ DEMO` independently. No conflation.
+- **DEMO mode:** `bridge_server.py` replays the bundled CSV trajectories, synthesizes body/camera poses, computes demo controller telemetry, and broadcasts normalized JSON to `/ws` clients.
+- **LIVE mode:** the dashboard can connect to a bridge endpoint intended to receive normalized telemetry from a companion ROS 2 adapter. The `rclpy` live adapter and physical command forwarding remain roadmap items; this README does not imply the current bridge alone flies hardware.
+- **Connection status:** bridge connectivity and ROS 2/live-data availability are separate states.
 
 </details>
 
@@ -165,48 +161,76 @@ flowchart TB
 
 ## 📐 Mathematical Formulations
 
-> All gains / constants match `bridge_server.py` + `drones-controller` ROS 2 params exactly.
+> Equations are displayed as LaTeX instead of inline code so GitHub renders subscripts, norms, transposes, and vector operators correctly. Parameter values should be kept in sync with `bridge_server.py` and the companion `drones-controller` ROS 2 parameters.
 
 ### ① Outer Loop — Position Controller
 
-| Symbol | Definition |
-|---|---|
-| $e_p = p - p_d$ | Position error $[e_{px},e_{py},e_{pz}]^T$ |
-| $e_v = v - v_d$ | Velocity error $[e_{vx},e_{vy},e_{vz}]^T$ |
-| $F_d = -K_p e_p - K_v e_v + m g e_3 + m a_d$ | Desired force |
+The position and velocity tracking errors are
 
-| Param | Value |
+$
+\mathbf{e}_p = \mathbf{p} - \mathbf{p}_d, \qquad
+\mathbf{e}_v = \mathbf{v} - \mathbf{v}_d.
+$
+
+The desired force is
+
+$
+\mathbf{F}_d = -K_p\mathbf{e}_p - K_v\mathbf{e}_v + mg\mathbf{e}_3 + m\mathbf{a}_d.
+$
+
+| Parameter | Value |
 |---|---|
-| $m$ | $1.50\ \text{kg}$ |
-| $K_p$ | $\mathrm{diag}(0.5, 0.5, 0.5)$ |
-| $K_v$ | $\mathrm{diag}(0.2, 0.2, 0.2)$ |
-| $g$ | $9.81\ \text{m/s}^2$ |
+| $m$ | $1.50\ \mathrm{kg}$ |
+| $K_p$ | $\operatorname{diag}(0.5,\,0.5,\,0.5)$ |
+| $K_v$ | $\operatorname{diag}(0.2,\,0.2,\,0.2)$ |
+| $g$ | $9.81\ \mathrm{m/s^2}$ |
 
 ### ② Attitude Generator
 
-$$b_{3d} = \frac{F_d}{\lVert F_d \rVert} \qquad T_d = \lVert F_d \rVert$$
+The desired body thrust axis and thrust magnitude are
 
-Produces $R_d \in \mathrm{SO}(3)$ and $q_d$ (desired quaternion) from thrust direction + yaw reference.
+$
+\mathbf{b}_{3d} = \frac{\mathbf{F}_d}{\lVert\mathbf{F}_d\rVert},
+\qquad
+T_d = \lVert\mathbf{F}_d\rVert.
+$
+
+The generator uses the thrust direction and yaw reference to construct the desired rotation $R_d \in \mathrm{SO}(3)$ and quaternion $q_d$.
 
 ### ③ Inner Loop — Geometric SO(3) Controller
 
-| Symbol | Definition |
-|---|---|
-| $e_R = \tfrac{1}{2}\left(R_d^T R - R^T R_d\right)^{\vee}$ | Attitude error $[e_{Rx},e_{Ry},e_{Rz}]^T$ |
-| $e_{\omega} = \omega - R^T R_d\, \omega_d$ | Angular velocity error |
-| $M_d = -k_R\, e_R - k_{\Omega}\, e_{\omega} + \omega \times J \omega$ | Desired moment |
+The attitude and angular-velocity errors are
 
-| Param | Value |
+$
+\mathbf{e}_R = \frac{1}{2}\left(R_d^T R - R^T R_d\right)^{\vee},
+\qquad
+\mathbf{e}_{\omega} = \boldsymbol{\omega} - R^T R_d\boldsymbol{\omega}_d.
+$
+
+The desired control moment is
+
+$
+\mathbf{M}_d = -k_R\mathbf{e}_R - k_{\Omega}\mathbf{e}_{\omega}
+               + \boldsymbol{\omega}\times J\boldsymbol{\omega}.
+$
+
+| Parameter | Value |
 |---|---|
-| $J$ | $\mathrm{diag}(0.02,\ 0.02,\ 0.04)\ \text{kg·m}^2$ |
-| $k_R$ | $[4.85,\ 4.85,\ 2.50]$ |
-| $k_{\Omega}$ | $[0.35,\ 0.35,\ 0.20]$ |
+| $J$ | $\operatorname{diag}(0.02,\,0.02,\,0.04)\ \mathrm{kg\,m^2}$ |
+| $k_R$ | $[4.85,\,4.85,\,2.50]$ |
+| $k_{\Omega}$ | $[0.35,\,0.35,\,0.20]$ |
 
 ### ④ Frame Extrinsics
 
-$$T_{WC} = T_{WB} \cdot T_{BC} \qquad T_{BC} = [+0.10,\, 0.00,\, -0.04]\,\text{m}$$
+The camera pose is derived from the body pose and the body-to-camera transform:
 
-Camera mounted **10 cm forward, 4 cm downward** on airframe. Dashboard renders both trajectories independently — toggle $T_{WB}$ / $T_{WC}$ layers in 3D view.
+$
+T_{WC} = T_{WB}T_{BC},
+\qquad
+\mathbf{t}_{BC} = [0.10,\,0.00,\,-0.04]^T\ \mathrm{m}.
+$
+
+The camera is mounted **10 cm forward and 4 cm downward** relative to the body frame. The dashboard can render the $T_{WB}$ and $T_{WC}$ trajectories independently.
 
 ---
 
