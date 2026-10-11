@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/diagrams/aerovio-hero.svg" width="100%" alt="Animated AeroVIO hero: sensor data flows through VIO and geometric control into a telemetry monitor." />
+<img src="docs/diagrams/aerovio-hero-v2.svg" width="100%" alt="Animated AeroVIO hero: sensor data flows through VIO and geometric control into a telemetry monitor." />
 
 <br/>
 
@@ -71,7 +71,7 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 |---|---|
 | 🎯 **Truthful by design** | Explicitly separates **WebSocket bridge** connectivity from **ROS 2 live-node** connectivity — no fake "connected" states. |
 | ⚡ **50 Hz closed-loop** | Full cascaded pipeline at controller rate: Position → Attitude Generator → Geometric SO(3) → FSM → ArduPilot. |
-| 👁️ **Frame-rigorous VIO** | Strict `T_WB` (body) vs $T_{WC} = T_{WB} \cdot T_{BC}$ (camera optical) separation. No shortcuts. |
+| 👁️ **Frame-rigorous VIO** | Strict $T_{WB}$ (body) vs $T_{WC} = T_{WB} \cdot T_{BC}$ (camera optical) separation. No shortcuts. |
 | 🗺️ **Real 3D mapping** | 442-point `synthetic_orbit_scanned_map.pcd` reconstruction, multi-projection (Isometric / Top XY / Side XZ). |
 | 🔌 **Zero-dependency bridge** | Pure stdlib Python — `http.server` + hand-rolled RFC 6455 WebSocket. No `pip install`. |
 | 📡 **5 flight regimes** | Calibrated datasets: `orbit` · `hover` · `straight` · `multi_axis` · `stress` (500 pts each). |
