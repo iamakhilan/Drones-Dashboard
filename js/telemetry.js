@@ -10,27 +10,7 @@
 (function(window) {
   'use strict';
 
-  // Configurable App Settings (APP_CONFIG defined early in websocket.js; hydrate here if needed)
-  (function ensureAppConfig(){
-    var lsUrl = null;
-    try { lsUrl = localStorage.getItem('aerovio.wsUrl'); } catch(e) {}
-    if (!window.APP_CONFIG) {
-      window.APP_CONFIG = {
-        websocketUrl: lsUrl || 'ws://localhost:8000/ws',
-        rateHz: 50.0,
-        massKg: 1.5,
-        gravity: 9.81
-      };
-    } else {
-      if (lsUrl) window.APP_CONFIG.websocketUrl = lsUrl;
-      if (!window.APP_CONFIG.websocketUrl) window.APP_CONFIG.websocketUrl = 'ws://localhost:8000/ws';
-      if (!window.APP_CONFIG.rateHz) window.APP_CONFIG.rateHz = 50.0;
-      if (!window.APP_CONFIG.massKg) window.APP_CONFIG.massKg = 1.5;
-      if (!window.APP_CONFIG.gravity) window.APP_CONFIG.gravity = 9.81;
-    }
-    var _badge = document.getElementById('top-endpoint-badge');
-    if (_badge) _badge.textContent = window.APP_CONFIG.websocketUrl;
-  })();
+  // APP_CONFIG defined in js/config.js — consumed here
 
   function _syncHeaderBadges(stateOrMode){
     try {

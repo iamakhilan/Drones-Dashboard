@@ -8,29 +8,7 @@
 (function(window) {
   'use strict';
 
-  // -------------------------------------------------------------------------
-  // APP_CONFIG early definition with localStorage persistence
-  // Must be defined BEFORE any class reads it (audit: define APP_CONFIG early)
-  // -------------------------------------------------------------------------
-  (function initAppConfigEarly() {
-    var storedUrl = null;
-    try { storedUrl = localStorage.getItem('aerovio.wsUrl'); } catch(e) {}
-    if (!window.APP_CONFIG) {
-      window.APP_CONFIG = {
-        websocketUrl: storedUrl || 'ws://localhost:8000/ws',
-        rateHz: 50.0,
-        massKg: 1.5,
-        gravity: 9.81
-      };
-    } else {
-      // hydrate from localStorage if present
-      if (storedUrl) window.APP_CONFIG.websocketUrl = storedUrl;
-      if (!window.APP_CONFIG.websocketUrl) window.APP_CONFIG.websocketUrl = 'ws://localhost:8000/ws';
-      if (!window.APP_CONFIG.rateHz) window.APP_CONFIG.rateHz = 50.0;
-      if (!window.APP_CONFIG.massKg) window.APP_CONFIG.massKg = 1.5;
-      if (!window.APP_CONFIG.gravity) window.APP_CONFIG.gravity = 9.81;
-    }
-  })();
+  // APP_CONFIG now defined in js/config.js (loaded first) — no duplicate here
 
   var WS_URL_PATTERN = /^wss?:\/\/.+/i;
   var STORAGE_KEY = 'aerovio.wsUrl';
