@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="docs/aerovio-architecture.svg" alt="AeroVIO dark architecture overview" width="100%" />
-
 # <span style="color:#7DD3FC">AeroVIO</span> Ground Station
 
 ### **See the state. Understand the flight.**
@@ -18,7 +16,7 @@ A telemetry-rich ground station for exploring drone state estimation, 3D mapping
   <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-06B6D4?style=for-the-badge" alt="MIT license" /></a>
 </p>
 
-[Explore features](#-capabilities) · [Architecture](#-architecture) · [Mathematics](#-mathematical-formulations) · [Quickstart](#-quickstart)
+[Explore features](#-feature-highlights) · [Architecture](#-architecture) · [Mathematics](#-mathematical-formulations) · [Quickstart](#-quickstart)
 
 </div>
 
