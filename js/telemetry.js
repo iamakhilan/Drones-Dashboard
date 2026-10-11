@@ -10,13 +10,36 @@
 (function(window) {
   'use strict';
 
-  // Configurable App Settings
-  window.APP_CONFIG = window.APP_CONFIG || {
-    websocketUrl: 'ws://localhost:8000/ws',
-    rateHz: 50.0,
-    massKg: 1.5,
-    gravity: 9.81
-  };
+  // Configurable App Settings (APP_CONFIG defined early in websocket.js; hydrate here if needed)
+  (function ensureAppConfig(){
+    var lsUrl = null;
+    try { lsUrl = localStorage.getItem('aerovio.wsUrl'); } catch(e) {}
+    if (!window.APP_CONFIG) {
+      window.APP_CONFIG = {
+        websocketUrl: lsUrl || 'ws://localhost:8000/ws',
+        rateHz: 50.0,
+        massKg: 1.5,
+        gravity: 9.81
+      };
+    } else {
+      if (lsUrl) window.APP_CONFIG.websocketUrl = lsUrl;
+      if (!window.APP_CONFIG.websocketUrl) window.APP_CONFIG.websocketUrl = 'ws://localhost:8000/ws';
+      if (!window.APP_CONFIG.rateHz) window.APP_CONFIG.rateHz = 50.0;
+      if (!window.APP_CONFIG.massKg) window.APP_CONFIG.massKg = 1.5;
+      if (!window.APP_CONFIG.gravity) window.APP_CONFIG.gravity = 9.81;
+    }
+    var _badge = document.getElementById('top-endpoint-badge');
+    if (_badge) _badge.textContent = window.APP_CONFIG.websocketUrl;
+  })();
+
+  function _syncHeaderBadges(stateOrMode){
+    try {
+      var ep = document.getElementById('top-endpoint-badge');
+      if (ep && window.APP_CONFIG) ep.textContent = window.APP_CONFIG.websocketUrl || 'ws://localhost:8000/ws';
+      var inp = document.getElementById('tune-ws-url');
+      if (inp && window.APP_CONFIG && inp.value !== window.APP_CONFIG.websocketUrl) inp.value = window.APP_CONFIG.websocketUrl;
+    } catch(e) {}
+  }
 
   // Extrinsic transform from Body (IMU) to Camera optical frame: T_BC
   // Camera is mounted +10cm forward, -4cm downward on the airframe
@@ -199,6 +222,11 @@
       this.totalTraveledDist = 0;
       this.lastPos = null;
 
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function(){ _syncHeaderBadges(this.state.connection); }.bind(this));
+      } else {
+        setTimeout(function(){ _syncHeaderBadges(this.state.connection); }.bind(this), 0);
+      }
       // Start internal watchdog and demo runner if initial mode is DEMO
       this._initWatchdog();
       if (this.mode === 'DEMO') {
@@ -241,6 +269,7 @@
       if (mode === this.mode) return;
       this.mode = mode;
       this.state.connection.mode = mode;
+      _syncHeaderBadges(mode);
 
       if (mode === 'DEMO') {
         this.startDemoMode();
@@ -529,7 +558,7 @@
       this.state.isStale = false;
       this.state.staleDuration = 0;
 
-      if (data.connection) Object.assign(this.state.connection, data.connection);
+      if (data.connection) { Object.assign(this.state.connection, data.connection); _syncHeaderBadges(this.state.connection); }
       if (data.position) Object.assign(this.state.position, data.position);
       if (data.velocity) Object.assign(this.state.velocity, data.velocity);
       if (data.acceleration) Object.assign(this.state.acceleration, data.acceleration);
@@ -580,6 +609,7 @@
      * Clean disconnected state
      */
     setDisconnectedState() {
+      _syncHeaderBadges('DISCONNECTED');
       this.state.connection.ros = false;
       this.state.connection.websocket = false;
       this.state.connection.state = 'DISCONNECTED';

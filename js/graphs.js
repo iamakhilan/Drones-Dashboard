@@ -86,6 +86,8 @@
 
     init() {
       this._bindHoverEvents();
+      this._applyResponsiveFixups();
+      window.addEventListener('resize', () => this._applyResponsiveFixups());
 
       // Subscribe to telemetry engine if available
       if (window.telemetry) {
@@ -100,12 +102,14 @@
         const svg = document.getElementById(this.chartConfigs[chartKey].svgId);
         if (!svg) return;
 
-        svg.addEventListener('mousemove', (e) => {
+        var handleMove = (clientX) => {
           const rect = svg.getBoundingClientRect();
-          const svgX = ((e.clientX - rect.left) / rect.width) * 400;
+          const svgX = ((clientX - rect.left) / rect.width) * 400;
           this.hoverState.activeChart = chartKey;
           this.hoverState.cursorX = Math.max(45, Math.min(390, svgX));
-        });
+        };
+
+        svg.addEventListener('mousemove', (e) => { handleMove(e.clientX); });
 
         svg.addEventListener('mouseleave', () => {
           if (this.hoverState.activeChart === chartKey) {
@@ -113,6 +117,51 @@
             this.hoverState.cursorX = null;
           }
         });
+
+        // Touch support
+        svg.addEventListener('touchmove', (e) => {
+          if (!e.touches || !e.touches[0]) return;
+          e.preventDefault();
+          handleMove(e.touches[0].clientX);
+        }, { passive: false });
+
+        svg.addEventListener('touchstart', (e) => {
+          if (!e.touches || !e.touches[0]) return;
+          handleMove(e.touches[0].clientX);
+        }, { passive: true });
+
+        svg.addEventListener('touchend', () => {
+          if (this.hoverState.activeChart === chartKey) {
+            this.hoverState.activeChart = null;
+            this.hoverState.cursorX = null;
+          }
+        });
+      });
+    }
+
+    // Apply responsive class fixups: h-44 -> h-56 on mobile, footer grid cols-2 on <768px
+    _applyResponsiveFixups() {
+      // graph wrapper containers: .w-full.h-44 inside graphs-section
+      var wrappers = document.querySelectorAll('#graphs-section .w-full.h-44, #graphs-section .w-full.h-56');
+      wrappers.forEach(function(el){
+        if (window.innerWidth < 768) {
+          el.classList.remove('h-44');
+          el.classList.add('h-56');
+        } else {
+          el.classList.remove('h-56');
+          el.classList.add('h-44');
+        }
+      });
+      // footer grids: grid-cols-4 -> grid-cols-2 on <768px
+      var footers = document.querySelectorAll('#graphs-section .grid.grid-cols-4');
+      footers.forEach(function(el){
+        if (window.innerWidth < 768) {
+          el.classList.remove('grid-cols-4');
+          el.classList.add('grid-cols-2');
+        } else {
+          el.classList.remove('grid-cols-2');
+          el.classList.add('grid-cols-4');
+        }
       });
     }
 
@@ -236,11 +285,14 @@
       }
     }
 
-    clearBuffers() {
+    clearBuffers(silent) {
       this.buffers.accel = [];
       this.buffers.vel = [];
       this.buffers.pos = [];
       this.render();
+      if (!silent && window.ui && typeof window.ui.showToast === 'function') {
+        // ui.js clearTrajectory handles Undo toast; avoid double toast when called via ui
+      }
     }
 
     _startRenderLoop() {

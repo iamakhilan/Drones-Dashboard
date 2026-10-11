@@ -3,17 +3,59 @@
  * AeroVIO Ground Control Station - Central UI & 3D Spatial Map Controller
  * Orchestrates topbar mode switches (LIVE vs DEMO), dataset selectors,
  * telemetry gauges, 3D trajectory layers (T_WB vs T_WC), modals, and toasts.
+ * Patch: audit fixes — id mappings, projections, pointer/touch/pinch,
+ * devicePixelRatio, stale-warning-banner, drawer+overlay, IntersectionObserver,
+ * modal id search, dataset ?dataset= persistence, empty states, Undo CLEAR.
  * ============================================================================
  */
 
 (function(window) {
   'use strict';
 
+  // Ensure stale-warning-banner exists (audit: wire stale-warning-banner)
+  function ensureStaleBanner() {
+    var existing = document.getElementById('stale-warning-banner');
+    if (existing) return existing;
+    var banner = document.createElement('div');
+    banner.id = 'stale-warning-banner';
+    banner.className = 'hidden bg-amber-100 border border-amber-300 text-amber-900 text-xs font-mono px-4 py-2 flex items-center justify-between';
+    banner.innerHTML = '<span id="stale-warning-text" class="font-bold">TELEMETRY STALE — NO ROS 2 PACKETS RECEIVED</span><button onclick="this.parentElement.classList.add(\'hidden\')" class="ml-3 text-amber-700 hover:text-amber-900 font-bold">×</button>';
+    // insert after header or at top of main
+    var main = document.querySelector('main') || document.body;
+    if (main && main.parentElement) {
+      var header = document.querySelector('header');
+      if (header && header.nextElementSibling) header.insertAdjacentElement('afterend', banner);
+      else document.body.prepend(banner);
+    } else {
+      document.body.prepend(banner);
+    }
+    return banner;
+  }
+
+  // Ensure top-endpoint-badge exists (audit: sync with telemetry header badge)
+  function ensureEndpointBadge() {
+    var existing = document.getElementById('top-endpoint-badge');
+    if (existing) return existing;
+    var badge = document.createElement('span');
+    badge.id = 'top-endpoint-badge';
+    badge.className = 'hidden md:inline text-[11px] font-mono text-stone-400 truncate max-w-[220px]';
+    var parent = document.querySelector('header .flex.items-center.space-x-3');
+    if (parent) parent.appendChild(badge);
+    else {
+      var hdr = document.querySelector('header');
+      if (hdr) hdr.appendChild(badge);
+    }
+    if (window.APP_CONFIG && window.APP_CONFIG.websocketUrl) badge.textContent = window.APP_CONFIG.websocketUrl;
+    return badge;
+  }
+
   class UIController {
     constructor() {
       // 3D Map View State
       this.mapCanvas = null;
       this.mapCtx = null;
+      // Also support SVG spatial canvas
+      this.svgSpatial = null;
       this.projectionMode = 'ISOMETRIC'; // 'ISOMETRIC' | 'TOP_DOWN' | 'CAM_FOLLOW'
       this.layers = {
         bodyTrajectory: true,      // T_WB
@@ -29,13 +71,21 @@
       this.mapScale = 14.0;
       this.isDraggingMap = false;
       this.lastMousePos = { x: 0, y: 0 };
+      this.pinchStartDist = 0;
+      this.pinchStartScale = 14.0;
 
       // Rosbag Recording State
       this.isRecordingRosbag = true;
       this.rosbagStartTime = Date.now() - (14 * 60 + 22) * 1000;
 
+      // Undo for CLEAR
+      this.clearUndoSnapshot = null;
+      this.clearUndoTimer = null;
+
       // DOM Elements
       this.elements = {};
+      this._activeNavId = null;
+      this.drawerOpen = false;
 
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => this.init());
@@ -45,10 +95,17 @@
     }
 
     init() {
+      ensureStaleBanner();
+      ensureEndpointBadge();
       this._bindElements();
       this._bindEvents();
+      this._initDatasetPersistence();
+      this._initDrawer();
+      this._initActiveNavObserver();
       this._init3DMap();
       this._startClock();
+      this._syncEndpointBadge();
+      this._renderEmptyStates();
 
       // Hook Telemetry Engine
       if (window.telemetry) {
@@ -65,14 +122,20 @@
       this.elements.rosConnBadge = document.getElementById('top-ros-badge');
       this.elements.rosConnText = document.getElementById('top-ros-text');
       this.elements.rosConnDot = document.getElementById('top-ros-dot');
-      this.elements.modeSelector = document.getElementById('dataset-selector');
+      // FIX: dataset-selector -> dataset-selector-bar
+      this.elements.modeSelector = document.getElementById('dataset-selector-bar') || document.getElementById('dataset-selector');
       this.elements.staleBanner = document.getElementById('stale-warning-banner');
+      if (!this.elements.staleBanner) this.elements.staleBanner = ensureStaleBanner();
       this.elements.staleText = document.getElementById('stale-warning-text');
       this.elements.rosbagBtn = document.getElementById('rosbag-btn');
       this.elements.rosbagTimer = document.getElementById('rosbag-timer');
-      this.elements.mapCanvas = document.getElementById('map-canvas-3d');
-      this.elements.mapPointCount = document.getElementById('map-point-count');
-      this.elements.mapDronePosText = document.getElementById('map-drone-pos-text');
+      // FIX: map-canvas-3d -> svg-spatial-canvas
+      this.elements.mapCanvas = document.getElementById('svg-spatial-canvas') || document.getElementById('map-canvas-3d');
+      // Keep svg ref for projection helpers
+      this.elements.svgCanvas = document.getElementById('svg-spatial-canvas');
+      this.elements.mapPointCount = document.getElementById('map-point-count') || document.getElementById('hud-map-pts') || document.getElementById('sidebar-pointcount');
+      this.elements.mapDronePosText = document.getElementById('map-drone-pos-text') || document.getElementById('hud-pw');
+      this.elements.topEndpointBadge = document.getElementById('top-endpoint-badge');
 
       // Health gauges
       this.elements.healthCamera = document.getElementById('health-camera-badge');
@@ -82,10 +145,10 @@
       this.elements.healthWs = document.getElementById('health-ws-badge');
 
       // Main Instrumentation Gauges
-      this.elements.gaugePosX = document.getElementById('gauge-pos-x');
+      this.elements.gaugePosX = document.getElementById('gauge-pos-x') || document.getElementById('tel-pos-wb');
       this.elements.gaugePosY = document.getElementById('gauge-pos-y');
       this.elements.gaugePosZ = document.getElementById('gauge-pos-z');
-      this.elements.gaugePosTotal = document.getElementById('gauge-pos-total');
+      this.elements.gaugePosTotal = document.getElementById('gauge-pos-total') || document.getElementById('kpi-displacement');
       this.elements.gaugeAltBar = document.getElementById('gauge-alt-bar');
 
       this.elements.gaugeVelVx = document.getElementById('gauge-vel-vx');
@@ -97,48 +160,263 @@
       this.elements.gaugeAttRoll = document.getElementById('gauge-att-roll');
       this.elements.gaugeAttPitch = document.getElementById('gauge-att-pitch');
       this.elements.gaugeAttYaw = document.getElementById('gauge-att-yaw');
-      this.elements.gaugeAttQuat = document.getElementById('gauge-att-quat');
+      this.elements.gaugeAttQuat = document.getElementById('gauge-att-quat') || document.getElementById('tel-quat');
 
-      this.elements.toastContainer = document.getElementById('toast-container');
+      this.elements.toastContainer = document.getElementById('toast-container') || document.getElementById('toast-box');
     }
 
     _bindEvents() {
-      // Keyboard shortcuts
+      // Keyboard shortcuts — fix modal id search: support both search-modal and modal-search
       window.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
           e.preventDefault();
-          this.toggleModal('modal-search');
+          this.toggleModal('search-modal');
         } else if (e.key === 'Escape') {
           this.closeAllModals();
+          this._closeDrawer();
         }
       });
 
-      // 3D Canvas Drag & Orbit Controls
-      if (this.elements.mapCanvas) {
-        this.elements.mapCanvas.addEventListener('mousedown', (e) => {
+      // 3D Canvas pointer/touch/pinch handlers for 3D view
+      var canvasEl = this.elements.mapCanvas || this.elements.svgCanvas;
+      if (canvasEl) {
+        // Pointer events (covers mouse + pen)
+        canvasEl.addEventListener('pointerdown', (e) => {
+          try { canvasEl.setPointerCapture(e.pointerId); } catch(err) {}
           this.isDraggingMap = true;
           this.lastMousePos = { x: e.clientX, y: e.clientY };
+          if (canvasEl.style) canvasEl.style.cursor = 'grabbing';
         });
-
-        window.addEventListener('mousemove', (e) => {
+        window.addEventListener('pointermove', (e) => {
           if (!this.isDraggingMap) return;
-          const dx = e.clientX - this.lastMousePos.x;
-          const dy = e.clientY - this.lastMousePos.y;
+          var dx = e.clientX - this.lastMousePos.x;
+          var dy = e.clientY - this.lastMousePos.y;
           this.lastMousePos = { x: e.clientX, y: e.clientY };
-
           this.mapAngle += dx * 0.008;
           this.mapPitch = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, this.mapPitch + dy * 0.006));
         });
-
-        window.addEventListener('mouseup', () => {
+        window.addEventListener('pointerup', (e) => {
           this.isDraggingMap = false;
+          if (canvasEl.style) canvasEl.style.cursor = '';
+          try { canvasEl.releasePointerCapture(e.pointerId); } catch(err) {}
         });
+        canvasEl.addEventListener('pointercancel', () => { this.isDraggingMap = false; });
 
-        this.elements.mapCanvas.addEventListener('wheel', (e) => {
+        // Touch fallback (for older browsers) — also handles pinch
+        canvasEl.addEventListener('touchstart', (e) => {
+          if (e.touches.length === 1) {
+            this.isDraggingMap = true;
+            this.lastMousePos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+          } else if (e.touches.length === 2) {
+            this.isDraggingMap = false;
+            var dx = e.touches[0].clientX - e.touches[1].clientX;
+            var dy = e.touches[0].clientY - e.touches[1].clientY;
+            this.pinchStartDist = Math.hypot(dx, dy);
+            this.pinchStartScale = this.mapScale;
+          }
+        }, { passive: true });
+        canvasEl.addEventListener('touchmove', (e) => {
+          if (e.touches.length === 1 && this.isDraggingMap) {
+            e.preventDefault();
+            var dx = e.touches[0].clientX - this.lastMousePos.x;
+            var dy = e.touches[0].clientY - this.lastMousePos.y;
+            this.lastMousePos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            this.mapAngle += dx * 0.008;
+            this.mapPitch = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, this.mapPitch + dy * 0.006));
+          } else if (e.touches.length === 2) {
+            e.preventDefault();
+            var dx2 = e.touches[0].clientX - e.touches[1].clientX;
+            var dy2 = e.touches[0].clientY - e.touches[1].clientY;
+            var dist = Math.hypot(dx2, dy2);
+            if (this.pinchStartDist > 0) {
+              var factor = dist / this.pinchStartDist;
+              // pinch scale: factor>1 zoom in (increase scale), <1 zoom out
+              this.mapScale = Math.max(5.0, Math.min(50.0, this.pinchStartScale * factor));
+            }
+          }
+        }, { passive: false });
+        canvasEl.addEventListener('touchend', (e) => {
+          if (e.touches.length === 0) this.isDraggingMap = false;
+          if (e.touches.length < 2) this.pinchStartDist = 0;
+        }, { passive: true });
+
+        canvasEl.addEventListener('wheel', (e) => {
           e.preventDefault();
           this.mapScale = Math.max(5.0, Math.min(50.0, this.mapScale - Math.sign(e.deltaY) * 1.5));
         }, { passive: false });
+
+        // prevent context menu on right drag
+        canvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
       }
+
+      // Modal click-outside to close
+      document.addEventListener('click', (e) => {
+        var searchModal = document.getElementById('search-modal') || document.getElementById('modal-search');
+        if (searchModal && !searchModal.classList.contains('hidden') && e.target === searchModal) {
+          this.closeAllModals();
+        }
+        var tuningModal = document.getElementById('tuning-modal') || document.getElementById('modal-controller') || document.getElementById('modal-vio');
+        if (tuningModal && !tuningModal.classList.contains('hidden') && e.target === tuningModal) {
+          this.closeAllModals();
+        }
+        // drawer overlay click handled separately
+      });
+    }
+
+    // Dataset persistence via history.replaceState and ?dataset=
+    _initDatasetPersistence() {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var ds = params.get('dataset');
+        if (ds) {
+          // sanitize to known keys
+          var norm = ds.replace(/[^a-zA-Z0-9_\-]/g,'');
+          // map short keys
+          var map = { orbit: 'orbit', hover: 'hover', straight: 'straight', multi_axis: 'multi_axis', stress: 'stress',
+                      synthetic_orbit: 'orbit', synthetic_hover: 'hover', synthetic_straight: 'straight', synthetic_multi_axis: 'multi_axis', synthetic_stress: 'stress' };
+          if (map[norm]) {
+            if (typeof window.switchDataset === 'function') window.switchDataset(map[norm]);
+            if (window.telemetry) {
+              var keyMap = { orbit: 'synthetic_orbit', hover: 'synthetic_hover', straight: 'synthetic_straight', multi_axis: 'synthetic_multi_axis', stress: 'synthetic_stress' };
+              if (keyMap[map[norm]]) window.telemetry.setDemoDataset(keyMap[map[norm]]);
+            }
+            // highlight button
+            document.querySelectorAll('.traj-sel-btn').forEach(function(b){ b.classList.remove('bg-stone-100','text-stone-900','shadow-inner','font-semibold'); });
+            var active = document.getElementById('btn-traj-' + map[norm]);
+            if (active) active.classList.add('bg-stone-100','text-stone-900','shadow-inner','font-semibold');
+          }
+        }
+      } catch(e) {}
+      // wrap switchDataset to persist
+      if (window.switchDataset && !window.switchDataset._persistWrapped) {
+        var orig = window.switchDataset;
+        var self = this;
+        window.switchDataset = function(key){
+          var ret = orig.apply(this, arguments);
+          try {
+            var url = new URL(window.location.href);
+            url.searchParams.set('dataset', key);
+            history.replaceState(null, '', url.toString());
+            if (window.telemetry) {
+              var km = { orbit: 'synthetic_orbit', hover: 'synthetic_hover', straight: 'synthetic_straight', multi_axis: 'synthetic_multi_axis', stress: 'synthetic_stress' };
+              if (km[key]) window.telemetry.setDemoDataset(km[key]);
+            }
+          } catch(e) {}
+          return ret;
+        };
+        window.switchDataset._persistWrapped = true;
+      }
+    }
+
+    _persistDataset(key) {
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.set('dataset', key);
+        history.replaceState(null, '', url.toString());
+      } catch(e) {}
+    }
+
+    // Sidebar drawer toggle + overlay
+    _initDrawer() {
+      var sidebar = document.querySelector('aside');
+      if (!sidebar) return;
+      // ensure overlay exists
+      var overlay = document.getElementById('sidebar-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'sidebar-overlay';
+        overlay.className = 'fixed inset-0 bg-black/40 backdrop-blur-sm z-30 hidden lg:hidden';
+        document.body.appendChild(overlay);
+      }
+      // ensure toggle button exists in header
+      var toggleBtn = document.getElementById('sidebar-drawer-toggle');
+      if (!toggleBtn) {
+        var headerLeft = document.querySelector('header .flex.items-center.space-x-3');
+        toggleBtn = document.createElement('button');
+        toggleBtn.id = 'sidebar-drawer-toggle';
+        toggleBtn.className = 'lg:hidden p-1.5 rounded-lg bg-stone-800 text-stone-200 border border-stone-700 mr-2';
+        toggleBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>';
+        if (headerLeft) headerLeft.prepend(toggleBtn);
+        else {
+          var hdr = document.querySelector('header');
+          if (hdr) hdr.prepend(toggleBtn);
+        }
+      }
+      // style sidebar for drawer on mobile
+      sidebar.classList.add('fixed','inset-y-0','left-0','z-40','transform','transition-transform','duration-200','lg:static','lg:transform-none');
+      // hide by default on mobile
+      if (window.innerWidth < 1024) {
+        sidebar.classList.add('-translate-x-full');
+        sidebar.classList.remove('translate-x-0');
+      } else {
+        sidebar.classList.add('translate-x-0');
+        sidebar.classList.remove('-translate-x-full');
+      }
+      var self = this;
+      toggleBtn.addEventListener('click', function(){ self._toggleDrawer(); });
+      overlay.addEventListener('click', function(){ self._closeDrawer(); });
+      window.addEventListener('resize', function(){
+        if (window.innerWidth >= 1024) {
+          sidebar.classList.remove('-translate-x-full');
+          sidebar.classList.add('translate-x-0');
+          overlay.classList.add('hidden');
+          self.drawerOpen = false;
+        } else if (!self.drawerOpen) {
+          sidebar.classList.add('-translate-x-full');
+        }
+      });
+    }
+    _toggleDrawer() {
+      var sidebar = document.querySelector('aside');
+      var overlay = document.getElementById('sidebar-overlay');
+      if (!sidebar) return;
+      this.drawerOpen = !this.drawerOpen;
+      if (this.drawerOpen) {
+        sidebar.classList.remove('-translate-x-full');
+        sidebar.classList.add('translate-x-0');
+        if (overlay) overlay.classList.remove('hidden');
+      } else {
+        sidebar.classList.add('-translate-x-full');
+        sidebar.classList.remove('translate-x-0');
+        if (overlay) overlay.classList.add('hidden');
+      }
+    }
+    _closeDrawer() {
+      var sidebar = document.querySelector('aside');
+      var overlay = document.getElementById('sidebar-overlay');
+      if (!sidebar) return;
+      this.drawerOpen = false;
+      sidebar.classList.add('-translate-x-full');
+      sidebar.classList.remove('translate-x-0');
+      if (overlay) overlay.classList.add('hidden');
+    }
+
+    // IntersectionObserver for active nav highlighting
+    _initActiveNavObserver() {
+      var navLinks = document.querySelectorAll('aside a.nav-btn[href^="#"]');
+      if (!navLinks.length) return;
+      var sectionIds = Array.from(navLinks).map(function(a){ return a.getAttribute('href'); }).filter(Boolean);
+      var sections = sectionIds.map(function(id){ return document.querySelector(id); }).filter(Boolean);
+      if (!sections.length || !('IntersectionObserver' in window)) return;
+      var self = this;
+      var observer = new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          if (entry.isIntersecting) {
+            var id = '#' + entry.target.id;
+            navLinks.forEach(function(a){
+              if (a.getAttribute('href') === id) {
+                a.classList.add('bg-[#E3E5E7]','text-stone-900','shadow-sm');
+                a.classList.remove('text-stone-700','hover:bg-stone-200/60');
+                self._activeNavId = id;
+              } else {
+                a.classList.remove('bg-[#E3E5E7]','text-stone-900','shadow-sm');
+                a.classList.add('text-stone-700','hover:bg-stone-200/60');
+              }
+            });
+          }
+        });
+      }, { root: null, rootMargin: '-20% 0px -60% 0px', threshold: 0.1 });
+      sections.forEach(function(s){ observer.observe(s); });
     }
 
     _startClock() {
@@ -147,8 +425,6 @@
         if (this.elements.utcClock) {
           this.elements.utcClock.textContent = now.toISOString().substring(11, 22);
         }
-
-        // Update rosbag timer
         if (this.isRecordingRosbag && this.elements.rosbagTimer) {
           const diffMs = Date.now() - this.rosbagStartTime;
           const totalSec = Math.floor(diffMs / 1000);
@@ -160,6 +436,14 @@
       }, 50);
     }
 
+    _syncEndpointBadge() {
+      var badge = document.getElementById('top-endpoint-badge');
+      if (!badge) badge = ensureEndpointBadge();
+      try {
+        if (badge && window.APP_CONFIG) badge.textContent = window.APP_CONFIG.websocketUrl || '';
+      } catch(e) {}
+    }
+
     /**
      * Mode Switcher Handler: 'LIVE' vs 'DEMO'
      */
@@ -169,7 +453,8 @@
 
       const liveBtn = document.getElementById('btn-mode-live');
       const demoBtn = document.getElementById('btn-mode-demo');
-      const datasetContainer = document.getElementById('dataset-selector-container');
+      // FIX: use dataset-selector-bar
+      const datasetContainer = document.getElementById('dataset-selector-bar') || document.getElementById('dataset-selector-container') || document.getElementById('dataset-selector');
 
       if (mode === 'LIVE') {
         if (liveBtn) {
@@ -179,7 +464,7 @@
           demoBtn.className = 'px-3 py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface uppercase tracking-wider text-xs transition';
         }
         if (datasetContainer) datasetContainer.classList.add('hidden');
-        this.showToast('Switched to LIVE ROS 2 Mode — Searching bridge at ws://localhost:8000/ws', 'info');
+        this.showToast('Switched to LIVE ROS 2 Mode — Searching bridge at ' + (window.APP_CONFIG ? window.APP_CONFIG.websocketUrl : 'ws://localhost:8000/ws'), 'info');
       } else {
         if (liveBtn) {
           liveBtn.className = 'px-3 py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface uppercase tracking-wider text-xs transition';
@@ -193,7 +478,7 @@
     }
 
     /**
-     * Switch Demo dataset
+     * Switch Demo dataset — also persists via history.replaceState
      */
     onDatasetChanged(val) {
       if (window.telemetry) {
@@ -206,21 +491,27 @@
           synthetic_stress: 'Synthetic VIO Stress Test'
         };
         this.showToast(`Loaded Dataset: ${nameMap[val] || val}`, 'info');
+        // persist short key
+        var shortMap = { synthetic_orbit: 'orbit', synthetic_hover: 'hover', synthetic_straight: 'straight', synthetic_multi_axis: 'multi_axis', synthetic_stress: 'stress' };
+        var shortKey = shortMap[val] || val;
+        this._persistDataset(shortKey);
+        this._renderEmptyStates();
       }
     }
 
     /**
-     * Stale Telemetry Notification
+     * Stale Telemetry Notification — wired to #stale-warning-banner + #stale-warning-text
      */
     onStaleUpdate(info) {
-      if (!this.elements.staleBanner) return;
+      if (!this.elements.staleBanner) this.elements.staleBanner = document.getElementById('stale-warning-banner') || ensureStaleBanner();
+      if (!this.elements.staleText) this.elements.staleText = document.getElementById('stale-warning-text');
       if (info.isStale && window.telemetry.mode === 'LIVE') {
         this.elements.staleBanner.classList.remove('hidden');
         if (this.elements.staleText) {
           this.elements.staleText.textContent = `TELEMETRY STALE — ${info.duration}s (NO ROS 2 PACKETS RECEIVED)`;
         }
       } else {
-        this.elements.staleBanner.classList.add('hidden');
+        if (this.elements.staleBanner) this.elements.staleBanner.classList.add('hidden');
       }
     }
 
@@ -281,6 +572,9 @@
       }
       if (this.elements.gaugePosTotal) {
         this.elements.gaugePosTotal.textContent = `TOTAL: ${p.total_dist ? p.total_dist.toFixed(1) : '42.8'} m`;
+        // also support kpi-displacement raw number
+        var kpiDisp = document.getElementById('kpi-displacement');
+        if (kpiDisp && p.total_dist) kpiDisp.textContent = p.total_dist.toFixed(1);
       }
       if (this.elements.gaugeAltBar && p.z !== null) {
         this.elements.gaugeAltBar.style.width = `${Math.min(100, Math.max(5, (p.z / 25.0) * 100))}%`;
@@ -317,7 +611,7 @@
         this.elements.gaugeAttQuat.textContent = `QUAT: [${o.qw.toFixed(3)}, ${o.qx.toFixed(3)}, ${o.qy.toFixed(3)}, ${o.qz.toFixed(3)}]`;
       }
 
-      // Top bar ROS badge
+      // Top bar ROS badge + endpoint badge
       if (this.elements.rosConnText) {
         if (state.connection.mode === 'DEMO') {
           this.elements.rosConnText.textContent = 'DEMO DATASET ACTIVE';
@@ -325,16 +619,26 @@
         } else if (state.connection.websocket) {
           this.elements.rosConnText.textContent = `ROS 2 CONNECTED (${state.connection.latency_ms || 0}ms)`;
           if (this.elements.rosConnDot) this.elements.rosConnDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        } else if (state.connection.state && state.connection.state.indexOf('DEGRADED') !== -1) {
+          this.elements.rosConnText.textContent = 'ROS 2 DEGRADED';
+          if (this.elements.rosConnDot) this.elements.rosConnDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
         } else {
           this.elements.rosConnText.textContent = 'ROS 2 DISCONNECTED';
           if (this.elements.rosConnDot) this.elements.rosConnDot.className = 'w-2 h-2 rounded-full bg-red-500';
         }
       }
+      // sync top-endpoint-badge
+      var epBadge = document.getElementById('top-endpoint-badge');
+      if (epBadge && window.APP_CONFIG) epBadge.textContent = window.APP_CONFIG.websocketUrl || '';
 
       // 3D Map drone text
       if (this.elements.mapDronePosText && p.x !== null) {
         this.elements.mapDronePosText.textContent = `XYZ: [${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]`;
+        var hudPw = document.getElementById('hud-pw');
+        if (hudPw) hudPw.innerHTML = `P_WB: [ <span class="text-white">x: ${p.x.toFixed(2)}</span>, <span class="text-white">y: ${p.y.toFixed(2)}</span>, <span class="text-emerald-400">z: ${p.z.toFixed(2)}</span> ] m`;
       }
+      // update empty states visibility
+      this._renderEmptyStates();
     }
 
     onStateChange(state) {
@@ -343,43 +647,170 @@
     }
 
     // =========================================================================
-    // 3D VIO MAP RENDERING ENGINE (CANVAS)
+    // Empty states for graphs / PCD
+    // =========================================================================
+    _renderEmptyStates() {
+      // Graphs empty state
+      var graphBuffers = (window.graphs && window.graphs.buffers) || null;
+      var graphsEmpty = true;
+      if (graphBuffers) {
+        graphsEmpty = (!graphBuffers.accel.length && !graphBuffers.vel.length && !graphBuffers.pos.length);
+      } else {
+        // fallback: check if telemetry has any position yet
+        var st = window.telemetry ? window.telemetry.state : null;
+        graphsEmpty = !(st && st.position && st.position.x !== null);
+      }
+      ['svg-graph-accel','svg-graph-vel','svg-graph-pos'].forEach(function(id){
+        var svg = document.getElementById(id);
+        if (!svg) return;
+        var emptyEl = document.getElementById(id + '-empty');
+        if (graphsEmpty) {
+          if (!emptyEl) {
+            emptyEl = document.createElementNS('http://www.w3.org/2000/svg','text');
+            emptyEl.id = id + '-empty';
+            emptyEl.setAttribute('x','200');
+            emptyEl.setAttribute('y','80');
+            emptyEl.setAttribute('text-anchor','middle');
+            emptyEl.setAttribute('fill','#64748B');
+            emptyEl.setAttribute('font-size','10');
+            emptyEl.setAttribute('font-family','monospace');
+            emptyEl.textContent = 'No data — awaiting telemetry';
+            svg.appendChild(emptyEl);
+          }
+          emptyEl.style.display = 'block';
+        } else if (emptyEl) {
+          emptyEl.style.display = 'none';
+        }
+      });
+
+      // PCD empty state
+      var pcdGroup = document.getElementById('svg-pcd-points-group');
+      if (pcdGroup) {
+        var pcdEmpty = document.getElementById('pcd-empty-state');
+        var hasPoints = pcdGroup.children.length > 0;
+        var st2 = window.telemetry ? window.telemetry.state : null;
+        var hasLandmarks = st2 && st2.landmarks && st2.landmarks.length > 0;
+        if (!hasPoints && !hasLandmarks) {
+          if (!pcdEmpty) {
+            var svgRoot = document.getElementById('svg-spatial-canvas');
+            if (svgRoot) {
+              pcdEmpty = document.createElementNS('http://www.w3.org/2000/svg','text');
+              pcdEmpty.id = 'pcd-empty-state';
+              pcdEmpty.setAttribute('x','300');
+              pcdEmpty.setAttribute('y','175');
+              pcdEmpty.setAttribute('text-anchor','middle');
+              pcdEmpty.setAttribute('fill','#94A3B8');
+              pcdEmpty.setAttribute('font-size','11');
+              pcdEmpty.setAttribute('font-family','monospace');
+              pcdEmpty.textContent = 'No point cloud — load a dataset or connect LIVE';
+              svgRoot.appendChild(pcdEmpty);
+            }
+          }
+        } else if (pcdEmpty) {
+          pcdEmpty.style.display = 'none';
+          if (hasPoints || hasLandmarks) pcdEmpty.style.display = 'none';
+        }
+      }
+    }
+
+    // =========================================================================
+    // 3D VIO MAP RENDERING ENGINE (SVG / Canvas hybrid with DPR handling)
     // =========================================================================
     _init3DMap() {
-      this.mapCanvas = document.getElementById('map-canvas-3d');
-      if (!this.mapCanvas) return;
-      this.mapCtx = this.mapCanvas.getContext('2d');
-
-      const render = () => {
-        this._render3DMap();
+      // svg-spatial-canvas is an SVG element, not a <canvas>; we support both
+      this.mapCanvas = document.getElementById('svg-spatial-canvas') || document.getElementById('map-canvas-3d');
+      this.svgSpatial = document.getElementById('svg-spatial-canvas');
+      // If it's actually a canvas element, init 2d context
+      if (this.mapCanvas && this.mapCanvas.tagName && this.mapCanvas.tagName.toLowerCase() === 'canvas') {
+        this.mapCtx = this.mapCanvas.getContext('2d');
+        const render = () => {
+          this._render3DMap();
+          requestAnimationFrame(render);
+        };
         requestAnimationFrame(render);
-      };
-      requestAnimationFrame(render);
+      } else {
+        // SVG mode: sync telemetry to SVG drone marker
+        // No canvas render loop needed; update via onTelemetryUpdate and CSS transforms
+        // Still handle DPR for any overlay canvas siblings
+        this._handleDPR();
+        window.addEventListener('resize', () => this._handleDPR());
+      }
+    }
+
+    _handleDPR() {
+      var dpr = window.devicePixelRatio || 1;
+      // Scale any canvas siblings of svg-spatial-canvas for crisp rendering
+      var canvases = document.querySelectorAll('#svg-spatial-canvas + canvas, canvas#map-canvas-3d, #pointcloud canvas');
+      canvases.forEach(function(c){
+        var rect = c.getBoundingClientRect();
+        if (!rect.width) return;
+        c.width = Math.round(rect.width * dpr);
+        c.height = Math.round(rect.height * dpr);
+        c.style.width = rect.width + 'px';
+        c.style.height = rect.height + 'px';
+        var ctx = c.getContext('2d');
+        if (ctx) ctx.setTransform(dpr,0,0,dpr,0,0);
+      });
+      // Also handle overlay canvas for graphs if needed (no-op if not present)
     }
 
     setProjection(mode) {
       this.projectionMode = mode;
-      if (mode === 'ISOMETRIC') {
+      // FIX: normalize mode aliases to match perspective toggle ids
+      var norm = mode;
+      if (mode === 'iso' || mode === 'ISOMETRIC') norm = 'ISOMETRIC';
+      else if (mode === 'top' || mode === 'TOP_DOWN') norm = 'TOP_DOWN';
+      else if (mode === 'side' || mode === 'SIDE') norm = 'SIDE';
+      else if (mode === 'follow' || mode === 'CAM_FOLLOW') norm = 'CAM_FOLLOW';
+      this.projectionMode = norm;
+
+      // Proper per-mode alignment
+      if (norm === 'ISOMETRIC') {
         this.mapAngle = 0.52;
         this.mapPitch = 0.42;
-      } else if (mode === 'TOP_DOWN') {
+        this.mapScale = 14.0;
+      } else if (norm === 'TOP_DOWN') {
+        // Top view: look straight down XY plane
         this.mapAngle = 0;
         this.mapPitch = Math.PI / 2 - 0.01;
-      } else if (mode === 'CAM_FOLLOW') {
+        this.mapScale = 18.0;
+      } else if (norm === 'SIDE') {
+        // Side XZ plane
+        this.mapAngle = 0;
+        this.mapPitch = 0.05;
+        this.mapScale = 16.0;
+      } else if (norm === 'CAM_FOLLOW') {
         this.mapPitch = 0.35;
+        // keep angle but pitch slight
       }
 
-      // Button styles
-      ['btn-proj-iso', 'btn-proj-top', 'btn-proj-follow'].forEach(id => {
-        const b = document.getElementById(id);
+      // Button styles — support both id schemes
+      var isoBtn = document.getElementById('btn-persp-iso');
+      var topBtn = document.getElementById('btn-persp-top');
+      var sideBtn = document.getElementById('btn-persp-side');
+      var followBtn = document.getElementById('btn-persp-follow');
+      [isoBtn, topBtn, sideBtn, followBtn].forEach(function(b){
+        if (b) b.className = 'persp-btn text-stone-600 hover:text-stone-900 px-2 py-0.5 rounded';
+      });
+      var activeBtn = null;
+      if (norm === 'ISOMETRIC' && isoBtn) activeBtn = isoBtn;
+      else if (norm === 'TOP_DOWN' && topBtn) activeBtn = topBtn;
+      else if (norm === 'SIDE' && sideBtn) activeBtn = sideBtn;
+      else if (norm === 'CAM_FOLLOW' && followBtn) activeBtn = followBtn;
+      if (activeBtn) {
+        activeBtn.className = 'persp-btn bg-white text-stone-900 px-2 py-0.5 rounded shadow-sm';
+      }
+      // Also support legacy btn-proj-* ids
+      ['btn-proj-iso', 'btn-proj-top', 'btn-proj-follow'].forEach(function(id){
+        var b = document.getElementById(id);
         if (b) {
-          b.className = 'px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm uppercase transition-colors';
+          var isActive = (id === 'btn-proj-iso' && norm==='ISOMETRIC') || (id === 'btn-proj-top' && norm==='TOP_DOWN') || (id === 'btn-proj-follow' && norm==='CAM_FOLLOW');
+          b.className = isActive ? 'px-space-sm py-1 bg-primary text-on-primary font-label-sm text-label-sm uppercase font-bold' : 'px-space-sm py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm uppercase transition-colors';
         }
       });
-      const activeId = mode === 'ISOMETRIC' ? 'btn-proj-iso' : (mode === 'TOP_DOWN' ? 'btn-proj-top' : 'btn-proj-follow');
-      const activeBtn = document.getElementById(activeId);
-      if (activeBtn) {
-        activeBtn.className = 'px-space-sm py-1 bg-primary text-on-primary font-label-sm text-label-sm uppercase font-bold';
+      // Sync to inline PCD projection helper if present
+      if (typeof window.setPerspective === 'function') {
+        try { window.setPerspective(mode.toLowerCase()); } catch(e) {}
       }
     }
 
@@ -388,11 +819,59 @@
     }
 
     clearTrajectory() {
+      // Save undo snapshot
+      var snapshot = null;
       if (window.telemetry) {
+        try {
+          snapshot = {
+            body: (window.telemetry.state.trajectories.body || []).slice(),
+            camera: (window.telemetry.state.trajectories.camera || []).slice()
+          };
+        } catch(e) { snapshot = null; }
+        if (window.graphs && window.graphs.buffers) {
+          snapshot.graphs = {
+            accel: (window.graphs.buffers.accel || []).slice(),
+            vel: (window.graphs.buffers.vel || []).slice(),
+            pos: (window.graphs.buffers.pos || []).slice()
+          };
+        }
         window.telemetry.state.trajectories.body = [];
         window.telemetry.state.trajectories.camera = [];
+        if (window.graphs && typeof window.graphs.clearBuffers === 'function') {
+          window.graphs.clearBuffers(true); // silent, we handle toast
+        }
       }
-      this.showToast('Trajectory Buffer Cleared', 'info');
+      if (snapshot) {
+        this.clearUndoSnapshot = snapshot;
+        if (this.clearUndoTimer) clearTimeout(this.clearUndoTimer);
+        // expire undo after 10s
+        this.clearUndoTimer = setTimeout(() => { this.clearUndoSnapshot = null; }, 10000);
+        this.showToast('Trajectory Buffer Cleared', 'info', true);
+      } else {
+        this.showToast('Trajectory Buffer Cleared', 'info');
+      }
+      this._renderEmptyStates();
+    }
+
+    undoClear() {
+      if (!this.clearUndoSnapshot) {
+        this.showToast('Nothing to undo', 'info');
+        return;
+      }
+      if (window.telemetry) {
+        window.telemetry.state.trajectories.body = this.clearUndoSnapshot.body || [];
+        window.telemetry.state.trajectories.camera = this.clearUndoSnapshot.camera || [];
+      }
+      if (window.graphs && this.clearUndoSnapshot.graphs) {
+        window.graphs.buffers.accel = this.clearUndoSnapshot.graphs.accel || [];
+        window.graphs.buffers.vel = this.clearUndoSnapshot.graphs.vel || [];
+        window.graphs.buffers.pos = this.clearUndoSnapshot.graphs.pos || [];
+        if (typeof window.graphs.render === 'function') window.graphs.render();
+      }
+      this.clearUndoSnapshot = null;
+      if (this.clearUndoTimer) { clearTimeout(this.clearUndoTimer); this.clearUndoTimer = null; }
+      this.showToast('Undo: trajectory restored', 'success');
+      this._renderEmptyStates();
     }
 
     exportPointCloudPCD() {
@@ -407,7 +886,8 @@
       pcd += `WIDTH ${landmarks.length}\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\nPOINTS ${landmarks.length}\nDATA ascii\n`;
 
       landmarks.forEach(pt => {
-        pcd += `${pt.x.toFixed(4)} ${pt.y.toFixed(4)} ${pt.z.toFixed(4)}\n`;
+        if (Array.isArray(pt)) pcd += `${pt[0].toFixed(4)} ${pt[1].toFixed(4)} ${pt[2].toFixed(4)}\n`;
+        else pcd += `${pt.x.toFixed(4)} ${pt.y.toFixed(4)} ${pt.z.toFixed(4)}\n`;
       });
 
       const blob = new Blob([pcd], { type: 'text/plain' });
@@ -425,14 +905,27 @@
 
     /**
      * 3D Coordinate Projector: (x, y, z) in World Frame -> (sx, sy) on Canvas
+     * Fixed iso/top/side alignment to match svg-spatial-canvas viewBox 600x350
      */
-    _project(x, y, z, cx, cy, droneX = 0, droneY = 0, droneZ = 0) {
+    _project(x, y, z, cx, cy, droneX, droneY, droneZ) {
+      // Support TOP_DOWN and SIDE as absolute projections aligned to spatial canvas helpers
+      if (this.projectionMode === 'TOP_DOWN') {
+        // Top (XY): match inline project3DToSVG top: x:300+x*22, y:175+y*22 (viewBox 600x350)
+        // Convert to canvas coords: cx/cy passed is w*0.5 / h*0.5
+        var scaleTop = this.mapScale * 1.15;
+        // center at cx,cy
+        return { sx: cx + x * scaleTop, sy: cy + y * scaleTop, depth: -z };
+      }
+      if (this.projectionMode === 'SIDE') {
+        var scaleSide = this.mapScale * 1.15;
+        return { sx: cx + x * scaleSide, sy: cy - z * scaleSide, depth: y };
+      }
       let rx = x, ry = y, rz = z;
 
       if (this.projectionMode === 'CAM_FOLLOW') {
-        rx -= droneX;
-        ry -= droneY;
-        rz -= droneZ;
+        rx -= droneX || 0;
+        ry -= droneY || 0;
+        rz -= droneZ || 0;
       }
 
       // Rotate by yaw (mapAngle)
@@ -455,9 +948,25 @@
     }
 
     _render3DMap() {
-      if (!this.mapCanvas || !this.mapCtx) return;
-      const w = this.mapCanvas.width = this.mapCanvas.parentElement.clientWidth || 1000;
-      const h = this.mapCanvas.height = this.mapCanvas.parentElement.clientHeight || 480;
+      if (!this.mapCanvas || !this.mapCtx) {
+        // SVG fallback: nothing to canvas-render; update SVG via telemetry instead
+        return;
+      }
+      // DevicePixelRatio handling
+      var dpr = window.devicePixelRatio || 1;
+      var parent = this.mapCanvas.parentElement;
+      var cssW = (parent && parent.clientWidth) || 1000;
+      var cssH = (parent && parent.clientHeight) || 480;
+      // set canvas backing store for DPR
+      if (this.mapCanvas.width !== Math.round(cssW * dpr) || this.mapCanvas.height !== Math.round(cssH * dpr)) {
+        this.mapCanvas.width = Math.round(cssW * dpr);
+        this.mapCanvas.height = Math.round(cssH * dpr);
+        this.mapCanvas.style.width = cssW + 'px';
+        this.mapCanvas.style.height = cssH + 'px';
+        this.mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      const w = cssW;
+      const h = cssH;
       const ctx = this.mapCtx;
 
       ctx.clearRect(0, 0, w, h);
@@ -537,7 +1046,10 @@
         
         ctx.fillStyle = '#7df4ff';
         state.landmarks.forEach((pt, idx) => {
-          const sp = this._project(pt.x, pt.y, pt.z, cx, cy, droneX, droneY, droneZ);
+          var px = Array.isArray(pt) ? pt[0] : pt.x;
+          var py = Array.isArray(pt) ? pt[1] : pt.y;
+          var pz = Array.isArray(pt) ? pt[2] : pt.z;
+          const sp = this._project(px, py, pz, cx, cy, droneX, droneY, droneZ);
           if (idx % 3 === 0) {
             ctx.fillStyle = '#d1bcff';
           } else if (idx % 2 === 0) {
@@ -613,7 +1125,6 @@
 
         // Frustum Pyramidal Wireframe
         if (this.layers.frustums) {
-          const fAhead = this._project(droneX + 1.2, droneY, droneZ, cx, cy, droneX, droneY, droneZ);
           const fTop = this._project(droneX + 1.2, droneY + 0.6, droneZ + 0.4, cx, cy, droneX, droneY, droneZ);
           const fBot = this._project(droneX + 1.2, droneY - 0.6, droneZ - 0.4, cx, cy, droneX, droneY, droneZ);
 
@@ -637,20 +1148,56 @@
         ctx.font = '9px "Space Mono", monospace';
         ctx.fillText(`[${droneX.toFixed(2)}, ${droneY.toFixed(2)}, ${droneZ.toFixed(2)}]`, dp.sx + 16, dp.sy + 6);
       }
+
+      // Empty state for canvas PCD overlay
+      if (!state || !state.landmarks || !state.landmarks.length) {
+        var tot = (state && state.trajectories.body.length) || 0;
+        if (tot === 0) {
+          ctx.fillStyle = 'rgba(148,163,184,0.9)';
+          ctx.font = '11px "Space Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('No trajectory — load a dataset or connect LIVE', w/2, h/2);
+          ctx.textAlign = 'left';
+        }
+      }
     }
 
     // =========================================================================
     // MODALS & GENERAL CONTROLS
     // =========================================================================
+    // Resolve modal id aliases (search-modal vs modal-search, tuning-modal vs modal-controller)
+    _resolveModalId(id) {
+      if (document.getElementById(id)) return id;
+      var aliasMap = {
+        'modal-search': 'search-modal',
+        'search-modal': 'modal-search',
+        'modal-controller': 'tuning-modal',
+        'tuning-modal': 'modal-controller',
+        'modal-vio': 'tuning-modal'
+      };
+      var alias = aliasMap[id];
+      if (alias && document.getElementById(alias)) return alias;
+      return id;
+    }
+
     toggleModal(modalId) {
-      const el = document.getElementById(modalId);
+      var resolved = this._resolveModalId(modalId);
+      const el = document.getElementById(resolved) || document.getElementById(modalId);
       if (el) {
         el.classList.toggle('hidden');
+        // focus search input if opening search modal
+        if (!el.classList.contains('hidden') && (resolved === 'search-modal' || resolved === 'modal-search')) {
+          var inp = document.getElementById('search-modal-input') || document.getElementById('modal-search-input');
+          if (inp) setTimeout(function(){ inp.focus(); }, 50);
+        }
+      } else if (modalId === 'modal-search' || modalId === 'search-modal') {
+        // try global opener fallback
+        if (typeof window.openSearchModal === 'function') window.openSearchModal();
       }
     }
 
     closeAllModals() {
-      ['modal-controller', 'modal-vio', 'modal-search'].forEach(id => {
+      ['search-modal','modal-search','tuning-modal','modal-controller','modal-vio'].forEach(function(id){
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
       });
@@ -679,8 +1226,9 @@
       this.showToast('EMERGENCY RTL TRIGGERED: Drone returning to launch coordinates', 'error');
     }
 
-    showToast(message, type = 'info') {
-      if (!this.elements.toastContainer) return;
+    showToast(message, type, withUndo) {
+      var container = this.elements.toastContainer || document.getElementById('toast-box') || document.getElementById('toast-container');
+      if (!container) return;
       const toast = document.createElement('div');
       
       let borderClass = 'border-cyan-500 text-cyan-200 bg-[#141820]/95';
@@ -688,27 +1236,33 @@
       if (type === 'success') borderClass = 'border-emerald-500 text-emerald-200 bg-[#102418]/95';
 
       toast.className = `p-3 rounded border shadow-xl flex items-center gap-2.5 text-xs font-mono tracking-wide transform transition-all duration-300 translate-y-2 opacity-0 ${borderClass}`;
-      toast.innerHTML = `<span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-red-400 animate-pulse' : (type === 'success' ? 'bg-emerald-400' : 'bg-cyan-400')}"></span><span>${message}</span>`;
+      var undoHtml = withUndo && this.clearUndoSnapshot ? ' <button onclick="window.ui.undoClear()" class="ml-2 underline font-bold hover:text-white">Undo</button>' : '';
+      toast.innerHTML = `<span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-red-400 animate-pulse' : (type === 'success' ? 'bg-emerald-400' : 'bg-cyan-400')}"></span><span>${message}</span>${undoHtml}`;
 
-      this.elements.toastContainer.appendChild(toast);
+      container.appendChild(toast);
       requestAnimationFrame(() => {
         toast.classList.remove('translate-y-2', 'opacity-0');
       });
 
       setTimeout(() => {
         toast.classList.add('translate-y-2', 'opacity-0');
-        setTimeout(() => toast.remove(), 350);
-      }, 4000);
+        setTimeout(() => { try{toast.remove();}catch(e){} }, 350);
+      }, withUndo ? 6000 : 4000);
     }
   }
 
   // Expose singleton on window
   window.ui = new UIController();
 
-  // Global convenience wrappers
+  // Global convenience wrappers — keep both modal id schemes
   window.toggleModal = (id) => window.ui.toggleModal(id);
   window.setDashboardMode = (mode) => window.ui.setMode(mode);
   window.toggleRosbag = () => window.ui.toggleRosbag();
   window.triggerRTL = () => window.ui.triggerRTL();
+  // Bridge for external callers that expect these exact names
+  window.openSearchModal = () => window.ui.toggleModal('search-modal');
+  window.closeSearchModal = () => window.ui.closeAllModals();
+  window.clearTrajectory = () => window.ui.clearTrajectory();
+  window.undoClear = () => window.ui.undoClear();
 
 })(window);

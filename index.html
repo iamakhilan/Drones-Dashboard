@@ -1,70 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>AeroVIO Ground Station — Monocular Visual-Inertial Odometry &amp; 50 Hz Cascaded SO(3) Controller</title>
-  
-  <!-- Tailwind CSS CDN -->
+  <title>AeroVIO Ground Station — Monocular Visual-Inertial Odometry & 50 Hz Cascaded SO(3) Controller</title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  
-  <!-- Tailwind Custom Configuration -->
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
-            brand: {
-              50: '#F0F9FF',
-              100: '#E0F2FE',
-              500: '#0EA5E9',
-              600: '#0284C7',
-              700: '#0369A1'
-            }
+            brand: { 50: '#F0F9FF', 100: '#E0F2FE', 500: '#0EA5E9', 600: '#0284C7', 700: '#0369A1' }
           },
           fontFamily: {
-            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Inter', 'Helvetica', 'Arial', 'sans-serif'],
-            mono: ['"SF Mono"', 'Monaco', 'Menlo', 'Consolas', '"Ubuntu Mono"', 'monospace']
+            sans: ['-apple-system','BlinkMacSystemFont','\"Segoe UI\"','Roboto','Inter','Helvetica','Arial','sans-serif'],
+            mono: ['\"SF Mono\"','Monaco','Menlo','Consolas','\"Ubuntu Mono\"','monospace']
           }
         }
       }
     }
   </script>
-
-  <!-- Custom Styles for Precision UI -->
   <style>
-    body {
-      background-color: #F6F6F7;
-      color: #202223;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #D1D5DB;
-      border-radius: 9999px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #9CA3AF;
-    }
-    .reticle-grid {
-      background-size: 24px 24px;
-      background-image: 
-        linear-gradient(to right, rgba(14, 165, 233, 0.08) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
-    }
+    html{scroll-padding-top:56px;scroll-behavior:smooth}
+    body{background-color:#F6F6F7;color:#202223;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:9999px}
+    ::-webkit-scrollbar-thumb:hover{background:#9CA3AF}
+    .reticle-grid{background-size:24px 24px;background-image:linear-gradient(to right, rgba(14,165,233,0.08) 1px, transparent 1px),linear-gradient(to bottom, rgba(14,165,233,0.08) 1px, transparent 1px)}
   </style>
-
-  <!-- Real Drone VIO Datasets from GitHub Repository -->
   <script src="data/real_data.js"></script>
-
-  <!-- Modular Aerospace Telemetry Subsystems -->
   <script src="js/telemetry.js"></script>
   <script src="js/websocket.js"></script>
   <script src="js/controller.js"></script>
@@ -72,1072 +37,272 @@
   <script src="js/camera.js"></script>
   <script src="js/vio.js"></script>
 </head>
-
 <body class="min-h-screen flex flex-col font-sans selection:bg-brand-100 selection:text-brand-700">
-
-  <!-- ==================== TOP NAVIGATION BAR ==================== -->
-  <header class="bg-[#1A1A1A] text-white h-14 px-4 flex items-center justify-between border-b border-black/10 shrink-0 sticky top-0 z-50">
-    
-    <!-- Left Logo & Session Identity -->
-    <div class="flex items-center space-x-3 w-72">
-      <div class="flex items-center space-x-2 text-white font-semibold tracking-tight text-base">
-        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24">
-          <polygon points="12 2 19 8.5 12 15 5 8.5 12 2"></polygon>
-          <polyline points="5 15.5 12 22 19 15.5"></polyline>
-        </svg>
+  <header class="bg-[#1A1A1A] text-white min-h-14 px-3 sm:px-4 flex flex-wrap items-center gap-2 sm:gap-3 justify-between border-b border-black/10 shrink-0 sticky top-0 z-50 py-2">
+    <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+      <button id="sidebar-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="sidebar" class="lg:hidden inline-flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg bg-stone-800 border border-stone-700 text-white hover:bg-stone-700 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="flex items-center gap-2 text-white font-semibold tracking-tight text-base">
+        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24"><polygon points="12 2 19 8.5 12 15 5 8.5 12 2"></polygon><polyline points="5 15.5 12 22 19 15.5"></polyline></svg>
         <span class="text-sm font-bold tracking-normal font-mono">AERO<span class="text-emerald-400">VIO</span></span>
       </div>
-      <span class="bg-stone-800 text-stone-300 text-xs px-2 py-0.5 rounded-full font-mono font-medium border border-stone-700">GCS Station</span>
+      <span class="hidden sm:inline-flex bg-stone-800 text-stone-300 text-xs px-2 py-0.5 rounded-full font-mono font-medium border border-stone-700">GCS Station</span>
     </div>
-
-    <!-- Center Search & Topic Inspector -->
-    <div class="flex-1 max-w-xl px-4">
+    <div class="flex-1 min-w-[200px] max-w-xl order-last sm:order-none w-full sm:w-auto px-0 sm:px-4">
       <div class="relative w-full">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
         </div>
-        <input id="global-search-input" onfocus="openSearchModal()" class="w-full bg-[#2C2C2C] text-sm text-stone-100 placeholder-stone-400 rounded-lg pl-9 pr-12 py-1.5 border border-stone-700 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 cursor-pointer" placeholder="Search ROS 2 topics, telemetry, or node params (⌘ K)" type="text" value="/drones_controller/position_error" readonly />
+        <input id="global-search-input" type="text" autocomplete="off" spellcheck="false" onfocus="openSearchModal()" oninput="handleHeaderSearchInput(this.value)" class="w-full bg-[#2C2C2C] text-sm text-stone-100 placeholder-stone-400 rounded-lg pl-9 pr-12 py-2.5 min-h-[44px] border border-stone-700 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" placeholder="Search ROS 2 topics, telemetry, or node params (⌘ K)" value="/drones_controller/position_error" />
         <div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
-          <kbd class="text-[11px] font-mono text-stone-400 bg-stone-700/80 px-1.5 py-0.5 rounded border border-stone-600">⌘ K</kbd>
+          <kbd class="hidden sm:inline-flex text-[11px] font-mono text-stone-400 bg-stone-700/80 px-1.5 py-0.5 rounded border border-stone-600">⌘ K</kbd>
         </div>
       </div>
     </div>
-
-    <!-- Right Controls: Truthful Connection Status & Settings -->
-    <div class="flex items-center space-x-3 text-stone-300">
-      
-      <!-- Truthful Mode & Bridge Status Indicator -->
-      <div class="flex items-center space-x-2 bg-stone-900/90 border border-stone-700/70 px-3 py-1 rounded-full text-xs font-mono">
-        <span class="relative flex h-2 w-2">
-          <span id="top-status-dot-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span id="top-status-dot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-        </span>
-        <span id="top-mode-badge" class="font-semibold text-emerald-400">DEMO REPLAY</span>
+    <div class="flex items-center gap-2 sm:gap-3 text-stone-300 flex-wrap justify-end">
+      <div class="hidden md:flex items-center gap-2">
+        <input id="header-ws-url" type="text" value="ws://localhost:8000/ws" class="w-48 lg:w-56 bg-[#2C2C2C] text-xs font-mono text-stone-200 placeholder-stone-500 rounded-lg px-2.5 py-2 min-h-[44px] border border-stone-700 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500" placeholder="ws://host:port/ws" />
+        <button id="header-connect-btn" onclick="syncEndpointAndConnect()" class="min-h-[44px] min-w-[44px] px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold transition shadow-sm">Connect Bridge</button>
+      </div>
+      <div class="flex items-center gap-2 bg-stone-900/90 border border-stone-700/70 px-3 py-1.5 rounded-full text-xs font-mono min-h-[32px]">
+        <span class="relative flex h-2 w-2"><span id="top-status-dot-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span id="top-status-dot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+        <button id="top-mode-badge" onclick="toggleTelemetryMode()" class="font-semibold text-emerald-400 hover:text-emerald-300 transition" title="Toggle mode">DEMO REPLAY</button>
         <span class="text-stone-600">|</span>
         <span id="top-latency-badge" class="text-stone-300">1.8 ms</span>
       </div>
-
-      <!-- Mode Selector Switch (DEMO vs LIVE) -->
-      <button id="top-mode-toggle-btn" onclick="toggleTelemetryMode()" class="bg-stone-800 hover:bg-stone-700 text-white text-xs font-medium px-2.5 py-1 rounded-lg border border-stone-700 transition flex items-center gap-1.5 font-mono">
-        <svg class="w-3.5 h-3.5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+      <button id="top-mode-toggle-btn" onclick="toggleTelemetryMode()" class="min-h-[44px] px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg border border-brand-600 transition flex items-center gap-1.5 font-mono shadow-sm">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
         <span id="top-mode-toggle-text">Switch to LIVE</span>
       </button>
-
-      <!-- Settings / Parameters Button -->
-      <button onclick="openTuningModal()" title="Controller &amp; Extrinsics Settings" class="p-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white rounded-lg border border-stone-700 transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+      <button onclick="openTuningModal()" title="Controller &amp; Extrinsics Settings" class="min-h-[44px] min-w-[44px] w-11 h-11 inline-flex items-center justify-center bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white rounded-lg border border-stone-700 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
       </button>
-
     </div>
   </header>
-
-  <!-- ==================== MAIN LAYOUT ==================== -->
-  <div class="flex flex-1 overflow-hidden">
-    
-    <!-- ==================== LEFT SIDEBAR ==================== -->
-    <aside class="w-60 bg-[#EFEFEF]/50 border-r border-[#E1E3E5] flex flex-col justify-between shrink-0 select-none">
+  <div id="stale-warning-banner" class="hidden bg-amber-400 text-stone-900 text-xs font-semibold px-4 py-2.5 text-center border-b border-amber-500 flex items-center justify-center gap-2">
+    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+    <span id="stale-warning-text">Telemetry stale — no updates received. Check bridge connection or switch to DEMO.</span>
+  </div>
+  <div id="sidebar-backdrop" class="fixed inset-0 bg-black/50 z-30 hidden lg:hidden" onclick="closeSidebarDrawer()"></div>
+  <div class="flex flex-1 overflow-hidden relative">
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-60 bg-[#EFEFEF] lg:bg-[#EFEFEF]/50 border-r border-[#E1E3E5] flex flex-col justify-between shrink-0 select-none transform -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-out overflow-y-auto max-h-[calc(100vh-3.5rem)] lg:max-h-none lg:overflow-visible">
       <div class="py-3 px-2 space-y-1">
-        
-        <a class="nav-btn flex items-center justify-between px-3 py-1.5 rounded-lg text-sm font-medium bg-[#E3E5E7] text-stone-900 font-sans shadow-sm" href="#overview">
-          <div class="flex items-center space-x-2.5">
-            <svg class="w-4 h-4 text-stone-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-            <span>VIO Dashboard</span>
-          </div>
-          <span class="text-[11px] font-mono bg-stone-300/80 px-1.5 rounded text-stone-700 font-semibold">60Hz</span>
+        <a class="nav-link flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-[#E3E5E7] text-stone-900 shadow-sm" href="#overview" data-nav="overview">
+          <div class="flex items-center gap-2.5"><svg class="w-4 h-4 text-stone-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span>Overview</span></div>
+          <span class="text-[11px] font-mono bg-stone-300/80 px-1.5 rounded text-stone-700 font-semibold">60 Hz</span>
         </a>
-
-        <a class="nav-btn flex items-center justify-between px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#camera">
-          <div class="flex items-center space-x-2.5">
-            <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-            <span>Monocular Feed</span>
-          </div>
+        <a class="nav-link flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#camera" data-nav="camera">
+          <div class="flex items-center gap-2.5"><svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span>Monocular Feed</span></div>
           <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
         </a>
-
-        <a class="nav-btn flex items-center justify-between px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#pointcloud">
-          <div class="flex items-center space-x-2.5">
-            <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-            <span>3D Point Cloud (Map)</span>
-          </div>
+        <a class="nav-link flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#pointcloud" data-nav="pointcloud">
+          <div class="flex items-center gap-2.5"><svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg><span>3D Point Cloud (Map)</span></div>
           <span id="sidebar-pointcount" class="text-xs font-mono text-stone-500">442 pts</span>
         </a>
-
-        <a class="nav-btn flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#controller-section">
-          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-          <span>50 Hz SO(3) Controller</span>
+        <a class="nav-link flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#imu" data-nav="imu">
+          <div class="flex items-center gap-2.5"><svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span>Kinematics / IMU</span></div>
+          <span class="text-[10px] font-mono text-stone-500">200 Hz</span>
         </a>
-
-        <a class="nav-btn flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#graphs-section">
-          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-          <span>Kinematic Graphs</span>
+        <a class="nav-link flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#controller-section" data-nav="controller-section">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span>50 Hz SO(3) Controller</span>
         </a>
-
-        <div class="pt-3 pb-1 px-3 text-xs font-semibold text-stone-400 uppercase tracking-wider">ROS 2 Graph</div>
-        <a class="nav-btn flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#nodes">
-          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-          <span>Topics &amp; Pipelines</span>
+        <a class="nav-link flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#graphs-section" data-nav="graphs-section">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span>Kinematic Graphs</span>
         </a>
-
-        <a onclick="openTuningModal()" class="cursor-pointer flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#tuning">
-          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-          <span>Parameter Tuning</span>
+        <div class="pt-3 pb-1 px-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">ROS 2 Graph</div>
+        <a class="nav-link flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#nodes" data-nav="nodes">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span>Topics &amp; Pipelines</span>
         </a>
-
+        <a class="nav-link flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition" href="#controller-section" data-nav="controller-section">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span>Parameter Tuning</span>
+        </a>
       </div>
-
-      <!-- Sidebar Footer -->
       <div class="p-3 border-t border-[#E1E3E5] space-y-1">
-        <button onclick="openTuningModal()" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-200/60 transition text-left">
-          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+        <button onclick="openTuningModal()" class="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-200/60 transition text-left">
+          <svg class="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
           <span>Extrinsics Config (T<sub>BC</sub>)</span>
         </button>
-        <div class="px-3 py-1 flex items-center justify-between text-[11px] text-stone-400 font-mono">
+        <div class="px-3 py-1 flex items-center justify-between text-[11px] text-stone-500 font-mono">
           <span>Bridge: <strong id="sidebar-bridge-status" class="text-emerald-600">ACTIVE</strong></span>
           <span id="sidebar-ros-status" class="text-stone-500">DEMO MODE</span>
         </div>
+        <div class="lg:hidden pt-2 flex items-center gap-2">
+          <input id="mobile-ws-url" type="text" value="ws://localhost:8000/ws" class="flex-1 bg-white text-xs font-mono text-stone-800 rounded-lg px-2.5 py-2 min-h-[44px] border border-stone-300" placeholder="ws://host:port/ws" />
+          <button onclick="syncMobileEndpointAndConnect()" class="min-h-[44px] px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold">Connect</button>
+        </div>
       </div>
     </aside>
-
-    <!-- ==================== MAIN CONTENT ==================== -->
-    <main class="flex-1 overflow-y-auto p-6 space-y-6">
-      
-      <!-- Title & Dataset Selector -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4" id="overview">
+    <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 min-w-0">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 scroll-mt-14" id="overview">
         <div>
-          <div class="flex items-center space-x-2">
-            <h1 class="text-xl font-bold tracking-tight text-stone-900">Visual-Inertial Odometry &amp; 50 Hz Cascaded Controller</h1>
-            <span id="overview-state-badge" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-              MSCKF Nominal
-            </span>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-2xl font-bold tracking-tight text-stone-900">Visual-Inertial Odometry &amp; 50 Hz Cascaded Controller</h1>
+            <span id="overview-state-badge" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">MSCKF Nominal</span>
           </div>
-          <p class="text-xs text-stone-500 mt-0.5">Monocular visual-inertial state estimation with explicit body <span class="font-mono font-medium text-stone-700">T<sub>WB</sub></span> vs camera <span class="font-mono font-medium text-stone-700">T<sub>WC</sub></span> frame decomposition and cascaded closed-loop <span class="font-mono font-medium text-stone-700">SO(3)</span> geometric tracking.</p>
+          <p class="text-xs text-stone-600 mt-1">Monocular visual-inertial state estimation with explicit body <span class="font-mono font-medium text-stone-700">T<sub>WB</sub></span> vs camera <span class="font-mono font-medium text-stone-700">T<sub>WC</sub></span> frame decomposition and cascaded closed-loop <span class="font-mono font-medium text-stone-700">SO(3)</span> geometric tracking.</p>
         </div>
-
-        <!-- Real Trajectory Dataset Filter Selector (DEMO Mode) -->
-        <div id="dataset-selector-bar" class="flex items-center space-x-1.5 bg-white p-1 rounded-xl border border-stone-200 shadow-sm text-xs font-medium text-stone-600">
-          <button id="btn-traj-orbit" onclick="switchDataset('orbit')" class="traj-sel-btn px-3 py-1 bg-stone-100 text-stone-900 rounded-lg shadow-inner font-semibold">Orbit Scan</button>
-          <button id="btn-traj-hover" onclick="switchDataset('hover')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Hover Hold</button>
-          <button id="btn-traj-straight" onclick="switchDataset('straight')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Corridor</button>
-          <button id="btn-traj-multi_axis" onclick="switchDataset('multi_axis')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Multi-Axis</button>
-          <button id="btn-traj-stress" onclick="switchDataset('stress')" class="traj-sel-btn px-3 py-1 hover:text-stone-900 rounded-lg transition">Stress</button>
+        <div id="dataset-selector-bar" class="flex items-center gap-1 bg-white p-1 rounded-xl border border-stone-200 shadow-sm text-xs font-medium text-stone-600 overflow-x-auto">
+          <button id="btn-traj-orbit" onclick="switchDataset('orbit')" class="traj-sel-btn min-h-[44px] px-3 py-1.5 bg-stone-100 text-stone-900 rounded-lg shadow-inner font-semibold whitespace-nowrap">Orbit Scan</button>
+          <button id="btn-traj-hover" onclick="switchDataset('hover')" class="traj-sel-btn min-h-[44px] px-3 py-1.5 hover:text-stone-900 rounded-lg transition whitespace-nowrap">Hover Hold</button>
+          <button id="btn-traj-straight" onclick="switchDataset('straight')" class="traj-sel-btn min-h-[44px] px-3 py-1.5 hover:text-stone-900 rounded-lg transition whitespace-nowrap">Corridor</button>
+          <button id="btn-traj-multi_axis" onclick="switchDataset('multi_axis')" class="traj-sel-btn min-h-[44px] px-3 py-1.5 hover:text-stone-900 rounded-lg transition whitespace-nowrap">Multi-Axis</button>
+          <button id="btn-traj-stress" onclick="switchDataset('stress')" class="traj-sel-btn min-h-[44px] px-3 py-1.5 hover:text-stone-900 rounded-lg transition whitespace-nowrap">Stress</button>
         </div>
       </div>
-
-      <!-- ==================== KEYFRAME & VIO SUMMARY (Shopify KPI Style) ==================== -->
-      <section class="bg-white rounded-2xl border border-stone-200/90 p-5 shadow-sm" data-purpose="metrics-summary">
-        <div class="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
-          <div class="flex space-x-8 text-xs font-medium text-stone-500">
-            <div class="text-stone-900 font-semibold border-b-2 border-stone-900 pb-3 -mb-3.5">VIO Estimator Telemetry</div>
-            <div class="cursor-pointer hover:text-stone-800" onclick="openTuningModal()">Extrinsics <span class="font-mono">T<sub>BC</sub></span></div>
-            <div class="cursor-pointer hover:text-stone-800" onclick="showToast('Camera Matrix: fx=615.2, fy=615.4, cx=320.0, cy=240.0')">Camera Intrinsics</div>
+      <section class="bg-white rounded-2xl border border-stone-200/90 p-4 sm:p-5 shadow-sm" data-purpose="metrics-summary">
+        <div class="flex flex-wrap items-center justify-between border-b border-stone-100 pb-3 mb-4 gap-2">
+          <div class="flex gap-4 sm:gap-8 text-xs font-medium text-stone-500 overflow-x-auto">
+            <div class="text-stone-900 font-semibold border-b-2 border-stone-900 pb-3 -mb-3.5 whitespace-nowrap">VIO Estimator Telemetry</div>
+            <div class="cursor-pointer hover:text-stone-800 whitespace-nowrap min-h-[44px] flex items-center" onclick="openTuningModal()">Extrinsics <span class="font-mono">T<sub>BC</sub></span></div>
+            <div class="cursor-pointer hover:text-stone-800 whitespace-nowrap min-h-[44px] flex items-center" onclick="showToast('Camera Matrix: fx=615.2, fy=615.4, cx=320.0, cy=240.0')">Camera Intrinsics</div>
           </div>
-          <div class="flex items-center space-x-2 text-xs text-stone-500 font-mono">
-            <span>Estimator Rates:</span>
-            <span class="font-bold text-stone-800">200 Hz IMU / 30 Hz Cam</span>
-          </div>
+          <div class="flex items-center gap-2 text-xs text-stone-500 font-mono"><span>Estimator Rate:</span><span class="font-bold text-stone-800">200 Hz IMU / 30 Hz Cam</span></div>
         </div>
-
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
-          <!-- KPI 1 -->
-          <div class="space-y-1">
-            <span class="text-xs font-medium text-stone-500 flex items-center justify-between">
-              Tracked Features
-              <span id="kpi-features-delta" class="text-[10px] text-emerald-600 bg-emerald-50 px-1 rounded font-mono">87.5% Trk</span>
-            </span>
-            <div id="kpi-features" class="text-2xl font-bold tracking-tight text-stone-900 font-mono">248 <span class="text-sm font-normal text-stone-400">/ 280</span></div>
-            <p class="text-[11px] text-stone-400">KLT Feature Tracker</p>
-          </div>
-
-          <!-- KPI 2 -->
-          <div class="space-y-1">
-            <span class="text-xs font-medium text-stone-500">VIO Filter Rate</span>
-            <div id="kpi-rate" class="text-2xl font-bold tracking-tight text-stone-900 font-mono">60.0 <span class="text-sm font-normal text-stone-500">Hz</span></div>
-            <p class="text-[11px] text-emerald-600 font-medium">&lt; 1.2 ms filter innovation</p>
-          </div>
-
-          <!-- KPI 3 -->
-          <div class="space-y-1">
-            <span class="text-xs font-medium text-stone-500">Sliding Clones</span>
-            <div id="kpi-clones" class="text-2xl font-bold tracking-tight text-stone-900 font-mono">11 <span class="text-sm font-normal text-stone-400">/ 15</span></div>
-            <p class="text-[11px] text-stone-400">MSCKF State Vector</p>
-          </div>
-
-          <!-- KPI 4 -->
-          <div class="space-y-1">
-            <span class="text-xs font-medium text-stone-500">Total Path Length</span>
-            <div class="text-2xl font-bold tracking-tight text-stone-900 font-mono"><span id="kpi-displacement">142.8</span> <span class="text-sm font-normal text-stone-500">m</span></div>
-            <p class="text-[11px] text-stone-400">Integrated Body <span class="font-mono">T<sub>WB</sub></span></p>
-          </div>
-
-          <!-- KPI 5 -->
-          <div class="space-y-1">
-            <span class="text-xs font-medium text-stone-500">Reprojection Residual</span>
-            <div class="text-2xl font-bold tracking-tight text-stone-900 font-mono text-emerald-600"><span id="kpi-reproj">0.42</span> <span class="text-sm font-normal text-emerald-700">px</span></div>
-            <p class="text-[11px] text-emerald-600">Nominal bounds (&lt; 1.0 px)</p>
-          </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 sm:gap-6">
+          <div class="space-y-1"><span class="text-xs font-medium text-stone-600 flex items-center justify-between">Tracked Features <span id="kpi-features-delta" class="text-[10px] text-emerald-700 bg-emerald-50 px-1 rounded font-mono">87.5% Trk</span></span><div id="kpi-features" class="text-xl font-bold tracking-tight text-stone-900 font-mono tabular-nums">248 <span class="text-sm font-normal text-stone-500">/ 280</span></div><p class="text-[11px] text-stone-500">KLT Feature Tracker</p></div>
+          <div class="space-y-1"><span class="text-xs font-medium text-stone-600">VIO Filter Rate</span><div id="kpi-rate" class="text-xl font-bold tracking-tight text-stone-900 font-mono tabular-nums">60.0 <span class="text-sm font-normal text-stone-500">Hz</span></div><p class="text-[11px] text-emerald-700 font-medium">&lt; 1.2 ms filter innovation</p></div>
+          <div class="space-y-1"><span class="text-xs font-medium text-stone-600">Sliding Clones</span><div id="kpi-clones" class="text-xl font-bold tracking-tight text-stone-900 font-mono tabular-nums">11 <span class="text-sm font-normal text-stone-500">/ 15</span></div><p class="text-[11px] text-stone-500">MSCKF State Vector</p></div>
+          <div class="space-y-1"><span class="text-xs font-medium text-stone-600">Total Path Length</span><div class="text-xl font-bold tracking-tight text-stone-900 font-mono tabular-nums"><span id="kpi-displacement">142.8</span> <span class="text-sm font-normal text-stone-500">m</span></div><p class="text-[11px] text-stone-500">Integrated Body <span class="font-mono">T<sub>WB</sub></span></p></div>
+          <div class="space-y-1"><span class="text-xs font-medium text-stone-600">Reprojection Residual</span><div class="text-xl font-bold tracking-tight text-emerald-700 font-mono tabular-nums"><span id="kpi-reproj">0.42</span> <span class="text-sm font-normal">px</span></div><p class="text-[11px] text-emerald-700">Nominal bounds (&lt; 1.0 px)</p></div>
         </div>
-
-        <!-- Transform Equation Bar -->
         <div class="mt-6 pt-4 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-between text-xs gap-2">
-          <div class="flex items-center space-x-3 font-mono text-[11px] text-stone-600">
-            <span class="font-bold text-stone-800">Frame Relationship:</span>
-            <span class="bg-stone-100 px-2 py-0.5 rounded border border-stone-200">T<sub>WC</sub> = T<sub>WB</sub> &middot; T<sub>BC</sub></span>
-            <span class="text-stone-400">|</span>
-            <span>T<sub>BC</sub>: [+0.10, 0.00, -0.04]m</span>
-          </div>
-          <span id="kpi-filter-status" class="font-mono text-stone-400 text-[11px]">Covariance Trace: 1.42e-4 • Scale Drift: 0.18%</span>
+          <div class="flex flex-wrap items-center gap-3 font-mono text-[11px] text-stone-600"><span class="font-bold text-stone-800">Frame Relationship:</span><span class="bg-stone-100 px-2 py-0.5 rounded border border-stone-200">T<sub>WC</sub> = T<sub>WB</sub> &middot; T<sub>BC</sub></span><span class="text-stone-400">|</span><span>T<sub>BC</sub>: [+0.10, 0.00, -0.04]m</span></div>
+          <span id="kpi-filter-status" class="font-mono text-stone-500 text-[11px]">Covariance Trace: 1.42e-4 • Scale Drift: 0.18%</span>
         </div>
       </section>
-
-      <!-- ==================== WORKSPACE GRID (Monocular Feed & 3D Spatial Point Cloud) ==================== -->
       <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" data-purpose="workspaces-section">
-        
-        <!-- LEFT: Monocular Optical Viewport (6 Cols) -->
-        <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between" id="camera">
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center space-x-2">
-              <h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
-                Monocular Optical Feed
-              </h2>
-              <span class="text-[11px] font-mono text-stone-500">/camera/image_raw</span>
-            </div>
-            <div class="flex items-center space-x-1 text-xs font-mono bg-stone-100 px-2 py-0.5 rounded text-stone-700">
-              <span id="cam-fps">30 FPS</span>
-              <span class="text-stone-400">•</span>
-              <span id="cam-lat">14 ms</span>
-            </div>
+        <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between scroll-mt-14" id="camera">
+          <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+            <div class="flex items-center gap-2"><h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5"><svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>Monocular Optical Feed</h2><span class="text-[11px] font-mono text-stone-500">/camera/image_raw</span></div>
+            <div class="flex items-center gap-1 text-xs font-mono bg-stone-100 px-2 py-1 rounded text-stone-700"><span id="cam-fps">30 FPS</span><span class="text-stone-400">•</span><span id="cam-lat">14 ms</span></div>
           </div>
-
-          <!-- Camera Stream Frame Viewport -->
           <div class="relative w-full aspect-video bg-stone-900 rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center">
-            
-            <!-- Camera Feed Image -->
             <img id="camera-feed-bg" class="absolute inset-0 w-full h-full object-cover opacity-90" src="monocular_tracking_feed.png" alt="Monocular Camera Stream" />
-
-            <!-- Optical Center Reticle -->
-            <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div class="w-8 h-8 border border-white/40 rounded-full flex items-center justify-center">
-                <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
-              </div>
-              <div class="absolute w-24 h-[1px] bg-white/25"></div>
-              <div class="absolute h-24 w-[1px] bg-white/25"></div>
-            </div>
-
-            <!-- Optical Flow / Keypoints Render (SVG overlay) -->
-            <svg id="optical-flow-svg" class="absolute inset-0 w-full h-full pointer-events-none">
-              <g id="klt-points-group">
-                <!-- Dynamically populated from frame telemetry -->
-              </g>
-            </svg>
-
-            <!-- Live Viewport Overlays -->
-            <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded border border-white/10 text-[11px] font-mono text-white flex items-center space-x-2">
-              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>KLT TRACKER: <strong id="klt-count">248 pts</strong></span>
-            </div>
-            <div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded border border-white/10 text-[10px] font-mono text-stone-300">
-              <span>FOV: 92.4° H | 74.1° V</span>
-            </div>
-            <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono text-stone-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">
-              <div>Pinhole Model (fx=615, fy=615)</div>
-              <div class="text-emerald-400 font-semibold">T<sub>WC</sub> CAMERA OPTICAL FRAME</div>
-            </div>
-
+            <div class="absolute inset-0 pointer-events-none flex items-center justify-center"><div class="w-8 h-8 border border-white/40 rounded-full flex items-center justify-center"><div class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div></div><div class="absolute w-24 h-[1px] bg-white/25"></div><div class="absolute h-24 w-[1px] bg-white/25"></div></div>
+            <svg id="optical-flow-svg" class="absolute inset-0 w-full h-full pointer-events-none"><g id="klt-points-group"></g></svg>
+            <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded border border-white/10 text-[11px] font-mono text-white flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>KLT TRACKER: <strong id="klt-count">248 pts</strong></span></div>
+            <div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded border border-white/10 text-[10px] font-mono text-stone-300"><span>FOV: 92.4° H | 74.1° V</span></div>
+            <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono text-stone-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10"><div>Pinhole Model (fx=615, fy=615)</div><div class="text-emerald-400 font-semibold">T<sub>WC</sub> CAMERA OPTICAL FRAME</div></div>
           </div>
-
-          <!-- Bottom Viewport Controls -->
-          <div class="flex items-center justify-between pt-3 text-xs">
-            <div class="flex items-center space-x-2">
-              <button id="btn-toggle-features" onclick="toggleFeatureOverlay()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition">
-                Toggle Features
-              </button>
-              <button id="btn-toggle-vectors" onclick="toggleFlowVectors()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition">
-                Show Velocity Vectors
-              </button>
+          <div class="flex items-center justify-between pt-3 text-xs flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <button id="btn-toggle-features" onclick="toggleFeatureOverlay()" class="min-h-[44px] px-3 py-2 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Toggle Features</button>
+              <button id="btn-toggle-vectors" onclick="toggleFlowVectors()" class="min-h-[44px] px-3 py-2 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Show Velocity Vectors</button>
             </div>
             <span class="text-stone-500 font-mono text-[11px]">Subscribed: /camera/image_raw</span>
           </div>
-
         </div>
-
-        <!-- RIGHT: 3D Spatial Trajectory & Point Cloud (6 Cols) -->
-        <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between" id="pointcloud">
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center space-x-2">
-              <h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-                3D Spatial Map &amp; Trajectories (T<sub>WB</sub> / T<sub>WC</sub>)
-              </h2>
-              <span class="text-[11px] font-mono text-stone-500">/drone/vio/pointcloud</span>
-            </div>
-
-            <!-- Perspective Toggle -->
-            <div class="flex items-center space-x-1 text-xs bg-stone-100 p-0.5 rounded-lg border border-stone-200 font-medium" id="perspective-controls">
-              <button onclick="setPerspective('iso')" id="btn-persp-iso" class="persp-btn bg-white text-stone-900 px-2 py-0.5 rounded shadow-sm">Isometric</button>
-              <button onclick="setPerspective('top')" id="btn-persp-top" class="persp-btn text-stone-600 hover:text-stone-900 px-2 py-0.5 rounded">Top (XY)</button>
-              <button onclick="setPerspective('side')" id="btn-persp-side" class="persp-btn text-stone-600 hover:text-stone-900 px-2 py-0.5 rounded">Side (XZ)</button>
+        <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between scroll-mt-14" id="pointcloud">
+          <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+            <div class="flex items-center gap-2"><h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5"><svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>3D Spatial Map &amp; Trajectories</h2><span class="text-[11px] font-mono text-stone-500 hidden sm:inline">/drone/vio/pointcloud</span></div>
+            <div class="flex items-center gap-1 text-xs bg-stone-100 p-0.5 rounded-lg border border-stone-200 font-medium" id="perspective-controls">
+              <button onclick="setPerspective('iso')" id="btn-persp-iso" class="persp-btn min-h-[32px] px-2 py-1 bg-white text-stone-900 rounded shadow-sm">Isometric</button>
+              <button onclick="setPerspective('top')" id="btn-persp-top" class="persp-btn min-h-[32px] text-stone-600 hover:text-stone-900 px-2 py-1 rounded">Top (XY)</button>
+              <button onclick="setPerspective('side')" id="btn-persp-side" class="persp-btn min-h-[32px] text-stone-600 hover:text-stone-900 px-2 py-1 rounded">Side (XZ)</button>
             </div>
           </div>
-
-          <!-- 3D Canvas / Spatial Grid -->
           <div class="relative w-full aspect-video bg-[#0C1017] rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center reticle-grid">
-            
-            <svg id="svg-spatial-canvas" class="w-full h-full" viewBox="0 0 600 350">
-              <defs>
-                <linearGradient id="trajGrad" x1="0%" x2="100%" y1="100%" y2="0%">
-                  <stop offset="0%" stop-color="#0284C7" stop-opacity="0.3"></stop>
-                  <stop offset="60%" stop-color="#0EA5E9" stop-opacity="0.8"></stop>
-                  <stop offset="100%" stop-color="#10B981" stop-opacity="1"></stop>
-                </linearGradient>
-              </defs>
-
-              <!-- Floor Projection Grid -->
-              <g id="svg-floor-grid" stroke="rgba(255,255,255,0.08)" stroke-width="1">
-                <path d="M 120 280 L 320 340 L 520 270 L 320 210 Z" fill="rgba(14, 165, 233, 0.02)"></path>
-                <line x1="220" x2="420" y1="245" y2="305"></line>
-                <line x1="320" x2="320" y1="210" y2="340"></line>
-              </g>
-
-              <!-- Origin Triad -->
-              <g id="svg-origin-triad" transform="translate(180, 270)">
-                <line stroke="#EF4444" stroke-width="2" x1="0" x2="25" y1="0" y2="8"></line>
-                <line stroke="#10B981" stroke-width="2" x1="0" x2="-15" y1="0" y2="12"></line>
-                <line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-25"></line>
-                <text fill="#EF4444" font-family="monospace" font-size="9" x="30" y="10">X_ned</text>
-              </g>
-
-              <!-- 3D Sparse PCD Landmarks (442 Points from synthetic_orbit_scanned_map.pcd) -->
-              <g id="svg-pcd-points-group">
-                <!-- Populated dynamically -->
-              </g>
-
-              <!-- Body Trajectory Spline T_WB -->
-              <path id="svg-trajectory-path" d="M 180 270 Q 230 250, 270 210 T 360 170 T 430 115" fill="none" stroke="url(#trajGrad)" stroke-linecap="round" stroke-width="3"></path>
-
-              <!-- Current Drone Body Frame & Frustum (T_WB) -->
-              <g id="svg-drone-body" transform="translate(430, 115)">
-                <polygon fill="rgba(16, 185, 129, 0.2)" points="0,0 -16,-22 16,-22" stroke="#10B981" stroke-width="1.8"></polygon>
-                <circle cx="0" cy="0" fill="#10B981" r="4.5"></circle>
-                <line stroke="#EF4444" stroke-width="2" x1="0" x2="20" y1="0" y2="0"></line>
-                <line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-20"></line>
-              </g>
-
-              <!-- Callout Tag -->
-              <g id="svg-drone-callout" transform="translate(445, 95)">
-                <rect fill="rgba(15, 23, 42, 0.85)" height="38" rx="6" stroke="rgba(255,255,255,0.15)" width="135" x="0" y="0"></rect>
-                <text fill="#E2E8F0" font-family="monospace" font-size="10" font-weight="bold" x="8" y="15">BODY POSE T_WB</text>
-                <text id="svg-callout-subtext" fill="#38BDF8" font-family="monospace" font-size="9" x="8" y="29">Z: 14.8m | V: 3.2 m/s</text>
-              </g>
-            </svg>
-
-            <!-- Coordinate HUD Overlay -->
-            <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 text-[11px] font-mono text-slate-300 space-y-0.5">
-              <div id="hud-pw">P_WB: [ <span class="text-white">x: 4.00</span>, <span class="text-white">y: 0.00</span>, <span class="text-emerald-400">z: -2.00</span> ] m</div>
-              <div id="hud-vw">V_WB: [ <span class="text-white">vx: 1.25</span>, <span class="text-white">vy: 0.10</span>, <span class="text-emerald-400">vz: 0.02</span> ] m/s</div>
-            </div>
-
-            <div class="absolute top-3 right-3 flex flex-col space-y-1 items-end">
-              <span class="bg-slate-900/80 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">MSCKF SLIDING MAP</span>
-              <span class="bg-slate-900/80 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">LANDMARKS: <strong id="hud-map-pts">442</strong></span>
-            </div>
-
+            <svg id="svg-spatial-canvas" class="w-full h-full" viewBox="0 0 600 350"><defs><linearGradient id="trajGrad" x1="0%" x2="100%" y1="100%" y2="0%"><stop offset="0%" stop-color="#0284C7" stop-opacity="0.3"></stop><stop offset="60%" stop-color="#0EA5E9" stop-opacity="0.8"></stop><stop offset="100%" stop-color="#10B981" stop-opacity="1"></stop></linearGradient></defs><g id="svg-floor-grid" stroke="rgba(255,255,255,0.08)" stroke-width="1"><path d="M 120 280 L 320 340 L 520 270 L 320 210 Z" fill="rgba(14, 165, 233, 0.02)"></path><line x1="220" x2="420" y1="245" y2="305"></line><line x1="320" x2="320" y1="210" y2="340"></line></g><g id="svg-origin-triad" transform="translate(180, 270)"><line stroke="#EF4444" stroke-width="2" x1="0" x2="25" y1="0" y2="8"></line><line stroke="#10B981" stroke-width="2" x1="0" x2="-15" y1="0" y2="12"></line><line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-25"></line><text fill="#EF4444" font-family="monospace" font-size="9" x="30" y="10">X_ned</text></g><g id="svg-pcd-points-group"></g><path id="svg-trajectory-path" d="M 180 270 Q 230 250, 270 210 T 360 170 T 430 115" fill="none" stroke="url(#trajGrad)" stroke-linecap="round" stroke-width="3"></path><g id="svg-drone-body" transform="translate(430, 115)"><polygon fill="rgba(16, 185, 129, 0.2)" points="0,0 -16,-22 16,-22" stroke="#10B981" stroke-width="1.8"></polygon><circle cx="0" cy="0" fill="#10B981" r="4.5"></circle><line stroke="#EF4444" stroke-width="2" x1="0" x2="20" y1="0" y2="0"></line><line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-20"></line></g><g id="svg-drone-callout" transform="translate(445, 95)"><rect fill="rgba(15, 23, 42, 0.85)" height="38" rx="6" stroke="rgba(255,255,255,0.15)" width="135" x="0" y="0"></rect><text fill="#E2E8F0" font-family="monospace" font-size="10" font-weight="bold" x="8" y="15">BODY POSE T_WB</text><text id="svg-callout-subtext" fill="#38BDF8" font-family="monospace" font-size="9" x="8" y="29">Z: 14.8m | V: 3.2 m/s</text></g></svg>
+            <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 text-[11px] font-mono text-slate-300 space-y-0.5"><div id="hud-pw">P_WB: [ <span class="text-white">x: 4.00</span>, <span class="text-white">y: 0.00</span>, <span class="text-emerald-400">z: -2.00</span> ] m</div><div id="hud-vw">V_WB: [ <span class="text-white">vx: 1.25</span>, <span class="text-white">vy: 0.10</span>, <span class="text-emerald-400">vz: 0.02</span> ] m/s</div></div>
+            <div class="absolute top-3 right-3 flex flex-col gap-1 items-end"><span class="bg-slate-900/80 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">MSCKF SLIDING MAP</span><span class="bg-slate-900/80 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">LANDMARKS: <strong id="hud-map-pts">442</strong></span></div>
           </div>
-
-          <!-- Bottom Controls -->
-          <div class="flex items-center justify-between pt-3 text-xs">
-            <div class="flex items-center space-x-2">
-              <button onclick="resetTrajectoryCenter()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition">
-                Center Viewport
-              </button>
-              <button onclick="exportPCDFile()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2.5 py-1 rounded-lg border border-stone-200 transition flex items-center gap-1 font-mono text-[11px]">
-                <svg class="w-3.5 h-3.5 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-                Export PCD (442 pts)
-              </button>
+          <div class="flex items-center justify-between pt-3 text-xs flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <button onclick="resetTrajectoryCenter()" class="min-h-[44px] px-3 py-2 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Center Viewport</button>
+              <button onclick="exportPCDFile()" class="min-h-[44px] px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white font-semibold rounded-lg border border-stone-900 transition flex items-center gap-1 font-mono text-[11px]"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>Export PCD (442 pts)</button>
             </div>
-            <span class="text-stone-500 font-mono text-[11px]">World Frame: NED (North-East-Down)</span>
+            <span class="text-stone-500 font-mono text-[11px] hidden sm:inline">World Frame: NED (North-East-Down)</span>
           </div>
-
         </div>
-
       </section>
-
-      <!-- ==================== PRECISION VEHICLE KINEMATICS MATRIX ==================== -->
-      <section class="grid grid-cols-1 md:grid-cols-3 gap-6" data-purpose="kinematics-matrix" id="imu">
-        
-        <!-- Card 1: Position & Decomposed Frames (T_WB vs T_WC) -->
-        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
-          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
-            <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Position &amp; Frame Transforms</h3>
-            <span id="tel-cov" class="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Cov: ±0.04m</span>
-          </div>
-          <div class="space-y-2.5 font-mono text-xs">
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Body Pos (T<sub>WB</sub>) [X, Y, Z]</span>
-              <span id="tel-pos-wb" class="font-bold text-stone-800">[+4.00, +0.00, -2.00] m</span>
-            </div>
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Camera Pos (T<sub>WC</sub>) [X, Y, Z]</span>
-              <span id="tel-pos-wc" class="font-bold text-brand-600">[+4.10, +0.00, -2.04] m</span>
-            </div>
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Extrinsic Offset T<sub>BC</sub></span>
-              <span class="font-bold text-stone-700">[+0.10, 0.00, -0.04] m</span>
-            </div>
-            <div class="flex justify-between items-center py-1">
-              <span class="text-stone-500">Integrated Distance</span>
-              <span id="tel-path-len" class="font-bold text-stone-800">188.42 m</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 2: Linear Kinematics & IMU Accelerations -->
-        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
-          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
-            <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Linear Kinematics &amp; IMU Accel</h3>
-            <span class="text-[10px] font-mono text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">ADIS-16470</span>
-          </div>
-          <div class="space-y-2.5 font-mono text-xs">
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Linear Velocity [Vx, Vy, Vz]</span>
-              <span id="tel-vel" class="font-bold text-stone-800">[+1.25, +0.10, +0.02] m/s</span>
-            </div>
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Total Ground Speed</span>
-              <span id="tel-speed" class="font-bold text-stone-800">1.25 m/s (4.5 km/h)</span>
-            </div>
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Linear Accel [Ax, Ay, Az]</span>
-              <span id="tel-accel" class="font-bold text-stone-800">[+0.12, -0.04, +9.81] m/s²</span>
-            </div>
-            <div class="flex justify-between items-center py-1">
-              <span class="text-stone-500">Estimated Accel Bias</span>
-              <span id="tel-bias" class="font-bold text-stone-800">±0.0024 m/s²</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 3: Attitude & Angular Rates -->
-        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4">
-          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
-            <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Attitude &amp; Angular Rates</h3>
-            <span class="text-[10px] font-mono text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">SO(3) Quat</span>
-          </div>
-          <div class="space-y-2.5 font-mono text-xs">
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Euler Angles (Roll, Pitch, Yaw)</span>
-              <span id="tel-euler" class="font-bold text-stone-800">R: +1.2° | P: -3.8° | Y: 142.6°</span>
-            </div>
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Angular Rates [p, q, r]</span>
-              <span id="tel-rates" class="font-bold text-stone-800">[0.01, -0.02, 0.05] rad/s</span>
-            </div>
-            <div class="flex justify-between items-center py-1 border-b border-stone-50">
-              <span class="text-stone-500">Quaternion [qw, qx, qy, qz]</span>
-              <span id="tel-quat" class="font-bold text-stone-800">[0.998, 0.012, -0.018, 0.045]</span>
-            </div>
-            <div class="flex justify-between items-center py-1">
-              <span class="text-stone-500">Estimated Gyro Bias</span>
-              <span id="tel-gyro-bias" class="font-bold text-stone-800">[-0.0004, 0.0011, -0.0002] rad/s</span>
-            </div>
-          </div>
-        </div>
-
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-6 scroll-mt-14" data-purpose="kinematics-matrix" id="imu">
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4"><div class="flex items-center justify-between border-b border-stone-100 pb-2"><h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Position &amp; Frame Transforms</h3><span id="tel-cov" class="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Cov: ±0.04m</span></div><div class="space-y-2.5 font-mono text-xs"><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Body Pos (T<sub>WB</sub>) [X, Y, Z]</span><span id="tel-pos-wb" class="font-bold text-stone-800">[+4.00, +0.00, -2.00] m</span></div><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Camera Pos (T<sub>WC</sub>) [X, Y, Z]</span><span id="tel-pos-wc" class="font-bold text-brand-700">[+4.10, +0.00, -2.04] m</span></div><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Extrinsic Offset T<sub>BC</sub></span><span class="font-bold text-stone-800">[+0.10, 0.00, -0.04] m</span></div><div class="flex justify-between items-center py-1"><span class="text-stone-600">Integrated Distance</span><span id="tel-path-len" class="font-bold text-stone-800">188.42 m</span></div></div></div>
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4"><div class="flex items-center justify-between border-b border-stone-100 pb-2"><h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Linear Kinematics &amp; IMU Accel</h3><span class="text-[10px] font-mono text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">ADIS-16470</span></div><div class="space-y-2.5 font-mono text-xs"><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Linear Velocity [Vx, Vy, Vz]</span><span id="tel-vel" class="font-bold text-stone-800">[+1.25, +0.10, +0.02] m/s</span></div><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Total Ground Speed</span><span id="tel-speed" class="font-bold text-stone-800">1.25 m/s (4.5 km/h)</span></div><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Linear Accel [Ax, Ay, Az]</span><span id="tel-accel" class="font-bold text-stone-800">[+0.12, -0.04, +9.81] m/s²</span></div><div class="flex justify-between items-center py-1"><span class="text-stone-600">Estimated Accel Bias</span><span id="tel-bias" class="font-bold text-stone-800">±0.0024 m/s²</span></div></div></div>
+        <div class="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-4"><div class="flex items-center justify-between border-b border-stone-100 pb-2"><h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Attitude &amp; Angular Rates</h3><span class="text-[10px] font-mono text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">SO(3) Quat</span></div><div class="space-y-2.5 font-mono text-xs"><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Euler Angles (Roll, Pitch, Yaw)</span><span id="tel-euler" class="font-bold text-stone-800">R: +1.2° | P: -3.8° | Y: 142.6°</span></div><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Angular Rates [p, q, r]</span><span id="tel-rates" class="font-bold text-stone-800">[0.01, -0.02, 0.05] rad/s</span></div><div class="flex justify-between items-center py-1 border-b border-stone-50"><span class="text-stone-600">Quaternion [qw, qx, qy, qz]</span><span id="tel-quat" class="font-bold text-stone-800">[0.998, 0.012, -0.018, 0.045]</span></div><div class="flex justify-between items-center py-1"><span class="text-stone-600">Estimated Gyro Bias</span><span id="tel-gyro-bias" class="font-bold text-stone-800">[-0.0004, 0.0011, -0.0002] rad/s</span></div></div></div>
       </section>
-
-      <!-- ==================== 50 HZ CASCADED CLOSED-LOOP CONTROLLER SECTION ==================== -->
-      <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4" id="controller-section">
+      <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-4 sm:p-5 space-y-4 scroll-mt-14" id="controller-section">
         <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-stone-100 pb-3 gap-2">
-          <div>
-            <div class="flex items-center space-x-2">
-              <h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider">50 Hz Cascaded Closed-Loop Flight Controller</h2>
-              <span class="text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">50 Hz Active</span>
-            </div>
-            <p class="text-xs text-stone-500 mt-0.5 font-mono text-[11px] text-stone-600">Position Error (e<sub>p</sub>, e<sub>v</sub>) &rarr; Desired Force F<sub>d</sub> &rarr; Attitude Gen (b<sub>3d</sub>, R<sub>d</sub>) &rarr; SO(3) (e<sub>R</sub>, e<sub>&omega;</sub>) &rarr; Moment M<sub>d</sub> &rarr; FSM &rarr; <span class="font-bold text-stone-800">/ap/v1/cmd_vel</span></p>
-          </div>
-          <div class="flex items-center space-x-2 font-mono text-xs">
-            <span class="text-stone-500">FSM State:</span>
-            <span id="ctrl-fsm-state" class="px-2.5 py-0.5 rounded-lg bg-brand-50 text-brand-700 font-bold border border-brand-200">NAVIGATING</span>
-          </div>
+          <div><div class="flex items-center gap-2 flex-wrap"><h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider">50 Hz Cascaded Closed-Loop Flight Controller</h2><span class="text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">50 Hz Active</span></div><p class="text-xs text-stone-600 mt-1 font-mono text-[11px]">Position Error (e<sub>p</sub>, e<sub>v</sub>) &rarr; Desired Force F<sub>d</sub> &rarr; Attitude Gen (b<sub>3d</sub>, R<sub>d</sub>) &rarr; SO(3) (e<sub>R</sub>, e<sub>&omega;</sub>) &rarr; Moment M<sub>d</sub> &rarr; FSM &rarr; <span class="font-bold text-stone-800">/ap/v1/cmd_vel</span></p></div>
+          <div class="flex items-center gap-2 font-mono text-xs"><span class="text-stone-600">FSM State:</span><span id="ctrl-fsm-state" class="px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 font-bold border border-brand-200">NAVIGATING</span></div>
         </div>
-
-        <!-- 4 Closed-Loop Controller Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono text-xs">
-          
-          <!-- Controller Card 1: Outer Position Loop -->
-          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
-            <div class="flex justify-between items-center text-stone-500 font-sans text-xs">
-              <span class="font-bold text-stone-800">1. Position Loop</span>
-              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e<sub>p</sub> = p &minus; p<sub>d</sub></span>
-            </div>
-            <div class="space-y-1 text-[11px]">
-              <div class="flex justify-between"><span class="text-stone-500">Pos Error ‖e<sub>p</sub>‖:</span><strong id="ctrl-ep-norm" class="text-stone-800">0.42 m</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Vel Error ‖e<sub>v</sub>‖:</span><strong id="ctrl-ev-norm" class="text-stone-800">0.18 m/s</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Target p<sub>d</sub>:</span><span class="text-stone-700">[20.0, 5.0, 20.0]m</span></div>
-            </div>
-          </div>
-
-          <!-- Controller Card 2: Attitude Generator -->
-          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
-            <div class="flex justify-between items-center text-stone-500 font-sans text-xs">
-              <span class="font-bold text-stone-800">2. Attitude Generator</span>
-              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">b<sub>3d</sub> = F<sub>d</sub> / ‖F<sub>d</sub>‖</span>
-            </div>
-            <div class="space-y-1 text-[11px]">
-              <div class="flex justify-between"><span class="text-stone-500">Desired Force ‖F<sub>d</sub>‖:</span><strong id="ctrl-fd-norm" class="text-brand-600">14.72 N</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Thrust Direction b<sub>3d</sub>:</span><span id="ctrl-b3d-vec" class="text-stone-700">[0.02, -0.01, 1.00]</span></div>
-              <div class="flex justify-between"><span class="text-stone-500">Desired Quat q<sub>d</sub>:</span><span class="text-stone-700">[1.0, 0.0, 0.0, 0.0]</span></div>
-            </div>
-          </div>
-
-          <!-- Controller Card 3: SO(3) Geometric Controller -->
-          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
-            <div class="flex justify-between items-center text-stone-500 font-sans text-xs">
-              <span class="font-bold text-stone-800">3. Geometric SO(3)</span>
-              <span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e<sub>R</sub> = &frac12;(R<sub>d</sub><sup>T</sup>R &minus; R<sup>T</sup>R<sub>d</sub>)<sup>&or;</sup></span>
-            </div>
-            <div class="space-y-1 text-[11px]">
-              <div class="flex justify-between"><span class="text-stone-500">Attitude Error ‖e<sub>R</sub>‖:</span><strong id="ctrl-er-norm" class="text-emerald-600">0.024 rad</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Rate Error ‖e<sub>&omega;</sub>‖:</span><strong id="ctrl-ew-norm" class="text-stone-800">0.015 rad/s</strong></div>
-              <div class="flex justify-between"><span class="text-stone-500">Desired Moment ‖M<sub>d</sub>‖:</span><strong id="ctrl-md-norm" class="text-stone-800">0.118 N·m</strong></div>
-            </div>
-          </div>
-
-          <!-- Controller Card 4: FSM & Safety Watchdog -->
-          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2">
-            <div class="flex justify-between items-center text-stone-500 font-sans text-xs">
-              <span class="font-bold text-stone-800">4. Safety &amp; FSM</span>
-              <span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">WATCHDOG OK</span>
-            </div>
-            <div class="space-y-1 text-[11px]">
-              <div class="flex justify-between"><span class="text-stone-500">Heartbeat:</span><span class="text-emerald-600 font-bold">50.0 Hz Nominal</span></div>
-              <div class="flex justify-between"><span class="text-stone-500">Command Output:</span><span class="text-stone-700">/ap/v1/cmd_vel</span></div>
-              <div class="flex justify-between"><span class="text-stone-500">Vehicle Mass &amp; J:</span><span class="text-stone-700">1.50 kg • diag[0.02, 0.02, 0.04]</span></div>
-            </div>
-          </div>
-
+          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2"><div class="flex justify-between items-center text-stone-500 font-sans text-xs"><span class="font-bold text-stone-800">1. Position Loop</span><span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e<sub>p</sub> = p &minus; p<sub>d</sub></span></div><div class="space-y-1 text-[11px]"><div class="flex justify-between"><span class="text-stone-600">Pos Error ‖e<sub>p</sub>‖:</span><strong id="ctrl-ep-norm" class="text-stone-800">0.42 m</strong></div><div class="flex justify-between"><span class="text-stone-600">Vel Error ‖e<sub>v</sub>‖:</span><strong id="ctrl-ev-norm" class="text-stone-800">0.18 m/s</strong></div><div class="flex justify-between"><span class="text-stone-600">Target p<sub>d</sub>:</span><span class="text-stone-700">[20.0, 5.0, 20.0]m</span></div></div></div>
+          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2"><div class="flex justify-between items-center text-stone-500 font-sans text-xs"><span class="font-bold text-stone-800">2. Attitude Generator</span><span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">b<sub>3d</sub> = F<sub>d</sub> / ‖F<sub>d</sub>‖</span></div><div class="space-y-1 text-[11px]"><div class="flex justify-between"><span class="text-stone-600">Desired Force ‖F<sub>d</sub>‖:</span><strong id="ctrl-fd-norm" class="text-brand-700">14.72 N</strong></div><div class="flex justify-between"><span class="text-stone-600">Thrust Direction b<sub>3d</sub>:</span><span id="ctrl-b3d-vec" class="text-stone-700">[0.02, -0.01, 1.00]</span></div><div class="flex justify-between"><span class="text-stone-600">Desired Quat q<sub>d</sub>:</span><span class="text-stone-700">[1.0, 0.0, 0.0, 0.0]</span></div></div></div>
+          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2"><div class="flex justify-between items-center text-stone-500 font-sans text-xs"><span class="font-bold text-stone-800">3. Geometric SO(3)</span><span class="text-[10px] bg-white px-1.5 py-0.5 rounded border border-stone-200">e<sub>R</sub> = &frac12;(R<sub>d</sub><sup>T</sup>R &minus; R<sup>T</sup>R<sub>d</sub>)<sup>&or;</sup></span></div><div class="space-y-1 text-[11px]"><div class="flex justify-between"><span class="text-stone-600">Attitude Error ‖e<sub>R</sub>‖:</span><strong id="ctrl-er-norm" class="text-emerald-700">0.024 rad</strong></div><div class="flex justify-between"><span class="text-stone-600">Rate Error ‖e<sub>&omega;</sub>‖:</span><strong id="ctrl-ew-norm" class="text-stone-800">0.015 rad/s</strong></div><div class="flex justify-between"><span class="text-stone-600">Desired Moment ‖M<sub>d</sub>‖:</span><strong id="ctrl-md-norm" class="text-stone-800">0.118 N·m</strong></div></div></div>
+          <div class="p-3.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-2"><div class="flex justify-between items-center text-stone-500 font-sans text-xs"><span class="font-bold text-stone-800">4. Safety &amp; FSM</span><span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold border border-emerald-200">WATCHDOG OK</span></div><div class="space-y-1 text-[11px]"><div class="flex justify-between"><span class="text-stone-600">Heartbeat:</span><span class="text-emerald-700 font-bold">50.0 Hz Nominal</span></div><div class="flex justify-between"><span class="text-stone-600">Command Output:</span><span class="text-stone-700">/ap/v1/cmd_vel</span></div><div class="flex justify-between"><span class="text-stone-600">Vehicle Mass &amp; J:</span><span class="text-stone-700">1.50 kg • diag[0.02,0.02,0.04]</span></div></div></div>
         </div>
       </section>
-
-      <!-- ==================== REAL-TIME ROLLING OSCILLOSCOPE GRAPHS ==================== -->
-      <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 space-y-4" id="graphs-section">
+      <section class="bg-white rounded-2xl border border-stone-200 shadow-sm p-4 sm:p-5 space-y-4 scroll-mt-14" id="graphs-section">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-stone-100 pb-3 gap-2">
-          <div>
-            <h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2">
-              <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-              Live Kinematic Waveforms (Rolling 20-Second Window)
-            </h2>
-            <p class="text-xs text-stone-500 mt-0.5">Real-time linear acceleration (a<sub>x</sub>, a<sub>y</sub>, a<sub>z</sub>), velocity (v<sub>x</sub>, v<sub>y</sub>, v<sub>z</sub>), and world position (x, y, z)</p>
-          </div>
-          <div class="flex items-center space-x-2 font-mono">
-            <button id="graphs-pause-btn" onclick="toggleGraphsPause()" class="text-xs font-semibold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg border border-stone-200 transition">
-              PAUSE
-            </button>
-            <button onclick="clearGraphBuffers()" class="text-xs font-semibold text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 px-2.5 py-1.5 rounded-lg border border-stone-200 transition">
-              CLEAR
-            </button>
+          <div><h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2"><svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>Live Kinematic Waveforms (Rolling 20-Second Window)</h2><p class="text-xs text-stone-600 mt-0.5">Real-time linear acceleration (a<sub>x</sub>, a<sub>y</sub>, a<sub>z</sub>), velocity (v<sub>x</sub>, v<sub>y</sub>, v<sub>z</sub>), and world position (x, y, z)</p></div>
+          <div class="flex items-center gap-2 font-mono">
+            <button id="graphs-pause-btn" onclick="toggleGraphsPause()" class="min-h-[44px] text-xs font-semibold text-stone-700 hover:text-stone-900 bg-white hover:bg-stone-50 px-4 py-2 rounded-lg border border-stone-200 transition">PAUSE</button>
+            <button onclick="clearGraphBuffers()" class="min-h-[44px] text-xs font-semibold text-stone-600 hover:text-stone-900 bg-white hover:bg-stone-50 px-4 py-2 rounded-lg border border-stone-200 transition">CLEAR</button>
           </div>
         </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          <!-- Graph 1: Linear Acceleration -->
-          <div class="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                Linear Acceleration (m/s²)
-              </span>
-              <!-- Channel Toggle Chips -->
-              <div class="flex items-center space-x-1 font-mono text-[10px]">
-                <button id="btn-chip-accel-x" onclick="toggleGraphChannel('accel', 'x')" class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 hover:opacity-80 transition cursor-pointer">● Ax</button>
-                <button id="btn-chip-accel-y" onclick="toggleGraphChannel('accel', 'y')" class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300 hover:opacity-80 transition cursor-pointer">● Ay</button>
-                <button id="btn-chip-accel-z" onclick="toggleGraphChannel('accel', 'z')" class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold border border-amber-300 hover:opacity-80 transition cursor-pointer">● Az (+1g)</button>
-              </div>
-            </div>
-
-            <!-- SVG Oscilloscope Surface -->
-            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner">
-              <svg id="svg-graph-accel" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160">
-                <defs>
-                  <linearGradient id="accelGradX" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#10B981" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                  <linearGradient id="accelGradY" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                  <linearGradient id="accelGradZ" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                </defs>
-
-                <!-- Gridlines: Horizontal (Y-Ticks) -->
-                <line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="104" y2="104" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-
-                <!-- Y-Axis Labels -->
-                <text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+14</text>
-                <text x="40" y="45" fill="#F59E0B" font-family="monospace" font-size="8.5" text-anchor="end">+9.8</text>
-                <text x="40" y="76" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+5.0</text>
-                <text x="40" y="107" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text>
-                <text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-4.0</text>
-
-                <!-- Gridlines: Vertical (Time-Ticks) -->
-                <line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-                <line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"></line>
-
-                <!-- X-Axis Time Labels -->
-                <text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text>
-                <text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text>
-                <text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text>
-                <text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text>
-                <text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s (Now)</text>
-
-                <!-- Area Fills -->
-                <path id="graph-accel-area-x" fill="url(#accelGradX)" d=""></path>
-                <path id="graph-accel-area-y" fill="url(#accelGradY)" d=""></path>
-                <path id="graph-accel-area-z" fill="url(#accelGradZ)" d=""></path>
-
-                <!-- Data Stroke Lines -->
-                <path id="graph-accel-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""></path>
-                <path id="graph-accel-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""></path>
-                <path id="graph-accel-z" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" d=""></path>
-
-                <!-- Leading Edge Glow Dots -->
-                <circle id="graph-accel-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-                <circle id="graph-accel-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-                <circle id="graph-accel-dot-z" r="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-
-                <!-- Interactive Hover Crosshair & Tooltip -->
-                <line id="graph-accel-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"></line>
-                <g id="graph-accel-tooltip" opacity="0" pointer-events="none">
-                  <rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"></rect>
-                  <text id="graph-accel-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"></text>
-                </g>
-              </svg>
-            </div>
-
-            <!-- Value Footer -->
-            <div class="grid grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700">
-              <span id="graph-accel-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1 rounded-lg font-bold border border-emerald-200">AX: +0.12</span>
-              <span id="graph-accel-val-y" class="bg-sky-50 text-sky-900 px-2 py-1 rounded-lg font-bold border border-sky-200">AY: -0.04</span>
-              <span id="graph-accel-val-z" class="bg-amber-50 text-amber-900 px-2 py-1 rounded-lg font-bold border border-amber-200">AZ: 9.81</span>
-              <span id="graph-accel-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1 rounded-lg font-bold border border-stone-200 text-right">‖A‖: 9.81</span>
-            </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div class="p-3 sm:p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3 min-w-0">
+            <div class="flex items-center justify-between gap-2 flex-wrap"><span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Linear Acceleration (m/s²)</span><div class="flex items-center gap-1 font-mono text-[10px]"><button id="btn-chip-accel-x" onclick="toggleGraphChannel('accel','x')" class="min-h-[28px] px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">● Ax</button><button id="btn-chip-accel-y" onclick="toggleGraphChannel('accel','y')" class="min-h-[28px] px-2 py-1 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300">● Ay</button><button id="btn-chip-accel-z" onclick="toggleGraphChannel('accel','z')" class="min-h-[28px] px-2 py-1 rounded bg-amber-100 text-amber-800 font-bold border border-amber-300">● Az (+1g)</button></div></div>
+            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner"><svg id="svg-graph-accel" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160"><defs><linearGradient id="accelGradX" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.25"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.0"/></linearGradient><linearGradient id="accelGradY" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"/><stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"/></linearGradient><linearGradient id="accelGradZ" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#F59E0B" stop-opacity="0.25"/><stop offset="100%" stop-color="#F59E0B" stop-opacity="0.0"/></linearGradient></defs><line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="104" y2="104" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"/><line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+14</text><text x="40" y="45" fill="#F59E0B" font-family="monospace" font-size="8.5" text-anchor="end">+9.8</text><text x="40" y="76" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+5.0</text><text x="40" y="107" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text><text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-4.0</text><line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/><text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text><text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text><text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text><text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text><text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s</text><path id="graph-accel-area-x" fill="url(#accelGradX)" d=""/><path id="graph-accel-area-y" fill="url(#accelGradY)" d=""/><path id="graph-accel-area-z" fill="url(#accelGradZ)" d=""/><path id="graph-accel-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-accel-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-accel-z" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" d=""/><circle id="graph-accel-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-accel-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-accel-dot-z" r="4" fill="#F59E0B" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><line id="graph-accel-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"/><g id="graph-accel-tooltip" opacity="0" pointer-events="none"><rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"/><text id="graph-accel-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"/></g></svg></div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700"><span id="graph-accel-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1.5 rounded-lg font-bold border border-emerald-200">AX: +0.12</span><span id="graph-accel-val-y" class="bg-sky-50 text-sky-900 px-2 py-1.5 rounded-lg font-bold border border-sky-200">AY: -0.04</span><span id="graph-accel-val-z" class="bg-amber-50 text-amber-900 px-2 py-1.5 rounded-lg font-bold border border-amber-200">AZ: 9.81</span><span id="graph-accel-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1.5 rounded-lg font-bold border border-stone-200 text-right">‖A‖: 9.81</span></div>
           </div>
-
-          <!-- Graph 2: Linear Velocity -->
-          <div class="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-sky-500"></span>
-                Linear Velocity (m/s)
-              </span>
-              <!-- Channel Toggle Chips -->
-              <div class="flex items-center space-x-1 font-mono text-[10px]">
-                <button id="btn-chip-vel-x" onclick="toggleGraphChannel('vel', 'x')" class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 hover:opacity-80 transition cursor-pointer">● Vx</button>
-                <button id="btn-chip-vel-y" onclick="toggleGraphChannel('vel', 'y')" class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300 hover:opacity-80 transition cursor-pointer">● Vy</button>
-                <button id="btn-chip-vel-z" onclick="toggleGraphChannel('vel', 'z')" class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold border border-purple-300 hover:opacity-80 transition cursor-pointer">● Vz</button>
-              </div>
-            </div>
-
-            <!-- SVG Oscilloscope Surface -->
-            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner">
-              <svg id="svg-graph-vel" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160">
-                <defs>
-                  <linearGradient id="velGradX" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#10B981" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                  <linearGradient id="velGradY" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                  <linearGradient id="velGradZ" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#A855F7" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#A855F7" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                </defs>
-
-                <!-- Gridlines: Horizontal (Y-Ticks) -->
-                <line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="104" y2="104" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-
-                <!-- Y-Axis Labels -->
-                <text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+3.0</text>
-                <text x="40" y="45" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+1.5</text>
-                <text x="40" y="76" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text>
-                <text x="40" y="107" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-1.5</text>
-                <text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-3.0</text>
-
-                <!-- Gridlines: Vertical (Time-Ticks) -->
-                <line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-                <line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"></line>
-
-                <!-- X-Axis Time Labels -->
-                <text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text>
-                <text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text>
-                <text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text>
-                <text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text>
-                <text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s (Now)</text>
-
-                <!-- Area Fills -->
-                <path id="graph-vel-area-x" fill="url(#velGradX)" d=""></path>
-                <path id="graph-vel-area-y" fill="url(#velGradY)" d=""></path>
-                <path id="graph-vel-area-z" fill="url(#velGradZ)" d=""></path>
-
-                <!-- Data Stroke Lines -->
-                <path id="graph-vel-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""></path>
-                <path id="graph-vel-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""></path>
-                <path id="graph-vel-z" fill="none" stroke="#A855F7" stroke-width="2" stroke-linecap="round" d=""></path>
-
-                <!-- Leading Edge Glow Dots -->
-                <circle id="graph-vel-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-                <circle id="graph-vel-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-                <circle id="graph-vel-dot-z" r="4" fill="#A855F7" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-
-                <!-- Interactive Hover Crosshair & Tooltip -->
-                <line id="graph-vel-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"></line>
-                <g id="graph-vel-tooltip" opacity="0" pointer-events="none">
-                  <rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"></rect>
-                  <text id="graph-vel-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"></text>
-                </g>
-              </svg>
-            </div>
-
-            <!-- Value Footer -->
-            <div class="grid grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700">
-              <span id="graph-vel-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1 rounded-lg font-bold border border-emerald-200">VX: +1.25</span>
-              <span id="graph-vel-val-y" class="bg-sky-50 text-sky-900 px-2 py-1 rounded-lg font-bold border border-sky-200">VY: +0.10</span>
-              <span id="graph-vel-val-z" class="bg-purple-50 text-purple-900 px-2 py-1 rounded-lg font-bold border border-purple-200">VZ: +0.02</span>
-              <span id="graph-vel-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1 rounded-lg font-bold border border-stone-200 text-right">‖V‖: 1.25</span>
-            </div>
+          <div class="p-3 sm:p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3 min-w-0">
+            <div class="flex items-center justify-between gap-2 flex-wrap"><span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-sky-500"></span>Linear Velocity (m/s)</span><div class="flex items-center gap-1 font-mono text-[10px]"><button id="btn-chip-vel-x" onclick="toggleGraphChannel('vel','x')" class="min-h-[28px] px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">● Vx</button><button id="btn-chip-vel-y" onclick="toggleGraphChannel('vel','y')" class="min-h-[28px] px-2 py-1 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300">● Vy</button><button id="btn-chip-vel-z" onclick="toggleGraphChannel('vel','z')" class="min-h-[28px] px-2 py-1 rounded bg-purple-100 text-purple-800 font-bold border border-purple-300">● Vz</button></div></div>
+            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner"><svg id="svg-graph-vel" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160"><defs><linearGradient id="velGradX" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.25"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.0"/></linearGradient><linearGradient id="velGradY" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"/><stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"/></linearGradient><linearGradient id="velGradZ" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#A855F7" stop-opacity="0.25"/><stop offset="100%" stop-color="#A855F7" stop-opacity="0.0"/></linearGradient></defs><line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"/><line x1="45" x2="390" y1="104" y2="104" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+3.0</text><text x="40" y="45" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+1.5</text><text x="40" y="76" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text><text x="40" y="107" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-1.5</text><text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-3.0</text><line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/><text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text><text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text><text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text><text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text><text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s</text><path id="graph-vel-area-x" fill="url(#velGradX)" d=""/><path id="graph-vel-area-y" fill="url(#velGradY)" d=""/><path id="graph-vel-area-z" fill="url(#velGradZ)" d=""/><path id="graph-vel-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-vel-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-vel-z" fill="none" stroke="#A855F7" stroke-width="2" stroke-linecap="round" d=""/><circle id="graph-vel-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-vel-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-vel-dot-z" r="4" fill="#A855F7" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><line id="graph-vel-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"/><g id="graph-vel-tooltip" opacity="0" pointer-events="none"><rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"/><text id="graph-vel-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"/></g></svg></div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700"><span id="graph-vel-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1.5 rounded-lg font-bold border border-emerald-200">VX: +1.25</span><span id="graph-vel-val-y" class="bg-sky-50 text-sky-900 px-2 py-1.5 rounded-lg font-bold border border-sky-200">VY: +0.10</span><span id="graph-vel-val-z" class="bg-purple-50 text-purple-900 px-2 py-1.5 rounded-lg font-bold border border-purple-200">VZ: +0.02</span><span id="graph-vel-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1.5 rounded-lg font-bold border border-stone-200 text-right">‖V‖: 1.25</span></div>
           </div>
-
-          <!-- Graph 3: World Position -->
-          <div class="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-teal-500"></span>
-                World Position (m)
-              </span>
-              <!-- Channel Toggle Chips -->
-              <div class="flex items-center space-x-1 font-mono text-[10px]">
-                <button id="btn-chip-pos-x" onclick="toggleGraphChannel('pos', 'x')" class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 hover:opacity-80 transition cursor-pointer">● X</button>
-                <button id="btn-chip-pos-y" onclick="toggleGraphChannel('pos', 'y')" class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300 hover:opacity-80 transition cursor-pointer">● Y</button>
-                <button id="btn-chip-pos-z" onclick="toggleGraphChannel('pos', 'z')" class="px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-bold border border-teal-300 hover:opacity-80 transition cursor-pointer">● Z Alt</button>
-              </div>
-            </div>
-
-            <!-- SVG Oscilloscope Surface -->
-            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner">
-              <svg id="svg-graph-pos" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160">
-                <defs>
-                  <linearGradient id="posGradX" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#10B981" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                  <linearGradient id="posGradY" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                  <linearGradient id="posGradZ" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#14B8A6" stop-opacity="0.25"></stop>
-                    <stop offset="100%" stop-color="#14B8A6" stop-opacity="0.0"></stop>
-                  </linearGradient>
-                </defs>
-
-                <!-- Gridlines: Horizontal (Y-Ticks) -->
-                <line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="99" y2="99" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"></line>
-                <line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-
-                <!-- Y-Axis Labels -->
-                <text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+25</text>
-                <text x="40" y="45" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+15</text>
-                <text x="40" y="76" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+5.0</text>
-                <text x="40" y="103" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text>
-                <text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-10</text>
-
-                <!-- Gridlines: Vertical (Time-Ticks) -->
-                <line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
-                <line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"></line>
-                <line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"></line>
-
-                <!-- X-Axis Time Labels -->
-                <text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text>
-                <text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text>
-                <text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text>
-                <text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text>
-                <text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s (Now)</text>
-
-                <!-- Area Fills -->
-                <path id="graph-pos-area-x" fill="url(#posGradX)" d=""></path>
-                <path id="graph-pos-area-y" fill="url(#posGradY)" d=""></path>
-                <path id="graph-pos-area-z" fill="url(#posGradZ)" d=""></path>
-
-                <!-- Data Stroke Lines -->
-                <path id="graph-pos-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""></path>
-                <path id="graph-pos-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""></path>
-                <path id="graph-pos-z" fill="none" stroke="#14B8A6" stroke-width="2" stroke-linecap="round" d=""></path>
-
-                <!-- Leading Edge Glow Dots -->
-                <circle id="graph-pos-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-                <circle id="graph-pos-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-                <circle id="graph-pos-dot-z" r="4" fill="#14B8A6" stroke="#FFFFFF" stroke-width="1.5" opacity="0"></circle>
-
-                <!-- Interactive Hover Crosshair & Tooltip -->
-                <line id="graph-pos-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"></line>
-                <g id="graph-pos-tooltip" opacity="0" pointer-events="none">
-                  <rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"></rect>
-                  <text id="graph-pos-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"></text>
-                </g>
-              </svg>
-            </div>
-
-            <!-- Value Footer -->
-            <div class="grid grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700">
-              <span id="graph-pos-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1 rounded-lg font-bold border border-emerald-200">X: +4.00</span>
-              <span id="graph-pos-val-y" class="bg-sky-50 text-sky-900 px-2 py-1 rounded-lg font-bold border border-sky-200">Y: +0.00</span>
-              <span id="graph-pos-val-z" class="bg-teal-50 text-teal-900 px-2 py-1 rounded-lg font-bold border border-teal-200">Z: -2.00</span>
-              <span id="graph-pos-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1 rounded-lg font-bold border border-stone-200 text-right">‖P‖: 4.47</span>
-            </div>
+          <div class="p-3 sm:p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3 min-w-0">
+            <div class="flex items-center justify-between gap-2 flex-wrap"><span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-teal-500"></span>World Position (m)</span><div class="flex items-center gap-1 font-mono text-[10px]"><button id="btn-chip-pos-x" onclick="toggleGraphChannel('pos','x')" class="min-h-[28px] px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">● X</button><button id="btn-chip-pos-y" onclick="toggleGraphChannel('pos','y')" class="min-h-[28px] px-2 py-1 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300">● Y</button><button id="btn-chip-pos-z" onclick="toggleGraphChannel('pos','z')" class="min-h-[28px] px-2 py-1 rounded bg-teal-100 text-teal-800 font-bold border border-teal-300">● Z Alt</button></div></div>
+            <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner"><svg id="svg-graph-pos" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160"><defs><linearGradient id="posGradX" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.25"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.0"/></linearGradient><linearGradient id="posGradY" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"/><stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"/></linearGradient><linearGradient id="posGradZ" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#14B8A6" stop-opacity="0.25"/><stop offset="100%" stop-color="#14B8A6" stop-opacity="0.0"/></linearGradient></defs><line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="99" y2="99" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"/><line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+25</text><text x="40" y="45" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+15</text><text x="40" y="76" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+5.0</text><text x="40" y="103" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text><text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-10</text><line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/><text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text><text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text><text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text><text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text><text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s</text><path id="graph-pos-area-x" fill="url(#posGradX)" d=""/><path id="graph-pos-area-y" fill="url(#posGradY)" d=""/><path id="graph-pos-area-z" fill="url(#posGradZ)" d=""/><path id="graph-pos-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-pos-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-pos-z" fill="none" stroke="#14B8A6" stroke-width="2" stroke-linecap="round" d=""/><circle id="graph-pos-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-pos-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-pos-dot-z" r="4" fill="#14B8A6" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><line id="graph-pos-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"/><g id="graph-pos-tooltip" opacity="0" pointer-events="none"><rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"/><text id="graph-pos-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"/></g></svg></div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700"><span id="graph-pos-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1.5 rounded-lg font-bold border border-emerald-200">X: +4.00</span><span id="graph-pos-val-y" class="bg-sky-50 text-sky-900 px-2 py-1.5 rounded-lg font-bold border border-sky-200">Y: +0.00</span><span id="graph-pos-val-z" class="bg-teal-50 text-teal-900 px-2 py-1.5 rounded-lg font-bold border border-teal-200">Z: -2.00</span><span id="graph-pos-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1.5 rounded-lg font-bold border border-stone-200 text-right">‖P‖: 4.47</span></div>
           </div>
-
         </div>
       </section>
-
-      <!-- ==================== ROS 2 COMPUTATIONAL GRAPH & TOPIC MAPPING ==================== -->
-      <section class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden" data-purpose="ros-nodes-table" id="nodes">
-        <div class="p-5 border-b border-stone-100 flex items-center justify-between">
-          <div>
-            <h3 class="text-sm font-bold text-stone-900">ROS 2 Computational Graph &amp; Topic Interfaces</h3>
-            <p class="text-xs text-stone-500">Verified topic contracts from drones-controller &amp; VIO ROS 2 architecture</p>
-          </div>
-          <button onclick="openTuningModal()" class="text-xs font-semibold text-brand-600 hover:text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100 transition font-mono">
-            Configure Bridge Endpoint
-          </button>
+      <section class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden scroll-mt-14" data-purpose="ros-nodes-table" id="nodes">
+        <div class="p-4 sm:p-5 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div><h3 class="text-sm font-bold text-stone-900">ROS 2 Computational Graph &amp; Topic Interfaces</h3><p class="text-xs text-stone-600">Verified topic contracts from drones-controller &amp; VIO ROS 2 architecture</p></div>
+          <button onclick="openTuningModal()" class="min-h-[44px] text-xs font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 px-4 py-2 rounded-lg border border-brand-200 transition font-mono">Configure Bridge Endpoint</button>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs font-sans">
-            <thead class="bg-stone-50 border-b border-stone-200/80 text-stone-500 uppercase tracking-wider font-semibold">
-              <tr>
-                <th class="py-3 px-5">Node Name</th>
-                <th class="py-3 px-5">Topic</th>
-                <th class="py-3 px-5">Message Type</th>
-                <th class="py-3 px-5">Rate</th>
-                <th class="py-3 px-5">Direction</th>
-                <th class="py-3 px-5 text-right">Status</th>
-              </tr>
-            </thead>
+        <div class="overflow-x-auto -webkit-overflow-scrolling-touch">
+          <table class="w-full text-left text-xs font-sans min-w-[640px]">
+            <thead class="bg-stone-50 border-b border-stone-200/80 text-stone-600 uppercase tracking-wider font-semibold"><tr><th class="py-3 px-5">Node Name</th><th class="py-3 px-5">Topic</th><th class="py-3 px-5">Message Type</th><th class="py-3 px-5">Rate</th><th class="py-3 px-5">Direction</th><th class="py-3 px-5 text-right">Status</th></tr></thead>
             <tbody class="divide-y divide-stone-100 font-mono">
-              <tr class="hover:bg-stone-50/70 transition">
-                <td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td>
-                <td class="py-2.5 px-5 text-stone-600">/drones_controller/position_error</td>
-                <td class="py-2.5 px-5 text-stone-500">geometry_msgs/Vector3</td>
-                <td class="py-2.5 px-5">50.0 Hz</td>
-                <td class="py-2.5 px-5 text-brand-600 font-semibold">Published</td>
-                <td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span></td>
-              </tr>
-              <tr class="hover:bg-stone-50/70 transition">
-                <td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td>
-                <td class="py-2.5 px-5 text-stone-600">/drones_controller/desired_force</td>
-                <td class="py-2.5 px-5 text-stone-500">geometry_msgs/Vector3</td>
-                <td class="py-2.5 px-5">50.0 Hz</td>
-                <td class="py-2.5 px-5 text-brand-600 font-semibold">Published</td>
-                <td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span></td>
-              </tr>
-              <tr class="hover:bg-stone-50/70 transition">
-                <td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td>
-                <td class="py-2.5 px-5 text-stone-600">/drones_controller/attitude_error</td>
-                <td class="py-2.5 px-5 text-stone-500">geometry_msgs/Vector3</td>
-                <td class="py-2.5 px-5">50.0 Hz</td>
-                <td class="py-2.5 px-5 text-brand-600 font-semibold">Published</td>
-                <td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span></td>
-              </tr>
-              <tr class="hover:bg-stone-50/70 transition">
-                <td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td>
-                <td class="py-2.5 px-5 text-stone-600">/ap/v1/cmd_vel</td>
-                <td class="py-2.5 px-5 text-stone-500">geometry_msgs/TwistStamped</td>
-                <td class="py-2.5 px-5">50.0 Hz</td>
-                <td class="py-2.5 px-5 text-emerald-600 font-semibold">Command Out</td>
-                <td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span></td>
-              </tr>
-              <tr class="hover:bg-stone-50/70 transition">
-                <td class="py-2.5 px-5 font-semibold text-stone-800">vio_msckf_estimator</td>
-                <td class="py-2.5 px-5 text-stone-600">/drone/vio/odometry</td>
-                <td class="py-2.5 px-5 text-stone-500">nav_msgs/Odometry</td>
-                <td class="py-2.5 px-5">60.0 Hz</td>
-                <td class="py-2.5 px-5 text-brand-600 font-semibold">Published</td>
-                <td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span></td>
-              </tr>
-              <tr class="hover:bg-stone-50/70 transition">
-                <td class="py-2.5 px-5 font-semibold text-stone-800">camera_driver_node</td>
-                <td class="py-2.5 px-5 text-stone-600">/camera/image_raw</td>
-                <td class="py-2.5 px-5 text-stone-500">sensor_msgs/Image</td>
-                <td class="py-2.5 px-5">30.0 Hz</td>
-                <td class="py-2.5 px-5 text-brand-600 font-semibold">Published</td>
-                <td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span></td>
-              </tr>
-              <tr class="hover:bg-stone-50/70 transition">
-                <td class="py-2.5 px-5 font-semibold text-stone-800">imu_adis16470_publisher</td>
-                <td class="py-2.5 px-5 text-stone-600">/imu/data_raw</td>
-                <td class="py-2.5 px-5 text-stone-500">sensor_msgs/Imu</td>
-                <td class="py-2.5 px-5">200.0 Hz</td>
-                <td class="py-2.5 px-5 text-brand-600 font-semibold">Published</td>
-                <td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800">Active</span></td>
-              </tr>
+              <tr class="hover:bg-stone-50/70 transition"><td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td><td class="py-2.5 px-5 text-stone-600">/drones_controller/position_error</td><td class="py-2.5 px-5 text-stone-600">geometry_msgs/Vector3</td><td class="py-2.5 px-5">50.0 Hz</td><td class="py-2.5 px-5 text-brand-700 font-semibold">Published</td><td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span></td></tr>
+              <tr class="hover:bg-stone-50/70 transition"><td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td><td class="py-2.5 px-5 text-stone-600">/drones_controller/desired_force</td><td class="py-2.5 px-5 text-stone-600">geometry_msgs/Vector3</td><td class="py-2.5 px-5">50.0 Hz</td><td class="py-2.5 px-5 text-brand-700 font-semibold">Published</td><td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span></td></tr>
+              <tr class="hover:bg-stone-50/70 transition"><td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td><td class="py-2.5 px-5 text-stone-600">/drones_controller/attitude_error</td><td class="py-2.5 px-5 text-stone-600">geometry_msgs/Vector3</td><td class="py-2.5 px-5">50.0 Hz</td><td class="py-2.5 px-5 text-brand-700 font-semibold">Published</td><td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span></td></tr>
+              <tr class="hover:bg-stone-50/70 transition"><td class="py-2.5 px-5 font-semibold text-stone-800">drones_controller_node</td><td class="py-2.5 px-5 text-stone-600">/ap/v1/cmd_vel</td><td class="py-2.5 px-5 text-stone-600">geometry_msgs/TwistStamped</td><td class="py-2.5 px-5">50.0 Hz</td><td class="py-2.5 px-5 text-emerald-700 font-semibold">Command Out</td><td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span></td></tr>
+              <tr class="hover:bg-stone-50/70 transition"><td class="py-2.5 px-5 font-semibold text-stone-800">vio_msckf_estimator</td><td class="py-2.5 px-5 text-stone-600">/drone/vio/odometry</td><td class="py-2.5 px-5 text-stone-600">nav_msgs/Odometry</td><td class="py-2.5 px-5">60.0 Hz</td><td class="py-2.5 px-5 text-brand-700 font-semibold">Published</td><td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span></td></tr>
+              <tr class="hover:bg-stone-50/70 transition"><td class="py-2.5 px-5 font-semibold text-stone-800">camera_driver_node</td><td class="py-2.5 px-5 text-stone-600">/camera/image_raw</td><td class="py-2.5 px-5 text-stone-600">sensor_msgs/Image</td><td class="py-2.5 px-5">30.0 Hz</td><td class="py-2.5 px-5 text-brand-700 font-semibold">Published</td><td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span></td></tr>
+              <tr class="hover:bg-stone-50/70 transition"><td class="py-2.5 px-5 font-semibold text-stone-800">imu_adis16470_publisher</td><td class="py-2.5 px-5 text-stone-600">/imu/data_raw</td><td class="py-2.5 px-5 text-stone-600">sensor_msgs/Imu</td><td class="py-2.5 px-5">200.0 Hz</td><td class="py-2.5 px-5 text-brand-700 font-semibold">Published</td><td class="py-2.5 px-5 text-right"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span></td></tr>
             </tbody>
           </table>
         </div>
       </section>
-
-      <!-- Footer Identity Note -->
-      <footer class="pt-2 pb-6 text-center text-xs text-stone-400 font-mono">
-        AeroVIO Ground Station • Monocular Visual-Inertial Odometry &amp; 50 Hz Cascaded SO(3) Geometric Controller
-      </footer>
-
+      <footer class="pt-2 pb-6 text-center text-xs text-stone-500 font-mono">AeroVIO Ground Station • Monocular Visual-Inertial Odometry &amp; 50 Hz Cascaded SO(3) Geometric Controller</footer>
     </main>
   </div>
-
-  <!-- ==================== MODAL: CONTROLLER & SIMULATOR TUNING ==================== -->
-  <div id="tuning-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl border border-stone-300 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in duration-150">
-      
-      <div class="px-6 py-4 border-b border-stone-200 flex items-center justify-between">
-        <div class="flex items-center space-x-2">
-          <div class="w-3 h-3 rounded-full bg-brand-500"></div>
-          <h3 class="font-bold text-sm text-stone-900">Controller Parameters &amp; Bridge Configuration</h3>
-        </div>
-        <button onclick="closeTuningModal()" class="text-stone-400 hover:text-stone-700">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-        </button>
+  <div id="tuning-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-stone-300 shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col mx-4">
+      <div class="px-6 py-4 border-b border-stone-200 flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-brand-500"></div><h3 class="font-bold text-sm text-stone-900">Controller Parameters &amp; Bridge Configuration</h3></div><button onclick="closeTuningModal()" class="min-h-[44px] min-w-[44px] w-11 h-11 inline-flex items-center justify-center text-stone-500 hover:text-stone-700 rounded-lg hover:bg-stone-100"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg></button></div>
+      <div class="p-6 space-y-4 text-xs overflow-y-auto">
+        <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] font-sans"><strong>Notice:</strong> Parameter adjustments below configure simulator setpoints and controller gain matrices. Flight execution commands require verified physical ArduPilot safety interlocks.</div>
+        <div class="p-2.5 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[10px] text-center flex items-center justify-between gap-1 overflow-x-auto text-stone-700"><span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold text-brand-700">POSITION</span><span class="text-stone-400">→</span><span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold">ATTITUDE GEN</span><span class="text-stone-400">→</span><span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold text-emerald-700">SO(3) CONTROLLER</span><span class="text-stone-400">→</span><span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold">FLIGHT FSM</span><span class="text-stone-400">→</span><span class="px-2 py-0.5 bg-brand-600 text-white rounded font-bold">/ap/v1/cmd_vel</span></div>
+        <div><label class="block font-bold text-stone-700 uppercase tracking-wider mb-2 text-[11px]">Waypoint Target Setpoint [X, Y, Z, Yaw]</label><div class="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono"><div><span class="text-stone-600 block text-[10px]">X (m)</span><input id="tune-tx" type="number" step="0.5" value="20.0" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs font-mono" /></div><div><span class="text-stone-600 block text-[10px]">Y (m)</span><input id="tune-ty" type="number" step="0.5" value="5.0" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs font-mono" /></div><div><span class="text-stone-600 block text-[10px]">Z Alt (m)</span><input id="tune-tz" type="number" step="0.5" value="20.0" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs font-mono" /></div><div><span class="text-stone-600 block text-[10px]">Yaw (rad)</span><input id="tune-tyaw" type="number" step="0.1" value="2.0" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs font-mono" /></div></div></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono"><div><label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Position Gains (K<sub>p</sub>, K<sub>v</sub>)</label><div class="space-y-1.5"><input id="tune-kp" type="text" value="Kp: 0.5, 0.5, 0.5" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs" /><input id="tune-kv" type="text" value="Kv: 0.2, 0.2, 0.2" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs" /></div></div><div><label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">SO(3) Gains (k<sub>R</sub>, k<sub>&Omega;</sub>)</label><div class="space-y-1.5"><input id="tune-kr" type="text" value="k_R: 4.85, 4.85, 2.50" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs" /><input id="tune-kw" type="text" value="k_Ω: 0.35, 0.35, 0.20" class="w-full px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs" /></div></div></div>
+        <div class="p-3 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[11px] space-y-1 text-stone-600"><div class="flex justify-between"><span>Airframe Mass (m):</span><strong class="text-stone-900">1.50 kg</strong></div><div class="flex justify-between"><span>Inertia Tensor (J):</span><strong class="text-stone-900">diag[0.02, 0.02, 0.04] kg·m²</strong></div><div class="flex justify-between"><span>Extrinsics T<sub>BC</sub>:</span><strong class="text-stone-900">[+0.10, 0.00, -0.04] m</strong></div></div>
+        <div><label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Remote ROS 2 WebSocket Bridge Endpoint</label><div class="flex gap-2 font-mono"><input id="tune-ws-url" type="text" value="ws://localhost:8000/ws" class="flex-1 px-2.5 py-2 min-h-[44px] border border-stone-300 rounded-lg text-xs font-mono" placeholder="ws://[IP]:[PORT]/ws" /><button onclick="updateRemoteEndpoint()" class="min-h-[44px] px-4 py-2 bg-brand-600 text-white rounded-lg font-semibold hover:bg-brand-700 transition text-xs font-sans shadow-sm">Connect Bridge</button></div></div>
       </div>
-
-      <div class="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
-        
-        <!-- Safety / Simulator Notice -->
-        <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] font-sans">
-          <strong>Notice:</strong> Parameter adjustments below configure simulator setpoints and controller gain matrices. Flight execution commands require verified physical ArduPilot safety interlocks.
-        </div>
-
-        <!-- 5-Stage Control Pipeline Visual -->
-        <div class="p-2.5 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[10px] text-center flex items-center justify-between gap-1 overflow-x-auto text-stone-700">
-          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold text-brand-600">POSITION</span>
-          <span class="text-stone-400">→</span>
-          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold">ATTITUDE GEN</span>
-          <span class="text-stone-400">→</span>
-          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold text-emerald-600">SO(3) CONTROLLER</span>
-          <span class="text-stone-400">→</span>
-          <span class="px-2 py-0.5 bg-white border border-stone-200 rounded font-semibold">FLIGHT FSM</span>
-          <span class="text-stone-400">→</span>
-          <span class="px-2 py-0.5 bg-brand-600 text-white rounded font-bold">/ap/v1/cmd_vel</span>
-        </div>
-
-        <!-- Target Setpoint -->
-        <div>
-          <label class="block font-bold text-stone-700 uppercase tracking-wider mb-2 text-[11px]">Waypoint Target Setpoint [X, Y, Z, Yaw]</label>
-          <div class="grid grid-cols-4 gap-2 font-mono">
-            <div>
-              <span class="text-stone-500 block text-[10px]">X (m)</span>
-              <input id="tune-tx" type="number" step="0.5" value="20.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
-            </div>
-            <div>
-              <span class="text-stone-500 block text-[10px]">Y (m)</span>
-              <input id="tune-ty" type="number" step="0.5" value="5.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
-            </div>
-            <div>
-              <span class="text-stone-500 block text-[10px]">Z Alt (m)</span>
-              <input id="tune-tz" type="number" step="0.5" value="20.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
-            </div>
-            <div>
-              <span class="text-stone-500 block text-[10px]">Yaw (rad)</span>
-              <input id="tune-tyaw" type="number" step="0.1" value="2.0" class="w-full px-2 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Position & SO(3) Controller Gains -->
-        <div class="grid grid-cols-2 gap-3 font-mono">
-          <div>
-            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Position Gains (K<sub>p</sub>, K<sub>v</sub>)</label>
-            <div class="space-y-1.5">
-              <input id="tune-kp" type="text" value="Kp: 0.5, 0.5, 0.5" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
-              <input id="tune-kv" type="text" value="Kv: 0.2, 0.2, 0.2" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
-            </div>
-          </div>
-          <div>
-            <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">SO(3) Gains (k<sub>R</sub>, k<sub>&Omega;</sub>)</label>
-            <div class="space-y-1.5">
-              <input id="tune-kr" type="text" value="k_R: 4.85, 4.85, 2.50" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
-              <input id="tune-kw" type="text" value="k_Ω: 0.35, 0.35, 0.20" class="w-full px-2.5 py-1 border border-stone-300 rounded-lg text-xs" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Physical Parameters & Extrinsics -->
-        <div class="p-3 bg-stone-50 rounded-xl border border-stone-200 font-mono text-[11px] space-y-1 text-stone-600">
-          <div class="flex justify-between"><span>Airframe Mass (m):</span><strong class="text-stone-900">1.50 kg</strong></div>
-          <div class="flex justify-between"><span>Inertia Tensor (J):</span><strong class="text-stone-900">diag[0.02, 0.02, 0.04] kg·m²</strong></div>
-          <div class="flex justify-between"><span>Extrinsics T<sub>BC</sub>:</span><strong class="text-stone-900">[+0.10, 0.00, -0.04] m</strong></div>
-        </div>
-
-        <!-- Remote ROS 2 WebSocket Bridge Endpoint -->
-        <div>
-          <label class="block font-bold text-stone-700 uppercase tracking-wider mb-1 text-[11px]">Remote ROS 2 WebSocket Bridge Endpoint</label>
-          <div class="flex gap-2 font-mono">
-            <input id="tune-ws-url" type="text" value="ws://localhost:8000/ws" class="flex-1 px-2.5 py-1.5 border border-stone-300 rounded-lg text-xs font-mono" placeholder="ws://[IP]:[PORT]/ws" />
-            <button onclick="updateRemoteEndpoint()" class="px-3 py-1.5 bg-stone-800 text-white rounded-lg font-semibold hover:bg-stone-900 transition text-xs font-sans">Connect Bridge</button>
-          </div>
-        </div>
-
-      </div>
-
-      <div class="px-6 py-3.5 bg-stone-50 border-t border-stone-200 flex justify-end gap-2">
-        <button onclick="closeTuningModal()" class="px-4 py-1.5 rounded-lg border border-stone-300 text-stone-700 font-medium hover:bg-stone-100 transition">Cancel</button>
-        <button onclick="saveTuningParams()" class="px-4 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition">Apply Parameters</button>
-      </div>
-
+      <div class="px-6 py-3.5 bg-stone-50 border-t border-stone-200 flex justify-end gap-2"><button onclick="closeTuningModal()" class="min-h-[44px] px-4 py-2 rounded-lg border border-stone-300 text-stone-700 font-medium hover:bg-stone-100 transition">Cancel</button><button onclick="saveTuningParams()" class="min-h-[44px] px-4 py-2 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition shadow-sm">Apply Parameters</button></div>
     </div>
   </div>
-
-  <!-- ==================== MODAL: GLOBAL SEARCH (⌘ K) ==================== -->
-  <div id="search-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-start justify-center p-4 pt-16">
-    <div class="bg-white rounded-2xl border border-stone-300 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in fade-in zoom-in duration-150">
-      <div class="p-3 border-b border-stone-200 flex items-center gap-2">
-        <svg class="h-5 w-5 text-stone-400 pl-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-        <input id="search-modal-input" oninput="filterSearchTopics(this.value)" class="w-full text-sm outline-none placeholder-stone-400" placeholder="Type topic or parameter name..." />
-        <kbd class="text-[11px] font-mono text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-300">ESC</kbd>
-      </div>
-      <div id="search-results-list" class="max-h-72 overflow-y-auto p-2 divide-y divide-stone-100 text-xs font-mono"></div>
+  <div id="search-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-start justify-center p-4 pt-16">
+    <div class="bg-white rounded-2xl border border-stone-300 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh] mx-4">
+      <div class="p-3 border-b border-stone-200 flex items-center gap-2"><svg class="h-5 w-5 text-stone-400 pl-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><input id="search-modal-input" oninput="filterSearchTopics(this.value)" class="w-full text-sm outline-none placeholder-stone-500 min-h-[32px]" placeholder="Type topic or parameter name..." /><kbd class="hidden sm:inline-flex text-[11px] font-mono text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-300">ESC</kbd></div>
+      <div id="search-results-list" class="overflow-y-auto p-2 divide-y divide-stone-100 text-xs font-mono"></div>
     </div>
   </div>
-
-  <!-- Toast Notification Container -->
-  <div id="toast-box" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
-
-  <!-- ==================== DASHBOARD GLUE & EVENT CONTROLLERS ==================== -->
+  <div id="toast-box" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none px-4 sm:px-0"></div>
   <script>
     let currentDatasetKey = 'orbit';
     let currentFrameIndex = 0;
@@ -1146,36 +311,101 @@
     let showVectors = true;
     let liveTimerInterval = null;
     let graphsPaused = false;
-
-    // Load Real Datasets
     const realData = window.REAL_DRONE_DATA || { pcd_points: [], trajectories: {} };
-
     window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const ds = params.get('dataset');
+      if (ds && realData.trajectories[ds]) currentDatasetKey = ds;
+      const savedUrl = (window.APP_CONFIG && window.APP_CONFIG.websocketUrl) || 'ws://localhost:8000/ws';
+      ['header-ws-url','tune-ws-url','mobile-ws-url'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=savedUrl; });
+      document.querySelectorAll('.traj-sel-btn').forEach(b=>b.classList.remove('bg-stone-100','text-stone-900','shadow-inner','font-semibold'));
+      const ab=document.getElementById(`btn-traj-${currentDatasetKey}`);
+      if(ab) ab.classList.add('bg-stone-100','text-stone-900','shadow-inner','font-semibold');
       initPointcloud();
       initSearchList();
       startTelemetryPlayback();
       initKeyboardShortcuts();
-
-      // Hook WebSocket bridge status if present
-      if (window.wsBridge) {
-        window.wsBridge.onStatusChange((status) => {
-          updateConnectionStatusUI(status);
-        });
-      }
+      initDrawer();
+      initActiveNavObserver();
+      initEndpointSync();
+      if (window.wsBridge) window.wsBridge.onStatusChange((status) => updateConnectionStatusUI(status));
     });
-
-    // 1. Point Cloud Initialization from real PCD
+    function initDrawer(){
+      const btn=document.getElementById('sidebar-toggle');
+      const sidebar=document.getElementById('sidebar');
+      if(!btn||!sidebar) return;
+      btn.addEventListener('click',()=>{
+        const isOpen=!sidebar.classList.contains('-translate-x-full');
+        if(isOpen) closeSidebarDrawer(); else openSidebarDrawer();
+      });
+      document.querySelectorAll('#sidebar a.nav-link').forEach(a=>a.addEventListener('click',()=>{ if(window.innerWidth < 1024) closeSidebarDrawer(); }));
+    }
+    function openSidebarDrawer(){
+      const s=document.getElementById('sidebar'); const b=document.getElementById('sidebar-backdrop'); const t=document.getElementById('sidebar-toggle');
+      if(s) s.classList.remove('-translate-x-full'); if(b) b.classList.remove('hidden'); if(t) t.setAttribute('aria-expanded','true');
+      document.body.style.overflow='hidden';
+    }
+    function closeSidebarDrawer(){
+      const s=document.getElementById('sidebar'); const b=document.getElementById('sidebar-backdrop'); const t=document.getElementById('sidebar-toggle');
+      if(s) s.classList.add('-translate-x-full'); if(b) b.classList.add('hidden'); if(t) t.setAttribute('aria-expanded','false');
+      document.body.style.overflow='';
+    }
+    function initEndpointSync(){
+      const h=document.getElementById('header-ws-url'), m=document.getElementById('mobile-ws-url'), t=document.getElementById('tune-ws-url');
+      [h,m,t].forEach(el=>{
+        if(!el) return;
+        el.addEventListener('input',()=>{
+          const v=el.value;
+          [h,m,t].forEach(o=>{ if(o && o!==el) o.value=v; });
+          if(window.APP_CONFIG) window.APP_CONFIG.websocketUrl=v;
+        });
+      });
+    }
+    function syncEndpointAndConnect(){
+      const v=document.getElementById('header-ws-url')?.value.trim() || 'ws://localhost:8000/ws';
+      document.getElementById('tune-ws-url').value=v;
+      const mv=document.getElementById('mobile-ws-url'); if(mv) mv.value=v;
+      if(window.APP_CONFIG) window.APP_CONFIG.websocketUrl=v;
+      updateRemoteEndpoint();
+    }
+    function syncMobileEndpointAndConnect(){
+      const v=document.getElementById('mobile-ws-url')?.value.trim() || 'ws://localhost:8000/ws';
+      document.getElementById('header-ws-url').value=v; document.getElementById('tune-ws-url').value=v;
+      if(window.APP_CONFIG) window.APP_CONFIG.websocketUrl=v;
+      updateRemoteEndpoint();
+    }
+    function handleHeaderSearchInput(val){
+      openSearchModal();
+      const modalInput=document.getElementById('search-modal-input');
+      if(modalInput) { modalInput.value=val; filterSearchTopics(val); }
+    }
+    function initActiveNavObserver(){
+      const sections=['overview','camera','pointcloud','imu','controller-section','graphs-section','nodes'];
+      const navLinks=document.querySelectorAll('.nav-link');
+      const observer=new IntersectionObserver((entries)=>{
+        entries.forEach(entry=>{
+          if(entry.isIntersecting){
+            const id=entry.target.id;
+            navLinks.forEach(l=>{
+              const href=l.getAttribute('href');
+              const isActive=href==='#'+id;
+              if(isActive){ l.classList.add('bg-[#E3E5E7]','text-stone-900','shadow-sm'); l.classList.remove('text-stone-700'); }
+              else { l.classList.remove('bg-[#E3E5E7]','text-stone-900','shadow-sm'); if(!l.classList.contains('text-stone-700')) l.classList.add('text-stone-700'); }
+            });
+          }
+        });
+      },{root:null, rootMargin:'-50% 0px -50% 0px', threshold:0});
+      sections.forEach(id=>{ const el=document.getElementById(id); if(el) observer.observe(el); });
+    }
     function initPointcloud() {
       const pcdGroup = document.getElementById('svg-pcd-points-group');
       if (!pcdGroup) return;
-
       pcdGroup.innerHTML = '';
       const points = realData.pcd_points || [];
       const ptsCountEl = document.getElementById('sidebar-pointcount');
       const hudMapPtsEl = document.getElementById('hud-map-pts');
       if (ptsCountEl) ptsCountEl.textContent = `${points.length} pts`;
       if (hudMapPtsEl) hudMapPtsEl.textContent = `${points.length}`;
-
       const step = Math.max(1, Math.floor(points.length / 60));
       for (let i = 0; i < points.length; i += step) {
         const pt = points[i];
@@ -1189,69 +419,37 @@
         pcdGroup.appendChild(circle);
       }
     }
-
-    // 2. 3D to 2D Perspective Projection Helper
     function project3DToSVG(x, y, z) {
-      if (perspectiveMode === 'top') {
-        return { x: Math.round(300 + x * 22), y: Math.round(175 + y * 22) };
-      } else if (perspectiveMode === 'side') {
-        return { x: Math.round(300 + x * 22), y: Math.round(280 - z * 22) };
-      } else {
-        const isoX = (x - y) * Math.cos(Math.PI / 6);
-        const isoY = (x + y) * Math.sin(Math.PI / 6) - (z * 1.2);
-        return { x: Math.round(300 + isoX * 18), y: Math.round(240 + isoY * 18) };
-      }
+      if (perspectiveMode === 'top') return { x: Math.round(300 + x * 22), y: Math.round(175 + y * 22) };
+      else if (perspectiveMode === 'side') return { x: Math.round(300 + x * 22), y: Math.round(280 - z * 22) };
+      else { const isoX = (x - y) * Math.cos(Math.PI / 6); const isoY = (x + y) * Math.sin(Math.PI / 6) - (z * 1.2); return { x: Math.round(300 + isoX * 18), y: Math.round(240 + isoY * 18) }; }
     }
-
-    // 3. Switch Trajectory Dataset (DEMO Mode)
     function switchDataset(datasetKey) {
       if (!realData.trajectories[datasetKey]) return;
       currentDatasetKey = datasetKey;
       currentFrameIndex = 0;
-
-      document.querySelectorAll('.traj-sel-btn').forEach(btn => {
-        btn.classList.remove('bg-stone-100', 'text-stone-900', 'shadow-inner', 'font-semibold');
-      });
+      document.querySelectorAll('.traj-sel-btn').forEach(btn => btn.classList.remove('bg-stone-100','text-stone-900','shadow-inner','font-semibold'));
       const activeBtn = document.getElementById(`btn-traj-${datasetKey}`);
-      if (activeBtn) {
-        activeBtn.classList.add('bg-stone-100', 'text-stone-900', 'shadow-inner', 'font-semibold');
-      }
-
+      if (activeBtn) activeBtn.classList.add('bg-stone-100','text-stone-900','shadow-inner','font-semibold');
+      const url=new URL(window.location); url.searchParams.set('dataset', datasetKey); window.history.replaceState({},'',url);
       showToast(`Loaded Dataset: ${realData.trajectories[datasetKey].title}`);
     }
-
-    // 4. Main Telemetry Playback Loop
     function startTelemetryPlayback() {
       if (liveTimerInterval) clearInterval(liveTimerInterval);
-
       liveTimerInterval = setInterval(() => {
         const dataset = realData.trajectories[currentDatasetKey];
         if (!dataset || !dataset.points || dataset.points.length === 0) return;
-
         const frame = dataset.points[currentFrameIndex];
         currentFrameIndex = (currentFrameIndex + 1) % dataset.points.length;
-
         updateDashboardWithFrame(frame, dataset.points);
-      }, 50); // 20 Hz update
+      }, 50);
     }
-
-    // 5. Update UI DOM Elements with Normalized Telemetry Frame
     function updateDashboardWithFrame(frame, allPoints) {
-      const px = frame.px;
-      const py = frame.py;
-      const pz = frame.pz;
-      const vx = frame.vx;
-      const vy = frame.vy;
-      const vz = frame.vz;
+      const px = frame.px; const py = frame.py; const pz = frame.pz;
+      const vx = frame.vx; const vy = frame.vy; const vz = frame.vz;
       const speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
       const euler = quaternionToEuler(frame.qw, frame.qx, frame.qy, frame.qz);
-
-      // Camera Optical Pose T_WC = T_WB * T_BC (+10cm forward, -4cm down)
-      const cx = (px + 0.10).toFixed(2);
-      const cy = (py).toFixed(2);
-      const cz = (pz - 0.04).toFixed(2);
-
-      // DOM Updates - Decomposed Frames
+      const cx = (px + 0.10).toFixed(2); const cy = (py).toFixed(2); const cz = (pz - 0.04).toFixed(2);
       setElText('tel-pos-wb', `[${(px>=0?'+':'')+px.toFixed(2)}, ${(py>=0?'+':'')+py.toFixed(2)}, ${(pz>=0?'+':'')+pz.toFixed(2)}] m`);
       setElText('tel-pos-wc', `[${(cx>=0?'+':'')+cx}, ${(cy>=0?'+':'')+cy}, ${(cz>=0?'+':'')+cz}] m`);
       setElText('tel-vel', `[${(vx>=0?'+':'')+vx.toFixed(2)}, ${(vy>=0?'+':'')+vy.toFixed(2)}, ${(vz>=0?'+':'')+vz.toFixed(2)}] m/s`);
@@ -1261,8 +459,6 @@
       setElText('tel-euler', `R: ${(euler.roll>=0?'+':'')+euler.roll.toFixed(1)}° | P: ${(euler.pitch>=0?'+':'')+euler.pitch.toFixed(1)}° | Y: ${euler.yaw.toFixed(1)}°`);
       setElText('tel-rates', `[${(euler.roll*0.01).toFixed(2)}, ${(euler.pitch*0.01).toFixed(2)}, ${(euler.yaw*0.005).toFixed(2)}] rad/s`);
       setElText('tel-quat', `[${frame.qw.toFixed(3)}, ${frame.qx.toFixed(3)}, ${frame.qy.toFixed(3)}, ${frame.qz.toFixed(3)}]`);
-
-      // Controller Card Values
       const targetP = [20.0, 5.0, 20.0];
       const epNorm = Math.sqrt((px - targetP[0])**2 + (py - targetP[1])**2 + (pz - targetP[2])**2);
       const evNorm = speed;
@@ -1273,217 +469,101 @@
       setElText('ctrl-er-norm', `${(0.015 + Math.abs(Math.sin(frame.t*0.5))*0.01).toFixed(3)} rad`);
       setElText('ctrl-ew-norm', `${(0.012 + Math.abs(Math.cos(frame.t*0.5))*0.005).toFixed(3)} rad/s`);
       setElText('ctrl-md-norm', `${(0.118 + Math.sin(frame.t*0.4)*0.02).toFixed(3)} N·m`);
-
-      // 3D Spatial Canvas
       const projected = project3DToSVG(px, py, pz);
       const droneBody = document.getElementById('svg-drone-body');
-      if (droneBody) {
-        droneBody.setAttribute('transform', `translate(${projected.x}, ${projected.y}) rotate(${euler.yaw - 90})`);
-      }
+      if (droneBody) droneBody.setAttribute('transform', `translate(${projected.x}, ${projected.y}) rotate(${euler.yaw - 90})`);
       const callout = document.getElementById('svg-drone-callout');
-      if (callout) {
-        callout.setAttribute('transform', `translate(${Math.min(450, projected.x + 15)}, ${Math.max(20, projected.y - 30)})`);
-      }
+      if (callout) callout.setAttribute('transform', `translate(${Math.min(450, projected.x + 15)}, ${Math.max(20, projected.y - 30)})`);
       const calloutSubtext = document.getElementById('svg-callout-subtext');
-      if (calloutSubtext) {
-        calloutSubtext.textContent = `Z: ${pz.toFixed(2)}m | V: ${speed.toFixed(1)} m/s`;
-      }
+      if (calloutSubtext) calloutSubtext.textContent = `Z: ${pz.toFixed(2)}m | V: ${speed.toFixed(1)} m/s`;
       const hudPw = document.getElementById('hud-pw');
-      if (hudPw) {
-        hudPw.innerHTML = `P_WB: [ <span class="text-white">x: ${px.toFixed(2)}</span>, <span class="text-white">y: ${py.toFixed(2)}</span>, <span class="text-emerald-400">z: ${pz.toFixed(2)}</span> ] m`;
-      }
+      if (hudPw) hudPw.innerHTML = `P_WB: [ <span class="text-white">x: ${px.toFixed(2)}</span>, <span class="text-white">y: ${py.toFixed(2)}</span>, <span class="text-emerald-400">z: ${pz.toFixed(2)}</span> ] m`;
       const hudVw = document.getElementById('hud-vw');
-      if (hudVw) {
-        hudVw.innerHTML = `V_WB: [ <span class="text-white">vx: ${vx.toFixed(2)}</span>, <span class="text-white">vy: ${vy.toFixed(2)}</span>, <span class="text-emerald-400">vz: ${vz.toFixed(2)}</span> ] m/s`;
-      }
-
-      // Push live frame to Kinematic Oscilloscope Graph Engine
+      if (hudVw) hudVw.innerHTML = `V_WB: [ <span class="text-white">vx: ${vx.toFixed(2)}</span>, <span class="text-white">vy: ${vy.toFixed(2)}</span>, <span class="text-emerald-400">vz: ${vz.toFixed(2)}</span> ] m/s`;
+      const banner=document.getElementById('stale-warning-banner'); if(banner) banner.classList.add('hidden');
       if (window.graphs && typeof window.graphs.pushTelemetry === 'function' && !graphsPaused) {
-        const ax = frame.vx * 0.2;
-        const ay = frame.vy * 0.2;
-        const az = 9.81 + (frame.vz * 0.1);
-        window.graphs.pushTelemetry({
-          timestamp: Date.now(),
-          acceleration: { ax, ay, az },
-          velocity: { vx: frame.vx, vy: frame.vy, vz: frame.vz },
-          position: { x: frame.px, y: frame.py, z: frame.pz }
-        });
+        const ax = frame.vx * 0.2; const ay = frame.vy * 0.2; const az = 9.81 + (frame.vz * 0.1);
+        window.graphs.pushTelemetry({ timestamp: Date.now(), acceleration: { ax, ay, az }, velocity: { vx: frame.vx, vy: frame.vy, vz: frame.vz }, position: { x: frame.px, y: frame.py, z: frame.pz } });
       }
     }
-
-    function toggleGraphChannel(chartKey, axis) {
-      if (window.graphs && typeof window.graphs.toggleChannel === 'function') {
-        window.graphs.toggleChannel(chartKey, axis);
-      }
-    }
-
+    function toggleGraphChannel(chartKey, axis) { if (window.graphs && typeof window.graphs.toggleChannel === 'function') window.graphs.toggleChannel(chartKey, axis); }
     function toggleGraphsPause() {
       graphsPaused = !graphsPaused;
-      if (window.graphs && typeof window.graphs.togglePause === 'function') {
-        window.graphs.togglePause();
-      }
+      if (window.graphs && typeof window.graphs.togglePause === 'function') window.graphs.togglePause();
       const btn = document.getElementById('graphs-pause-btn');
       if (btn) btn.textContent = graphsPaused ? 'RESUME' : 'PAUSE';
       showToast(`Oscilloscope Waveforms: ${graphsPaused ? 'Paused' : 'Active'}`);
     }
-
-    function clearGraphBuffers() {
-      if (window.graphs && typeof window.graphs.clearBuffers === 'function') {
-        window.graphs.clearBuffers();
-      }
-      showToast('Oscilloscope waveform buffers cleared.');
-    }
-
+    function clearGraphBuffers() { if (window.graphs && typeof window.graphs.clearBuffers === 'function') window.graphs.clearBuffers(); showToast('Oscilloscope waveform buffers cleared.'); }
     function toggleTelemetryMode() {
       const topBadge = document.getElementById('top-mode-badge');
       const toggleBtnText = document.getElementById('top-mode-toggle-text');
-      const isCurrentlyDemo = (topBadge.textContent === 'DEMO REPLAY');
-
+      const isCurrentlyDemo = (topBadge.textContent.trim() === 'DEMO REPLAY');
       if (isCurrentlyDemo) {
-        topBadge.textContent = 'LIVE WS BRIDGE';
-        topBadge.className = 'font-semibold text-brand-400';
+        topBadge.textContent = 'LIVE WS BRIDGE'; topBadge.className = 'font-semibold text-brand-400 hover:text-brand-300 transition';
         toggleBtnText.textContent = 'Switch to DEMO';
         document.getElementById('sidebar-ros-status').textContent = 'LIVE BRIDGE';
         showToast('Switched to LIVE mode. Connecting to WebSocket Bridge...');
-        if (window.wsBridge) window.wsBridge.connect();
+        if (window.wsBridge) window.wsBridge.connect(document.getElementById('header-ws-url')?.value.trim());
       } else {
-        topBadge.textContent = 'DEMO REPLAY';
-        topBadge.className = 'font-semibold text-emerald-400';
+        topBadge.textContent = 'DEMO REPLAY'; topBadge.className = 'font-semibold text-emerald-400 hover:text-emerald-300 transition';
         toggleBtnText.textContent = 'Switch to LIVE';
         document.getElementById('sidebar-ros-status').textContent = 'DEMO MODE';
         showToast('Switched to DEMO Replay mode.');
       }
     }
-
     function updateConnectionStatusUI(status) {
       const topLatency = document.getElementById('top-latency-badge');
       const topDot = document.getElementById('top-status-dot');
       const topDotPing = document.getElementById('top-status-dot-ping');
-
+      const banner=document.getElementById('stale-warning-banner');
       if (status === 'CONNECTED') {
-        topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-500';
-        topDotPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
-        topLatency.textContent = '2.1 ms';
-        document.getElementById('sidebar-bridge-status').textContent = 'CONNECTED';
-        document.getElementById('sidebar-bridge-status').className = 'text-emerald-600';
+        topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-500'; topDotPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
+        topLatency.textContent = '2.1 ms'; document.getElementById('sidebar-bridge-status').textContent = 'CONNECTED'; document.getElementById('sidebar-bridge-status').className = 'text-emerald-600';
+        if(banner) banner.classList.add('hidden');
       } else if (status === 'CONNECTING') {
-        topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-amber-500';
-        topDotPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75';
-        topLatency.textContent = 'Connecting...';
+        topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-amber-500'; topDotPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75'; topLatency.textContent = 'Connecting...';
       } else {
-        topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-stone-500';
-        topDotPing.className = 'hidden';
-        topLatency.textContent = 'Offline';
-        document.getElementById('sidebar-bridge-status').textContent = 'STANDALONE';
-        document.getElementById('sidebar-bridge-status').className = 'text-stone-500';
+        topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-stone-500'; topDotPing.className = 'hidden'; topLatency.textContent = 'Offline'; document.getElementById('sidebar-bridge-status').textContent = 'STANDALONE'; document.getElementById('sidebar-bridge-status').className = 'text-stone-500';
+        if(document.getElementById('top-mode-badge')?.textContent.includes('LIVE') && banner) { banner.classList.remove('hidden'); document.getElementById('stale-warning-text').textContent='Bridge offline — telemetry stale. Check endpoint or switch to DEMO.'; }
       }
     }
-
     function quaternionToEuler(qw, qx, qy, qz) {
-      const sinr_cosp = 2 * (qw * qx + qy * qz);
-      const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
-      const roll = Math.atan2(sinr_cosp, cosr_cosp) * (180 / Math.PI);
-
-      const sinp = 2 * (qw * qy - qz * qx);
-      let pitch;
-      if (Math.abs(sinp) >= 1) {
-        pitch = Math.sign(sinp) * (Math.PI / 2) * (180 / Math.PI);
-      } else {
-        pitch = Math.asin(sinp) * (180 / Math.PI);
-      }
-
-      const siny_cosp = 2 * (qw * qz + qx * qy);
-      const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
-      let yaw = Math.atan2(siny_cosp, cosy_cosp) * (180 / Math.PI);
-      if (yaw < 0) yaw += 360;
-
+      const sinr_cosp = 2 * (qw * qx + qy * qz); const cosr_cosp = 1 - 2 * (qx * qx + qy * qy); const roll = Math.atan2(sinr_cosp, cosr_cosp) * (180 / Math.PI);
+      const sinp = 2 * (qw * qy - qz * qx); let pitch; if (Math.abs(sinp) >= 1) pitch = Math.sign(sinp) * (Math.PI / 2) * (180 / Math.PI); else pitch = Math.asin(sinp) * (180 / Math.PI);
+      const siny_cosp = 2 * (qw * qz + qx * qy); const cosy_cosp = 1 - 2 * (qy * qy + qz * qz); let yaw = Math.atan2(siny_cosp, cosy_cosp) * (180 / Math.PI); if (yaw < 0) yaw += 360;
       return { roll, pitch, yaw };
     }
-
-    function setElText(id, text) {
-      const el = document.getElementById(id);
-      if (el) el.textContent = text;
-    }
-
+    function setElText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
     function setPerspective(mode) {
       perspectiveMode = mode;
-      document.querySelectorAll('.persp-btn').forEach(b => {
-        b.classList.remove('bg-white', 'text-stone-900', 'shadow-sm');
-        b.classList.add('text-stone-600');
-      });
+      document.querySelectorAll('.persp-btn').forEach(b => { b.classList.remove('bg-white','text-stone-900','shadow-sm'); b.classList.add('text-stone-600'); });
       const activeBtn = document.getElementById(`btn-persp-${mode}`);
-      if (activeBtn) {
-        activeBtn.classList.add('bg-white', 'text-stone-900', 'shadow-sm');
-        activeBtn.classList.remove('text-stone-600');
-      }
+      if (activeBtn) { activeBtn.classList.add('bg-white','text-stone-900','shadow-sm'); activeBtn.classList.remove('text-stone-600'); }
       initPointcloud();
     }
-
-    function resetTrajectoryCenter() {
-      currentFrameIndex = 0;
-      showToast('Trajectory viewport centered on initial pose.');
-    }
-
+    function resetTrajectoryCenter() { currentFrameIndex = 0; showToast('Trajectory viewport centered on initial pose.'); }
     function exportPCDFile() {
       showToast('Downloading synthetic_orbit_scanned_map.pcd (442 landmarks)...');
-      const link = document.createElement('a');
-      link.href = 'data/synthetic_orbit_scanned_map.pcd';
-      link.download = 'synthetic_orbit_scanned_map.pcd';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const link = document.createElement('a'); link.href = 'data/synthetic_orbit_scanned_map.pcd'; link.download = 'synthetic_orbit_scanned_map.pcd'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
     }
-
-    function toggleFeatureOverlay() {
-      showFeatures = !showFeatures;
-      const kltGroup = document.getElementById('klt-points-group');
-      if (kltGroup) kltGroup.style.display = showFeatures ? 'block' : 'none';
-      showToast(`KLT Features: ${showFeatures ? 'Enabled' : 'Disabled'}`);
-    }
-
-    function toggleFlowVectors() {
-      showVectors = !showVectors;
-      document.querySelectorAll('.flow-vector').forEach(line => {
-        line.style.display = showVectors ? 'inline' : 'none';
-      });
-      showToast(`Motion Vectors: ${showVectors ? 'Visible' : 'Hidden'}`);
-    }
-
-    function openTuningModal() {
-      document.getElementById('tuning-modal')?.classList.remove('hidden');
-    }
-
-    function closeTuningModal() {
-      document.getElementById('tuning-modal')?.classList.add('hidden');
-    }
-
+    function toggleFeatureOverlay() { showFeatures = !showFeatures; const g=document.getElementById('klt-points-group'); if(g) g.style.display=showFeatures?'block':'none'; showToast(`KLT Features: ${showFeatures ? 'Enabled' : 'Disabled'}`); }
+    function toggleFlowVectors() { showVectors = !showVectors; document.querySelectorAll('.flow-vector').forEach(l=>l.style.display=showVectors?'inline':'none'); showToast(`Motion Vectors: ${showVectors ? 'Visible' : 'Hidden'}`); }
+    function openTuningModal() { const m=document.getElementById('tuning-modal'); if(m){ m.classList.remove('hidden'); m.classList.add('flex'); } }
+    function closeTuningModal() { const m=document.getElementById('tuning-modal'); if(m){ m.classList.add('hidden'); m.classList.remove('flex'); } }
     function updateRemoteEndpoint() {
-      const urlInput = document.getElementById('tune-ws-url');
+      const urlInput = document.getElementById('tune-ws-url') || document.getElementById('header-ws-url');
       const wsUrl = urlInput ? urlInput.value.trim() : 'ws://localhost:8000/ws';
+      ['header-ws-url','tune-ws-url','mobile-ws-url'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=wsUrl; });
+      if(window.APP_CONFIG) window.APP_CONFIG.websocketUrl=wsUrl;
       showToast(`Connecting to WebSocket Bridge at ${wsUrl}...`);
-      if (window.wsBridge) {
-        window.wsBridge.connect(wsUrl);
-      }
+      if (window.wsBridge) window.wsBridge.connect(wsUrl);
     }
-
     function saveTuningParams() {
-      const tx = document.getElementById('tune-tx')?.value;
-      const ty = document.getElementById('tune-ty')?.value;
-      const tz = document.getElementById('tune-tz')?.value;
-      const tyaw = document.getElementById('tune-tyaw')?.value;
-      const kp = document.getElementById('tune-kp')?.value;
-      const kv = document.getElementById('tune-kv')?.value;
-
-      showToast(`Parameters Applied: Target=[${tx}, ${ty}, ${tz}]m, Kp=[${kp}], Kv=[${kv}]`);
-      closeTuningModal();
-
-      fetch('/api/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'SET_PARAMS', target: [tx, ty, tz, tyaw], kp, kv })
-      }).catch(() => {});
+      const tx=document.getElementById('tune-tx')?.value, ty=document.getElementById('tune-ty')?.value, tz=document.getElementById('tune-tz')?.value, tyaw=document.getElementById('tune-tyaw')?.value, kp=document.getElementById('tune-kp')?.value, kv=document.getElementById('tune-kv')?.value;
+      showToast(`Parameters Applied: Target=[${tx}, ${ty}, ${tz}]m, Kp=[${kp}], Kv=[${kv}]`); closeTuningModal();
+      fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'SET_PARAMS',target:[tx,ty,tz,tyaw],kp,kv})}).catch(()=>{});
     }
-
     const searchTopics = [
       { name: '/drone/vio/odometry', type: 'nav_msgs/Odometry', desc: 'Real-time MSCKF pose & velocity vector' },
       { name: '/drone/vio/camera_pose', type: 'geometry_msgs/PoseStamped', desc: 'Optical camera frame trajectory T_WC' },
@@ -1496,79 +576,37 @@
       { name: '/drones_controller/desired_moment', type: 'geometry_msgs/Vector3', desc: 'Desired moment vector M_d' },
       { name: '/ap/v1/cmd_vel', type: 'geometry_msgs/TwistStamped', desc: 'Autonomous velocity control command to ArduPilot' }
     ];
-
-    function initSearchList() {
-      filterSearchTopics('');
+    function initSearchList(){ filterSearchTopics(''); }
+    function openSearchModal(){ const m=document.getElementById('search-modal'); if(m){ m.classList.remove('hidden'); m.classList.add('flex'); setTimeout(()=>document.getElementById('search-modal-input')?.focus(),50);} }
+    function closeSearchModal(){ const m=document.getElementById('search-modal'); if(m){ m.classList.add('hidden'); m.classList.remove('flex'); } }
+    function filterSearchTopics(query){
+      const container=document.getElementById('search-results-list'); if(!container) return;
+      const q=query.toLowerCase(); const filtered=searchTopics.filter(t=>t.name.toLowerCase().includes(q)||t.desc.toLowerCase().includes(q));
+      if(filtered.length===0){ container.innerHTML=`<div class="py-6 text-center text-stone-500 font-sans">No topics match</div>`; return; }
+      container.innerHTML=filtered.map(t=>`<div class="py-2.5 px-3 hover:bg-stone-50 cursor-pointer rounded-lg transition min-h-[44px] flex flex-col justify-center" onclick="selectSearchItem('${t.name}')"><div class="flex items-center justify-between gap-2"><span class="font-bold text-stone-900 text-xs">${t.name}</span><span class="text-[10px] text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">${t.type}</span></div><p class="text-[11px] text-stone-600 font-sans mt-0.5">${t.desc}</p></div>`).join('');
     }
-
-    function openSearchModal() {
-      const modal = document.getElementById('search-modal');
-      if (modal) {
-        modal.classList.remove('hidden');
-        setTimeout(() => document.getElementById('search-modal-input')?.focus(), 50);
-      }
+    function selectSearchItem(topicName){
+      const gi=document.getElementById('global-search-input'); if(gi) gi.value=topicName;
+      const mi=document.getElementById('search-modal-input'); if(mi) mi.value=topicName;
+      closeSearchModal(); showToast(`Selected ROS 2 topic: ${topicName}`);
     }
-
-    function closeSearchModal() {
-      document.getElementById('search-modal')?.classList.add('hidden');
-    }
-
-    function filterSearchTopics(query) {
-      const container = document.getElementById('search-results-list');
-      if (!container) return;
-
-      const q = query.toLowerCase();
-      const filtered = searchTopics.filter(t => t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q));
-
-      container.innerHTML = filtered.map(t => `
-        <div class="py-2 px-3 hover:bg-stone-50 cursor-pointer rounded-lg transition" onclick="selectSearchItem('${t.name}')">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-stone-900">${t.name}</span>
-            <span class="text-[10px] text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">${t.type}</span>
-          </div>
-          <p class="text-[11px] text-stone-500 font-sans mt-0.5">${t.desc}</p>
-        </div>
-      `).join('');
-    }
-
-    function selectSearchItem(topicName) {
-      document.getElementById('global-search-input').value = topicName;
-      closeSearchModal();
-      showToast(`Selected ROS 2 topic: ${topicName}`);
-    }
-
-    function initKeyboardShortcuts() {
-      document.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-          e.preventDefault();
-          openSearchModal();
-        }
-        if (e.key === 'Escape') {
-          closeSearchModal();
-          closeTuningModal();
-        }
+    function initKeyboardShortcuts(){
+      document.addEventListener('keydown',(e)=>{
+        if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); openSearchModal(); }
+        if(e.key==='Escape'){ closeSearchModal(); closeTuningModal(); closeSidebarDrawer(); }
       });
+      document.getElementById('search-modal')?.addEventListener('click',(e)=>{ if(e.target.id==='search-modal') closeSearchModal(); });
+      document.getElementById('tuning-modal')?.addEventListener('click',(e)=>{ if(e.target.id==='tuning-modal') closeTuningModal(); });
     }
-
-    function showToast(message) {
-      const container = document.getElementById('toast-box');
-      if (!container) return;
-
-      const toast = document.createElement('div');
-      toast.className = 'bg-stone-900/95 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl border border-stone-700 pointer-events-auto flex items-center space-x-2 backdrop-blur-md transition-all duration-300 transform translate-y-3 opacity-0';
-      toast.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>${message}</span>`;
-
+    function showToast(message){
+      const container=document.getElementById('toast-box'); if(!container) return;
+      const toast=document.createElement('div');
+      toast.className='bg-stone-900/95 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl border border-stone-700 pointer-events-auto flex items-center gap-2 backdrop-blur-md transition-all duration-300 transform translate-y-3 opacity-0';
+      toast.innerHTML=`<span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span><span>${message}</span>`;
       container.appendChild(toast);
-      requestAnimationFrame(() => {
-        toast.classList.remove('translate-y-3', 'opacity-0');
-      });
-
-      setTimeout(() => {
-        toast.classList.add('opacity-0', 'translate-y-2');
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
+      requestAnimationFrame(()=>toast.classList.remove('translate-y-3','opacity-0'));
+      setTimeout(()=>{ toast.classList.add('opacity-0','translate-y-2'); setTimeout(()=>toast.remove(),300); },3000);
     }
   </script>
-
 </body>
 </html>

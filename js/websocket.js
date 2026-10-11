@@ -5,14 +5,82 @@
  * Ingests topics from drones-controller & VIO ROS 2 nodes.
  * ============================================================================
  */
-
 (function(window) {
   'use strict';
+
+  // -------------------------------------------------------------------------
+  // APP_CONFIG early definition with localStorage persistence
+  // Must be defined BEFORE any class reads it (audit: define APP_CONFIG early)
+  // -------------------------------------------------------------------------
+  (function initAppConfigEarly() {
+    var storedUrl = null;
+    try { storedUrl = localStorage.getItem('aerovio.wsUrl'); } catch(e) {}
+    if (!window.APP_CONFIG) {
+      window.APP_CONFIG = {
+        websocketUrl: storedUrl || 'ws://localhost:8000/ws',
+        rateHz: 50.0,
+        massKg: 1.5,
+        gravity: 9.81
+      };
+    } else {
+      // hydrate from localStorage if present
+      if (storedUrl) window.APP_CONFIG.websocketUrl = storedUrl;
+      if (!window.APP_CONFIG.websocketUrl) window.APP_CONFIG.websocketUrl = 'ws://localhost:8000/ws';
+      if (!window.APP_CONFIG.rateHz) window.APP_CONFIG.rateHz = 50.0;
+      if (!window.APP_CONFIG.massKg) window.APP_CONFIG.massKg = 1.5;
+      if (!window.APP_CONFIG.gravity) window.APP_CONFIG.gravity = 9.81;
+    }
+  })();
+
+  var WS_URL_PATTERN = /^wss?:\/\/.+/i;
+  var STORAGE_KEY = 'aerovio.wsUrl';
+
+  function isValidWsUrl(url) {
+    return typeof url === 'string' && WS_URL_PATTERN.test(url.trim());
+  }
+
+  function persistWsUrl(url) {
+    try { localStorage.setItem(STORAGE_KEY, url); } catch(e) {}
+    try { if (window.APP_CONFIG) window.APP_CONFIG.websocketUrl = url; } catch(e) {}
+    // sync header badge if present
+    var badge = document.getElementById('top-endpoint-badge');
+    if (badge) badge.textContent = url;
+    var tuneInput = document.getElementById('tune-ws-url');
+    if (tuneInput && tuneInput.value !== url) tuneInput.value = url;
+  }
+
+  function setConnectingUI(isConnecting) {
+    var btn = document.getElementById('tune-ws-url') ? document.querySelector('[onclick*="updateRemoteEndpoint"],[onclick*="updateWsEndpoint"]') : null;
+    // generic connect button
+    var connectBtn = document.querySelector('#tune-ws-url + button, button[onclick="updateRemoteEndpoint()"]');
+    if (connectBtn) {
+      connectBtn.disabled = !!isConnecting;
+      if (isConnecting) {
+        if (!connectBtn.dataset.origText) connectBtn.dataset.origText = connectBtn.textContent;
+        connectBtn.innerHTML = '<svg class="animate-spin h-3 w-3 inline mr-1" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Connecting...';
+        connectBtn.classList.add('opacity-60','cursor-not-allowed');
+      } else {
+        if (connectBtn.dataset.origText) connectBtn.textContent = connectBtn.dataset.origText;
+        else connectBtn.textContent = 'Connect Bridge';
+        connectBtn.classList.remove('opacity-60','cursor-not-allowed');
+      }
+    }
+    var wsInput = document.getElementById('tune-ws-url');
+    if (wsInput) wsInput.disabled = !!isConnecting;
+    // header mode toggle also disabled while connecting to prevent race
+    var modeTog = document.getElementById('top-mode-toggle-btn');
+    // do not fully disable mode toggle, just visual hint via latency badge handled in _setStatus
+  }
 
   class WebSocketBridge {
     constructor() {
       // Configurable endpoint (can point to friend's machine IP on LAN)
       this.defaultUrl = (window.APP_CONFIG && window.APP_CONFIG.websocketUrl) || 'ws://localhost:8000/ws';
+      // hydrate from localStorage again in case class instantiated late
+      try {
+        var ls = localStorage.getItem(STORAGE_KEY);
+        if (ls && isValidWsUrl(ls)) this.defaultUrl = ls;
+      } catch(e) {}
       this.url = this.defaultUrl;
       this.socket = null;
       
@@ -20,6 +88,9 @@
       this.status = 'DISCONNECTED';
       this.reconnectAttempts = 0;
       this.reconnectTimer = null;
+      this.reconnectCountdownTimer = null;
+      this.reconnectDelayMs = 0;
+      this.reconnectCountdownSec = 0;
       this.pingTimer = null;
       this.lastPingSent = 0;
       this.latencyMs = null;
@@ -32,13 +103,19 @@
         cameraFrame: [],
         pointCloud: []
       };
-
+      // hydrate wsUrl badge on load
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function(){ persistWsUrl(this.url); }.bind(this));
+      } else {
+        // defer to ensure DOM parsed
+        setTimeout(function(){ persistWsUrl(this.url); }.bind(this), 0);
+      }
       // Watch telemetry mode
       if (window.telemetry) {
         window.telemetry.onStateChange((state) => {
           if (state.connection.mode === 'LIVE' && this.status === 'DISCONNECTED') {
             this.connect();
-          } else if (state.connection.mode === 'DEMO' && (this.status === 'CONNECTED' || this.status === 'CONNECTING')) {
+          } else if (state.connection.mode === 'DEMO' && (this.status === 'CONNECTED' || this.status === 'CONNECTING' || this.status === 'DEGRADED')) {
             this.disconnect();
           }
         });
@@ -49,16 +126,38 @@
      * Establish WebSocket connection to specified or default endpoint
      */
     connect(customUrl) {
-      if (customUrl) {
-        this.url = customUrl;
-        if (window.APP_CONFIG) window.APP_CONFIG.websocketUrl = customUrl;
+      if (customUrl !== undefined && customUrl !== null && String(customUrl).trim() !== '') {
+        var candidate = String(customUrl).trim();
+        if (!isValidWsUrl(candidate)) {
+          console.warn('[AeroVIO Bridge] Invalid WebSocket URL (must match ^wss?://):', candidate);
+          if (window.ui && window.ui.showToast) window.ui.showToast('Invalid WebSocket URL — must start with ws:// or wss://', 'error');
+          else console.error('Invalid WebSocket URL');
+          this._exposeValidationError(candidate);
+          return false;
+        }
+        this.url = candidate;
+        persistWsUrl(candidate);
       } else {
-        this.url = (window.APP_CONFIG && window.APP_CONFIG.websocketUrl) || this.defaultUrl;
+        // use current or APP_CONFIG
+        var fallback = (window.APP_CONFIG && window.APP_CONFIG.websocketUrl) || this.defaultUrl;
+        try {
+          var ls2 = localStorage.getItem(STORAGE_KEY);
+          if (ls2 && isValidWsUrl(ls2)) fallback = ls2;
+        } catch(e) {}
+        if (!isValidWsUrl(fallback)) {
+          console.warn('[AeroVIO Bridge] Stored URL invalid, falling back to default');
+          fallback = this.defaultUrl;
+        }
+        this.url = fallback;
       }
       
       if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
-        return;
+        return true;
       }
+
+      // clear any pending reconnect countdown
+      this._clearReconnectCountdown();
+      if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
 
       this._setStatus('CONNECTING');
       this.connectStartTime = Date.now();
@@ -69,8 +168,11 @@
         this.socket.onopen = (event) => {
           this._setStatus('CONNECTED');
           this.reconnectAttempts = 0;
+          this._clearReconnectCountdown();
+          persistWsUrl(this.url);
           this._startPing();
           console.log(`[AeroVIO Bridge] Connected to ROS 2 endpoint: ${this.url}`);
+          if (window.ui && window.ui.showToast) window.ui.showToast('Bridge CONNECTED: ' + this.url, 'success');
         };
 
         this.socket.onmessage = (event) => {
@@ -79,13 +181,26 @@
 
         this.socket.onerror = (error) => {
           console.warn(`[AeroVIO Bridge] Connection error on ${this.url}`);
+          // Proper DEGRADED handling: distinguish from DISCONNECTED
+          // Keep socket alive if possible, mark degraded but do not immediately disconnect
           this._setStatus('DEGRADED');
+          // propagate degraded to health without wiping stale timers
+          if (window.telemetry) {
+            window.telemetry.state.health.websocket = 'DEGRADED';
+            window.telemetry.state.connection.state = 'BRIDGE DEGRADED';
+          }
         };
 
         this.socket.onclose = (event) => {
           this._stopPing();
+          // if we were DEGRADED and close was clean, move to DISCONNECTED
+          var wasDegraded = this.status === 'DEGRADED';
           this._setStatus('DISCONNECTED');
           this.socket = null;
+
+          if (wasDegraded) {
+            console.log('[AeroVIO Bridge] Degraded connection closed, scheduling reconnect');
+          }
 
           if (window.telemetry && window.telemetry.mode === 'LIVE') {
             this._scheduleReconnect();
@@ -98,20 +213,23 @@
         if (window.telemetry && window.telemetry.mode === 'LIVE') {
           this._scheduleReconnect();
         }
+        return false;
       }
+      return true;
     }
 
     /**
      * Close connection explicitly
      */
     disconnect() {
+      this._clearReconnectCountdown();
       if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
       }
       this._stopPing();
       if (this.socket) {
-        this.socket.close();
+        try { this.socket.close(); } catch(e) {}
         this.socket = null;
       }
       this._setStatus('DISCONNECTED');
@@ -157,28 +275,86 @@
       this.listeners.pointCloud.push(callback);
     }
 
+    getReconnectCountdown() {
+      return this.reconnectCountdownSec;
+    }
+
+    _exposeValidationError(url) {
+      var el = document.getElementById('tune-ws-url');
+      if (el) {
+        el.classList.add('border-red-500','ring-1','ring-red-300');
+        setTimeout(function(){ el.classList.remove('border-red-500','ring-1','ring-red-300'); }, 1800);
+      }
+    }
+
     _setStatus(status) {
       this.status = status;
       
+      // Spinner / disable handling during CONNECTING
+      if (status === 'CONNECTING') setConnectingUI(true);
+      else setConnectingUI(false);
+
+      // Proper DEGRADED handling
+      var isConn = (status === 'CONNECTED');
+      var isDegraded = (status === 'DEGRADED');
+      var isConnecting = (status === 'CONNECTING');
+
       if (window.telemetry) {
-        const isConn = (status === 'CONNECTED');
         window.telemetry.state.connection.websocket = isConn;
-        window.telemetry.state.connection.state = isConn 
-          ? (window.telemetry.mode === 'LIVE' ? 'BRIDGE LIVE' : 'BRIDGE DEMO') 
-          : `BRIDGE ${status}`;
+        // keep degraded as distinct: state = DEGRADED, health = DEGRADED
+        if (isDegraded) {
+          window.telemetry.state.connection.state = 'BRIDGE DEGRADED';
+          window.telemetry.state.health.websocket = 'DEGRADED';
+        } else {
+          window.telemetry.state.connection.state = isConn 
+            ? (window.telemetry.mode === 'LIVE' ? 'BRIDGE LIVE' : 'BRIDGE DEMO') 
+            : (isConnecting ? 'BRIDGE CONNECTING' : `BRIDGE ${status}`);
+          window.telemetry.state.health.websocket = isConn ? 'ONLINE' : (isConnecting ? 'READY' : (isDegraded ? 'DEGRADED' : 'DISCONNECTED'));
+        }
         window.telemetry.state.connection.latency_ms = this.latencyMs;
-        window.telemetry.state.health.websocket = isConn ? 'ONLINE' : (status === 'CONNECTING' ? 'READY' : 'DISCONNECTED');
         
-        // A WebSocket connection means bridge is connected; ROS 2 status is updated truthfully from server payloads
-        if (!isConn) {
+        if (!isConn && !isDegraded && !isConnecting) {
           window.telemetry.state.connection.ros = false;
           if (window.telemetry.mode === 'LIVE') {
             window.telemetry.setDisconnectedState();
           }
         }
+        // when degraded, keep ros flag as-is but mark latency null
+        if (isDegraded) {
+          // don't wipe ros flag, allow stale banner logic to handle
+        }
       }
 
-      this.listeners.statusChange.forEach(cb => cb(status));
+      // Update header badges for DEGRADED as amber
+      this._updateHeaderForStatus(status);
+
+      this.listeners.statusChange.forEach(cb => { try{cb(status);}catch(e){} });
+    }
+
+    _updateHeaderForStatus(status) {
+      var topDot = document.getElementById('top-status-dot');
+      var topPing = document.getElementById('top-status-dot-ping');
+      var latBadge = document.getElementById('top-latency-badge');
+      var modeBadge = document.getElementById('top-mode-badge');
+      if (status === 'DEGRADED') {
+        if (topDot) topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-amber-500';
+        if (topPing) topPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75';
+        if (latBadge) latBadge.textContent = 'Degraded — retrying...';
+        if (modeBadge) { modeBadge.textContent = 'LIVE DEGRADED'; modeBadge.className = 'font-semibold text-amber-400'; }
+      } else if (status === 'CONNECTING') {
+        if (topDot) topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-amber-500';
+        if (topPing) topPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75';
+        if (latBadge) latBadge.textContent = 'Connecting...';
+      } else if (status === 'CONNECTED') {
+        if (topDot) topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-500';
+        if (topPing) topPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
+        if (latBadge) latBadge.textContent = (this.latencyMs !== null ? this.latencyMs + ' ms' : '2.1 ms');
+      } else if (status === 'DISCONNECTED') {
+        if (topDot) topDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-stone-500';
+        if (topPing) topPing.className = 'hidden';
+        // latency badge will be managed by reconnect countdown if scheduled
+        if (!this.reconnectTimer && latBadge) latBadge.textContent = 'Offline';
+      }
     }
 
     _startPing() {
@@ -198,14 +374,55 @@
       }
     }
 
+    _clearReconnectCountdown() {
+      if (this.reconnectCountdownTimer) {
+        clearInterval(this.reconnectCountdownTimer);
+        this.reconnectCountdownTimer = null;
+      }
+      this.reconnectCountdownSec = 0;
+    }
+
+    _exposeReconnectCountdown() {
+      var latBadge = document.getElementById('top-latency-badge');
+      var countEl = document.getElementById('ws-reconnect-countdown');
+      // create countdown element if not present but badge exists
+      if (!countEl && latBadge && latBadge.parentElement) {
+        countEl = document.createElement('span');
+        countEl.id = 'ws-reconnect-countdown';
+        countEl.className = 'ml-1 text-amber-400 font-mono text-xs';
+        latBadge.insertAdjacentElement('afterend', countEl);
+      }
+      var update = () => {
+        var txt = this.reconnectCountdownSec > 0 ? `Reconnect in ${this.reconnectCountdownSec}s` : 'Reconnecting...';
+        if (latBadge) latBadge.textContent = txt;
+        if (countEl) countEl.textContent = this.reconnectCountdownSec > 0 ? `(${this.reconnectCountdownSec}s)` : '';
+        // also sidebar bridge status
+        var sb = document.getElementById('sidebar-bridge-status');
+        if (sb) sb.textContent = txt;
+      };
+      update();
+      this._clearReconnectCountdown();
+      this.reconnectCountdownTimer = setInterval(() => {
+        this.reconnectCountdownSec = Math.max(0, this.reconnectCountdownSec - 1);
+        update();
+        if (this.reconnectCountdownSec <= 0) {
+          this._clearReconnectCountdown();
+        }
+      }, 1000);
+    }
+
     _scheduleReconnect() {
       if (this.reconnectTimer) return;
       this.reconnectAttempts++;
       const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);
+      this.reconnectDelayMs = delay;
+      this.reconnectCountdownSec = Math.ceil(delay / 1000);
       
       console.log(`[AeroVIO Bridge] Reconnecting to ${this.url} in ${(delay/1000).toFixed(1)}s...`);
+      this._exposeReconnectCountdown();
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
+        this._clearReconnectCountdown();
         if (window.telemetry && window.telemetry.mode === 'LIVE') {
           this.connect();
         }
@@ -228,6 +445,9 @@
               window.telemetry.state.connection.ros = !!msg.ros2_connected;
             }
           }
+          // update badge live
+          var lb = document.getElementById('top-latency-badge');
+          if (lb && this.status === 'CONNECTED') lb.textContent = this.latencyMs + ' ms';
           return;
         }
 
@@ -387,5 +607,8 @@
 
   // Expose singleton on window
   window.wsBridge = new WebSocketBridge();
+  // Expose validators for testing / external hooks
+  window.wsBridge._isValidWsUrl = isValidWsUrl;
+  window.wsBridge._persistWsUrl = persistWsUrl;
 
 })(window);

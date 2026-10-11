@@ -1,81 +1,243 @@
 /* ==========================================================================
-   AeroVIO Ground Control Station - Custom Styles & HUD Overlays
-   Aerospace Dark Theme (#0a0e15 / #181c23 / #7df4ff / #d1bcff)
+   AeroVIO Ground Control Station — Unified Light Theme
+   Tokens: #F6F6F7 bg + white surfaces + stone neutrals
    ========================================================================== */
 
-/* Base Layout & Clean Scrollbars */
-html, body {
+/* --------------------------------------------------------------------------
+   Design Tokens — :root
+   -------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --color-bg: #F6F6F7;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #EFEFEF;
+  --color-header: #1A1A1A;
+
+  /* Stone neutrals */
+  --stone-50: #FAFAF9;
+  --stone-100: #F5F5F4;
+  --stone-200: #E7E5E4;
+  --stone-300: #D6D3D1;
+  --stone-400: #A8A29E;
+  --stone-500: #78716C;
+  --stone-600: #57534E;
+  --stone-700: #44403C;
+  --stone-800: #292524;
+  --stone-900: #1C1917;
+  --border-light: #E1E3E5;
+  --border-default: #E7E5E4;
+  --text-primary: #202223;
+  --text-secondary: #57534E;
+  --text-muted: #78716C;
+
+  /* Brand */
+  --brand-500: #0EA5E9;
+  --brand-600: #0284C7;
+
+  /* 8pt Spacing Scale */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  --space-7: 56px;
+  --space-8: 64px;
+  --space-10: 80px;
+  --space-12: 96px;
+
+  /* Elevation Tokens */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  /* semantic aliases */
+  --elevation-secondary: var(--shadow-sm);
+  --elevation-primary: var(--shadow-md);
+
+  /* Radius Scale */
+  --radius-xl: 16px;   /* cards, panels, modals */
+  --radius-lg: 8px;    /* buttons, inputs */
+  --radius-full: 9999px; /* chips, badges, pills */
+  --radius-md: 6px;
+  --radius-sm: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Base Layout & Scroll Anchoring
+   -------------------------------------------------------------------------- */
+html {
   margin: 0;
   padding: 0;
-  background-color: #0a0e15;
-  color: #dfe2ed;
-  font-family: 'Space Mono', monospace;
+  background-color: var(--color-bg);
+  scroll-padding-top: 56px;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg);
+  color: var(--text-primary);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6, .font-headline {
-  font-family: 'Chivo', sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* Custom Tactical Scrollbars */
+.font-mono,
+code, kbd, pre, samp {
+  font-family: "SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", monospace;
+}
+
+/* Section scroll-margin for sticky header offset */
+section,
+section[id],
+[id="overview"],
+[id="camera"],
+[id="pointcloud"],
+[id="imu"],
+[id="controller-section"],
+[id="graphs-section"],
+[id="nodes"] {
+  scroll-margin-top: 64px;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Unified Scrollbar — 6px #D1D5DB
+   -------------------------------------------------------------------------- */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #0a0e15;
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #262a32;
-  border-radius: 2px;
+  background: #D1D5DB;
+  border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #7df4ff;
+  background: #9CA3AF;
 }
 
-/* HUD Reticles and Grid Patterns */
-.hud-grid {
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Reticle Grid (light) — single grid pattern, hud-grid removed
+   -------------------------------------------------------------------------- */
+.reticle-grid {
   background-size: 24px 24px;
-  background-image: 
-    linear-gradient(to right, rgba(125, 244, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(125, 244, 255, 0.06) 1px, transparent 1px);
+  background-image:
+    linear-gradient(to right, rgba(14, 165, 233, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
 }
 
-.hud-radar-glow {
-  box-shadow: 0 0 25px -3px rgba(125, 244, 255, 0.15);
+/* --------------------------------------------------------------------------
+   Elevation Helpers
+   -------------------------------------------------------------------------- */
+.shadow-sm,
+.elevation-secondary {
+  box-shadow: var(--shadow-sm);
 }
 
-.hud-violet-glow {
-  box-shadow: 0 0 25px -3px rgba(209, 188, 255, 0.15);
+.shadow-md,
+.elevation-primary {
+  box-shadow: var(--shadow-md);
 }
 
-/* Animations */
-@keyframes radar-sweep {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
 }
 
-.animate-radar {
-  animation: radar-sweep 8s linear infinite;
+.card-elevated {
+  box-shadow: var(--shadow-md);
 }
 
-@keyframes pulse-ring {
-  0% { transform: scale(0.95); opacity: 0.9; }
-  50% { transform: scale(1.15); opacity: 0.3; }
-  100% { transform: scale(0.95); opacity: 0.9; }
+/* --------------------------------------------------------------------------
+   Radius Helpers
+   -------------------------------------------------------------------------- */
+.btn,
+button,
+input[type="button"],
+input[type="submit"] {
+  border-radius: var(--radius-lg);
 }
 
-.live-pulse {
-  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+.chip,
+.badge,
+kbd {
+  border-radius: var(--radius-full);
 }
 
-/* Stale Warning Banner */
+/* --------------------------------------------------------------------------
+   Tabular Numbers & Transitions (kept)
+   -------------------------------------------------------------------------- */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.transition-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --------------------------------------------------------------------------
+   Canvas — DPR handling
+   -------------------------------------------------------------------------- */
+canvas {
+  display: block;
+  max-width: 100%;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Canvas DPR handling: JS must scale backing store by devicePixelRatio.
+   Example: const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+   CSS size stays in layout px; backing store scaled for sharpness. */
+
+/* --------------------------------------------------------------------------
+   Stale Warning — light-theme variant
+   -------------------------------------------------------------------------- */
 .stale-warning {
-  background: rgba(147, 0, 10, 0.85);
-  border: 1px solid #ffb4ab;
-  color: #ffdad6;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #991B1B;
+  border-radius: var(--radius-lg);
+  padding: var(--space-1) var(--space-2);
+  font-family: "SF Mono", Monaco, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   animation: flash-warning 1s ease-in-out infinite alternate;
+}
+
+.stale-warning::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #DC2626;
+  flex-shrink: 0;
 }
 
 @keyframes flash-warning {
@@ -83,18 +245,87 @@ h1, h2, h3, h4, h5, h6, .font-headline {
   to { opacity: 1; }
 }
 
-/* Monospace Numbers Alignment */
-.tabular-nums {
-  font-variant-numeric: tabular-nums;
+/* --------------------------------------------------------------------------
+   Sidebar Drawer — Mobile Breakpoints with Transition
+   -------------------------------------------------------------------------- */
+aside {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
 }
 
-/* Canvas styling */
-canvas {
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
+/* Overlay backdrop for drawer */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.25s ease;
 }
 
-/* Smooth transitions */
-.transition-card {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+.sidebar-backdrop.is-open {
+  display: block;
+  opacity: 1;
+}
+
+@media (max-width: 1024px) {
+  aside {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    bottom: 0;
+    z-index: 45;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-md);
+    overflow-y: auto;
+  }
+
+  aside.is-open {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  aside {
+    width: 280px;
+    top: 56px;
+    transform: translateX(-100%);
+  }
+
+  aside.is-open {
+    transform: translateX(0);
+  }
+
+  /* Touch targets — minimum 44px */
+  button,
+  a,
+  [role="button"],
+  .nav-btn,
+  .traj-sel-btn,
+  .persp-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Ensure tap targets have comfortable hit area even if visual size smaller */
+  .chip,
+  .badge {
+    min-height: 28px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  main {
+    padding: var(--space-2);
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .transition-card,
+  aside,
+  .sidebar-backdrop { transition: none; }
+  .stale-warning { animation: none; }
 }
