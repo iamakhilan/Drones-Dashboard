@@ -1,216 +1,476 @@
-# 🛰️ AeroVIO Ground Station — Drone VIO & Cascaded SO(3) Controller Dashboard
+<div align="center">
 
-An aerospace-grade, real-time Ground Control Station (GCS) and visualization frontend designed for Autonomous Drone Visual-Inertial Odometry (VIO), MSCKF state estimation, 3D point-cloud mapping, and 50 Hz cascaded closed-loop flight control.
+<!-- ============ HERO BANNER ============ -->
+<img src="drone_prototype_render.png" width="720" alt="AeroVIO — Autonomous Drone VIO Platform" />
 
-Designed to interface with the [Autonomous Drone VIO & Controller Architecture](https://github.com/Ravish2807/Drones_S5_CD2_3D_Mapping_using_normal_monocular_camera_controlling_Visual-Inertial-Odometry-VIO/tree/drones-controller).
+# 🛰️ AeroVIO Ground Station
 
----
+### *Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Cascaded SO(3) Flight Control*
 
-## 📊 System Implementation Status
-
-### ✅ Implemented Now
-- **Dashboard Frontend UI**: Clean light-themed ground station dashboard with metric KPI cards, precision kinematics matrices, and topic inspection.
-- **VIO Visualizations**:
-  - Monocular camera feed with dynamic KLT feature velocity vectors, optical reticle, and Brown-Conrady camera parameters.
-  - 3D spatial reconstruction with 442 PCD landmarks (`synthetic_orbit_scanned_map.pcd`).
-  - Strict mathematical frame separation: Body Trajectory $T_{WB}$ vs Camera Optical Trajectory $T_{WC} = T_{WB} \cdot T_{BC}$.
-  - Multi-angle projection switcher (Isometric, Top XY, Side XZ).
-- **50 Hz Cascaded Closed-Loop Controller Telemetry**:
-  - Outer Loop: Position error $e_p = p - p_d$, velocity error $e_v = v - v_d$, desired force $F_d = -K_p e_p - K_v e_v + m g e_3 + m a_d$.
-  - Attitude Generator: Thrust direction $b_{3d} = F_d / \|F_d\|$, collective thrust $T_d = \|F_d\|$, desired attitude $R_d$ ($q_d$).
-  - Inner Loop: Geometric $\mathrm{SO}(3)$ attitude error $e_R = \frac{1}{2}(R_d^T R - R^T R_d)^\vee$, angular velocity error $e_\omega = \omega - R^T R_d \omega_d$, desired moment $M_d = -k_R e_R - k_\Omega e_\omega + \omega \times J \omega$.
-  - Flight FSM state tracker (`IDLE` &rarr; `ARMING` &rarr; `TAKEOFF` &rarr; `NAVIGATING` &rarr; `HOVER` / `FAILSAFE`).
-  - Safety watchdog heartbeat monitor.
-- **Live Kinematic Oscilloscope Graphs**:
-  - 3 real-time rolling 20-second SVG charts for Linear Acceleration ($a_x, a_y, a_z$), Velocity ($v_x, v_y, v_z$), and Position ($x, y, z$).
-  - Pause / Resume and buffer clear controls.
-- **DEMO Telemetry Playback Engine**:
-  - Replays 5 calibrated flight trajectory datasets (`orbit`, `hover`, `corridor`, `multi_axis`, `stress`).
-  - Dynamically calculates closed-loop controller outputs and KLT feature motion at 50 Hz.
-- **WebSocket Transport Bridge (`bridge_server.py`)**:
-  - Zero-dependency Python server supporting HTTP file serving and WebSocket streaming on `/ws`.
-  - Configurable remote endpoint (`ws://[IP]:8000/ws`) for cross-machine LAN connection.
-  - Truthful connection reporting (distinguishes WebSocket bridge connection from ROS 2 live node connection).
-
-### ⏳ Planned / Integration Stage
-- **Live ROS 2 Node Adapter**: Native `rclpy` bridge node subscribing to live ROS 2 topics on the companion computer and pushing normalized JSON frames to the bridge.
-- **Live Vehicle Telemetry**: Active in-flight stream from hardware IMU (ADIS16470 / BMI088) and optical camera over ROS 2 topics.
-- **Physical ArduPilot Actuation**: Real `/ap/v1/cmd_vel` command forwarding to physical aircraft flight controller (currently commands only update simulator setpoints).
+**Aerospace-grade real-time Ground Control Station (GCS) for autonomous drone VIO, 3D mapping & closed-loop flight.**
 
 ---
 
-## 🏗️ Actual Cascaded Controller Architecture (`drones-controller`)
+<!-- Badges -->
+<p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-0EA5E9?style=for-the-badge" alt="MIT License" /></a>
+  <a href="bridge_server.py"><img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.8+" /></a>
+  <a href="index.html"><img src="https://img.shields.io/badge/Browser-Chrome%20%2F%20Firefox%20%2F%20Safari-1A1A1A?style=for-the-badge" alt="Browser" /></a>
+  <img src="https://img.shields.io/badge/Controller-50_Hz_SO(3)-10B981?style=for-the-badge" alt="50Hz SO3" />
+  <img src="https://img.shields.io/badge/VIO-MSCKF_/_VINS-8B5CF6?style=for-the-badge" alt="MSCKF" />
+</p>
 
-The system architecture matches the 50 Hz cascaded closed-loop control pipeline:
+<p>
+  <a href="https://github.com/iamakhilan/Drones-Dashboard"><img src="https://img.shields.io/github/stars/iamakhilan/Drones-Dashboard?style=social" alt="Stars" /></a>
+  <img src="https://img.shields.io/badge/status-DEMO_ready-success?style=flat-square" alt="demo" />
+  <img src="https://img.shields.io/badge/ROS_2-Humble-22314E?style=flat-square&logo=ros&logoColor=white" alt="ROS2" />
+  <img src="https://img.shields.io/badge/WebSocket-RFC6455-EF4444?style=flat-square" alt="ws" />
+  <img src="https://img.shields.io/badge/Tailwind-CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="tailwind" />
+</p>
+
+[🚀 Live Demo](#-quickstart) · [📖 Docs](#-mathematical-formulations) · [🏗️ Architecture](#️-architecture) · [🐛 Issues](https://github.com/iamakhilan/Drones-Dashboard/issues)
+
+</div>
+
+---
+
+<div align="center">
+
+> Companion repo: **[Drones_S5_CD2 — Controller & VIO Stack](https://github.com/Ravish2807/Drones_S5_CD2_3D_Mapping_using_normal_monocular_camera_controlling_Visual-Inertial-Odometry-VIO/tree/drones-controller)** — the 50 Hz `drones-controller` ROS 2 node this dashboard visualizes.
+
+</div>
+
+---
+
+## ✨ Why AeroVIO?
+
+| | |
+|---|---|
+| 🎯 **Truthful by design** | Explicitly separates **WebSocket bridge** connectivity from **ROS 2 live-node** connectivity — no fake "connected" states. |
+| ⚡ **50 Hz closed-loop** | Full cascaded pipeline at controller rate: Position → Attitude Generator → Geometric SO(3) → FSM → ArduPilot. |
+| 👁️ **Frame-rigorous VIO** | Strict `T_WB` (body) vs `T_WC = T_WB · T_BC` (camera optical) separation. No shortcuts. |
+| 🗺️ **Real 3D mapping** | 442-point `synthetic_orbit_scanned_map.pcd` reconstruction, multi-projection (Isometric / Top XY / Side XZ). |
+| 🔌 **Zero-dependency bridge** | Pure stdlib Python — `http.server` + hand-rolled RFC 6455 WebSocket. No `pip install`. |
+| 📡 **5 flight regimes** | Calibrated datasets: `orbit` · `hover` · `straight` · `multi_axis` · `stress` (500 pts each). |
+
+---
+
+## 🖼️ Screenshots
+
+<div align="center">
+
+| Ground Station Dashboard | Monocular Tracking Feed | 3D Spatial Map |
+|---|---|---|
+| <img src="drone_vio_screen_89764d85cb77486e852b5b488c2f5fff.png" width="360" alt="Dashboard" /> | <img src="monocular_tracking_feed.png" width="360" alt="Camera feed" /> | <img src="stitch_screen_5f02e90f849a4a9b90ee2d2da12b516a.png" width="360" alt="3D map" /> |
+| *KPI cards · SO(3) telemetry · oscilloscope graphs* | *KLT velocity vectors · Brown-Conrady · reticle grid* | *442 landmarks · T_WB / T_WC trajectories* |
+
+*Light theme · #F6F6F7 surfaces · stone neutrals · SF Mono / Inter*
+
+</div>
+
+<details>
+<summary><b>📸 More renders</b></summary>
+
+<br/>
+
+<div align="center">
+
+| Prototype Airframe | Light Render |
+|---|---|
+| <img src="drone_prototype_render.png" width="400" alt="prototype" /> | <img src="drone_render_light.png" width="400" alt="light render" /> |
+
+</div>
+
+</details>
+
+---
+
+## 🚀 Feature Highlights
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+#### 👁️ VIO & Perception
+- Monocular feed @ 30 Hz (`/camera/image_raw`)
+- KLT feature velocity vectors
+- Brown-Conrady camera model overlay
+- Optical reticle + epipolar toggle
+- 442-landmark PCD map (`HEIGHT=1`)
+- `T_WC = T_WB · T_BC` projection
+
+</td>
+<td width="33%" valign="top">
+
+#### 🎛️ 50 Hz Cascaded Control
+- **Outer:** `F_d = -K_p e_p - K_v e_v + m g e₃ + m a_d`
+- **Generator:** `b₃d = F_d/‖F_d‖`, `T_d = ‖F_d‖`, `R_d / q_d`
+- **Inner:** `e_R = ½(R_dᵀR − RᵀR_d)∨`, `M_d = −k_R e_R − k_Ω e_ω + ω×Jω`
+- FSM: `IDLE → ARMING → TAKEOFF → NAVIGATING → HOVER / FAILSAFE`
+- Watchdog heartbeat + failsafe
+
+</td>
+<td width="33%" valign="top">
+
+#### 📈 Telemetry & Transport
+- 3 × 20 s rolling SVG oscilloscopes (accel / vel / pos)
+- Channel toggles + hover crosshair + pause/clear/undo
+- DEMO replay engine — 5 datasets @ 50 Hz
+- `bridge_server.py` — HTTP + `/ws` WebSocket
+- Cross-machine LAN: `ws://[IP]:8000/ws`
+- Stale-warning banner + truthful status
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🏗️ Architecture
+
+<div align="center">
+
+*End-to-end 50 Hz cascaded pipeline — from photons & IMU to actuation*
+
+</div>
 
 ```mermaid
-flowchart TD
-    subgraph Inputs & Sensors
-        CAM["Monocular Camera (30 Hz)\n/camera/image_raw"]
-        IMU["6-DOF IMU (200 Hz)\n/imu/data_raw"]
-        AP_STATUS["Flight Controller Status\n/ap/v1/status"]
+flowchart TB
+    subgraph SENSORS["📡 Sensors & Inputs"]
+        CAM["📷 Monocular Camera<br/>30 Hz · /camera/image_raw"]
+        IMU["🧭 6-DOF IMU<br/>200 Hz · /imu/data_raw<br/>ADIS16470 / BMI088"]
+        AP["✈️ ArduPilot Status<br/>10 Hz · /ap/v1/status"]
     end
 
-    subgraph State Estimation
-        VIO["VIO Node (MSCKF Estimator)\n- /drone/vio/odometry (T_WB)\n- /drone/vio/camera_pose (T_WC)\n- /drone/vio/pointcloud"]
-        EST["Vehicle State (Pose & Twist)\n/ap/v1/pose/filtered\n/ap/v1/twist/filtered"]
+    subgraph EST["🔬 State Estimation — VIO (MSCKF)"]
+        VIO["VIO Node<br/>/drone/vio/odometry → T_WB<br/>/drone/vio/camera_pose → T_WC<br/>/drone/vio/pointcloud → 442 pts"]
+        STATE["Vehicle State<br/>/ap/v1/pose/filtered · 50 Hz<br/>/ap/v1/twist/filtered · 50 Hz"]
     end
 
-    subgraph Safety & State Adapter
-        WATCHDOG["Safety / Watchdog\nHeartbeat & Failsafe Monitor"]
-        ADAPTER["State Adapter\nCoordinate & Rate Transformation"]
+    subgraph SAFETY["🛡️ Safety & Adapter"]
+        WD["Watchdog<br/>Heartbeat · Failsafe Monitor"]
+        ADAPT["State Adapter<br/>Frame & Rate Transform"]
     end
 
-    subgraph 50 Hz Cascaded Controller
-        POS_CTRL["1. Position Controller (Outer Loop)\nF_d = -K_p e_p - K_v e_v + m g e_3 + m a_d\n/drones_controller/position_error\n/drones_controller/desired_force"]
-        ATT_GEN["2. Attitude Generator\nb_3d = F_d / ||F_d||\nGenerates R_d, T_d, q_d\n/drones_controller/desired_attitude"]
-        SO3_CTRL["3. Geometric SO(3) Controller (Inner Loop)\ne_R = 1/2(R_d^T R - R^T R_d)^v\ne_w = w - R^T R_d w_d\nM_d = -k_R e_R - k_w e_w + w x J w\n/drones_controller/attitude_error\n/drones_controller/desired_moment"]
-        FSM["4. Flight State Manager\nIDLE → ARMING → TAKEOFF → NAVIGATING → HOVER\n(Failsafe on anomaly)"]
+    subgraph CTRL["⚡ 50 Hz Cascaded Controller — drones-controller"]
+        POS["① Position Controller (Outer)<br/>e_p = p − p_d · e_v = v − v_d<br/>F_d = −K_p e_p − K_v e_v + m g e₃ + m a_d"]
+        ATTG["② Attitude Generator<br/>b₃d = F_d / ‖F_d‖ · T_d = ‖F_d‖<br/>→ R_d ∈ SO(3) · q_d"]
+        SO3["③ Geometric SO(3) (Inner)<br/>e_R = ½(R_dᵀR − RᵀR_d)∨<br/>e_ω = ω − RᵀR_d ω_d<br/>M_d = −k_R e_R − k_Ω e_ω + ω×Jω"]
+        FSM["④ Flight State Manager<br/>IDLE → ARMING → TAKEOFF<br/>→ NAVIGATING → HOVER / FAILSAFE"]
     end
 
-    subgraph Actuation & Transport Bridge
-        CMD["Command Interface\n/ap/v1/cmd_vel (TwistStamped)"]
-        BRIDGE["Python Bridge Server (bridge_server.py)\nWebSocket: ws://localhost:8000/ws"]
-        DASH["AeroVIO Ground Station Dashboard\n(Browser Frontend)"]
+    subgraph BRIDGE["🌉 Transport & Ground Station"]
+        CMD["/ap/v1/cmd_vel<br/>TwistStamped @ 50 Hz"]
+        BR["bridge_server.py<br/>HTTP :8000 + WS /ws<br/>DEMO replay / LIVE forward"]
+        GCS["🖥️ AeroVIO Dashboard<br/>KPI · 3D Map · Oscilloscope · Camera HUD"]
     end
 
     CAM --> VIO
     IMU --> VIO
-    VIO --> EST
-    EST --> WATCHDOG
-    AP_STATUS --> WATCHDOG
-    WATCHDOG --> ADAPTER
-    ADAPTER --> POS_CTRL
-    POS_CTRL --> ATT_GEN
-    ATT_GEN --> SO3_CTRL
-    SO3_CTRL --> FSM
-    FSM --> CMD
+    VIO --> STATE
+    STATE --> WD
+    AP --> WD
+    WD --> ADAPT
+    ADAPT --> POS --> ATTG --> SO3 --> FSM --> CMD
+    STATE -.-> BR
+    POS -.-> BR
+    ATTG -.-> BR
+    SO3 -.-> BR
+    VIO -.-> BR
+    BR <==>|"JSON @ ~50 Hz"| GCS
 
-    EST --> BRIDGE
-    POS_CTRL --> BRIDGE
-    ATT_GEN --> BRIDGE
-    SO3_CTRL --> BRIDGE
-    VIO --> BRIDGE
-    BRIDGE <==>|Normalized JSON Telemetry| DASH
+    style POS fill:#0EA5E9,stroke:#0284C7,color:#fff
+    style SO3 fill:#10B981,stroke:#059669,color:#fff
+    style VIO fill:#8B5CF6,stroke:#7C3AED,color:#fff
+    style BR fill:#F59E0B,stroke:#D97706,color:#fff
 ```
+
+<details>
+<summary><b>🔍 Data-flow notes</b></summary>
+
+- **DEMO mode** — `bridge_server.py` replays CSV trajectories, synthesizes `T_WB`/`T_WC`, computes controller outputs on-the-fly @ 50 Hz, broadcasts normalized JSON to all `/ws` clients.
+- **LIVE mode** — bridge forwards frames from a companion `rclpy` adapter subscribing to real ROS 2 topics. Dashboard unchanged.
+- **Truthful status** — header pills show `Bridge: ● Connected` vs `ROS 2: ○ DEMO` independently. No conflation.
+
+</details>
 
 ---
 
 ## 📐 Mathematical Formulations
 
-### 1. Outer Loop: Position Controller
-- **Position Error**:
-  $$e_p = p - p_d = [e_{px}, e_{py}, e_{pz}]^T$$
-- **Velocity Error**:
-  $$e_v = v - v_d = [e_{vx}, e_{vy}, e_{vz}]^T$$
-- **Desired Force**:
-  $$F_d = -K_p e_p - K_v e_v + m g e_3 + m a_d$$
-  where $m = 1.50\text{ kg}$, $K_p = [0.5, 0.5, 0.5]$, $K_v = [0.2, 0.2, 0.2]$.
+> All gains / constants match `bridge_server.py` + `drones-controller` ROS 2 params exactly.
 
-### 2. Attitude Generator
-- **Thrust Direction Vector**:
-  $$b_{3d} = \frac{F_d}{\|F_d\|}$$
-- **Collective Thrust**:
-  $$T_d = \|F_d\|$$
-- Produces desired rotation matrix $R_d \in \mathrm{SO}(3)$ and desired orientation quaternion $q_d$.
+### ① Outer Loop — Position Controller
 
-### 3. Inner Loop: Geometric $\mathrm{SO}(3)$ Attitude Controller
-- **Attitude Error**:
-  $$e_R = \frac{1}{2} (R_d^T R - R^T R_d)^\vee = [e_{Rx}, e_{Ry}, e_{Rz}]^T$$
-- **Angular Velocity Error**:
-  $$e_\omega = \omega - R^T R_d \omega_d = [e_{\omega x}, e_{\omega y}, e_{\omega z}]^T$$
-- **Desired Control Moment**:
-  $$M_d = -k_R e_R - k_\Omega e_\omega + \omega \times J \omega$$
-  where $J = \mathrm{diag}(0.02, 0.02, 0.04)\text{ kg}\cdot\text{m}^2$, $k_R = [4.85, 4.85, 2.50]$, $k_\Omega = [0.35, 0.35, 0.20]$.
+| Symbol | Definition |
+|---|---|
+| $e_p = p - p_d$ | Position error $[e_{px},e_{py},e_{pz}]^T$ |
+| $e_v = v - v_d$ | Velocity error $[e_{vx},e_{vy},e_{vz}]^T$ |
+| $F_d = -K_p e_p - K_v e_v + m g e_3 + m a_d$ | Desired force |
 
-### 4. Frame Extrinsics
-- **Camera Optical Pose**:
-  $$T_{WC} = T_{WB} \cdot T_{BC}$$
-  where $T_{BC} = [+0.10, 0.00, -0.04]\text{ m}$ forward/downward offset.
+| Param | Value |
+|---|---|
+| $m$ | $1.50\ \text{kg}$ |
+| $K_p$ | $\mathrm{diag}(0.5, 0.5, 0.5)$ |
+| $K_v$ | $\mathrm{diag}(0.2, 0.2, 0.2)$ |
+| $g$ | $9.81\ \text{m/s}^2$ |
+
+### ② Attitude Generator
+
+$$b_{3d} = \frac{F_d}{\lVert F_d \rVert} \qquad T_d = \lVert F_d \rVert$$
+
+Produces $R_d \in \mathrm{SO}(3)$ and $q_d$ (desired quaternion) from thrust direction + yaw reference.
+
+### ③ Inner Loop — Geometric SO(3) Controller
+
+| Symbol | Definition |
+|---|---|
+| $e_R = \tfrac{1}{2}\left(R_d^T R - R^T R_d\right)^{\vee}$ | Attitude error $[e_{Rx},e_{Ry},e_{Rz}]^T$ |
+| $e_{\omega} = \omega - R^T R_d\, \omega_d$ | Angular velocity error |
+| $M_d = -k_R\, e_R - k_{\Omega}\, e_{\omega} + \omega \times J \omega$ | Desired moment |
+
+| Param | Value |
+|---|---|
+| $J$ | $\mathrm{diag}(0.02,\ 0.02,\ 0.04)\ \text{kg·m}^2$ |
+| $k_R$ | $[4.85,\ 4.85,\ 2.50]$ |
+| $k_{\Omega}$ | $[0.35,\ 0.35,\ 0.20]$ |
+
+### ④ Frame Extrinsics
+
+$$T_{WC} = T_{WB} \cdot T_{BC} \qquad T_{BC} = [+0.10,\ 0.00,\ -0.04]\ \text{m}$$
+
+Camera mounted **10 cm forward, 4 cm downward** on airframe. Dashboard renders both trajectories independently — toggle `T_WB` / `T_WC` layers in 3D view.
 
 ---
 
-## 📡 Verified ROS 2 Topic Contracts
+## 📡 ROS 2 Topic Contracts
 
-### Controller Inputs:
-| Topic Name | Message Type | Rate | Description |
-| :--- | :--- | :--- | :--- |
-| `/ap/v1/pose/filtered` | `geometry_msgs/PoseStamped` | 50 Hz | Current estimated drone pose ($p, q$) |
-| `/ap/v1/twist/filtered` | `geometry_msgs/TwistStamped` | 50 Hz | Current estimated linear & angular velocity ($v, \omega$) |
-| `/ap/v1/status` | `ardupilot_msgs/Status` | 10 Hz | Autopilot armed, failsafe, and flight state |
+*Verified against `drones-controller` — rates, types, semantics.*
 
-### Controller Telemetry Outputs:
-| Topic Name | Message Type | Rate | Description |
-| :--- | :--- | :--- | :--- |
-| `/ap/v1/cmd_vel` | `geometry_msgs/TwistStamped` | 50 Hz | Actuation command to ArduPilot |
-| `/drones_controller/position_error` | `geometry_msgs/Vector3` | 50 Hz | Position tracking error $e_p$ |
-| `/drones_controller/velocity_error` | `geometry_msgs/Vector3` | 50 Hz | Velocity tracking error $e_v$ |
-| `/drones_controller/desired_force` | `geometry_msgs/Vector3` | 50 Hz | Computed force vector $F_d$ |
-| `/drones_controller/desired_moment` | `geometry_msgs/Vector3` | 50 Hz | Computed $\mathrm{SO}(3)$ control moment $M_d$ |
-| `/drones_controller/attitude_error` | `geometry_msgs/Vector3` | 50 Hz | $\mathrm{SO}(3)$ attitude error $e_R$ |
-| `/drones_controller/angular_velocity_error` | `geometry_msgs/Vector3` | 50 Hz | Angular rate error $e_\omega$ |
-| `/drones_controller/desired_attitude` | `geometry_msgs/Quaternion` | 50 Hz | Desired attitude quaternion $q_d$ |
+#### Inputs — Controller subscribes
 
-### VIO Node Topics:
-| Topic Name | Message Type | Rate | Description |
-| :--- | :--- | :--- | :--- |
-| `/drone/vio/odometry` | `nav_msgs/Odometry` | 60 Hz | Body odometry $T_{WB}$ |
-| `/drone/vio/camera_pose` | `geometry_msgs/PoseStamped` | 30 Hz | Camera optical pose $T_{WC} = T_{WB} \cdot T_{BC}$ |
-| `/drone/vio/pointcloud` | `sensor_msgs/PointCloud2` | 10 Hz | Triangulated 3D sparse landmarks |
-| `/camera/image_raw` | `sensor_msgs/Image` | 30 Hz | Monocular camera frame stream |
-| `/imu/data_raw` | `sensor_msgs/Imu` | 200 Hz | IMU linear acceleration & angular rates |
+| Topic | Type | Rate | Description |
+|---|:---:|:---:|---|
+| `/ap/v1/pose/filtered` | `geometry_msgs/PoseStamped` | 50 Hz | Estimated pose $p, q$ |
+| `/ap/v1/twist/filtered` | `geometry_msgs/TwistStamped` | 50 Hz | Linear + angular velocity $v, \omega$ |
+| `/ap/v1/status` | `ardupilot_msgs/Status` | 10 Hz | Armed / failsafe / flight state |
+| `/camera/image_raw` | `sensor_msgs/Image` | 30 Hz | Monocular feed |
+| `/imu/data_raw` | `sensor_msgs/Imu` | 200 Hz | 6-DOF accel + gyro |
+
+#### Outputs — Controller publishes
+
+| Topic | Type | Rate | Description |
+|---|:---:|:---:|---|
+| `/ap/v1/cmd_vel` | `geometry_msgs/TwistStamped` | 50 Hz | ArduPilot actuation |
+| `/drones_controller/position_error` | `geometry_msgs/Vector3` | 50 Hz | $e_p$ |
+| `/drones_controller/velocity_error` | `geometry_msgs/Vector3` | 50 Hz | $e_v$ |
+| `/drones_controller/desired_force` | `geometry_msgs/Vector3` | 50 Hz | $F_d$ |
+| `/drones_controller/desired_attitude` | `geometry_msgs/Quaternion` | 50 Hz | $q_d$ (+ $R_d$, $T_d$, $b_{3d}$) |
+| `/drones_controller/attitude_error` | `geometry_msgs/Vector3` | 50 Hz | $e_R$ |
+| `/drones_controller/angular_velocity_error` | `geometry_msgs/Vector3` | 50 Hz | $e_{\omega}$ |
+| `/drones_controller/desired_moment` | `geometry_msgs/Vector3` | 50 Hz | $M_d$ |
+
+#### VIO — Perception
+
+| Topic | Type | Rate | Description |
+|---|:---:|:---:|---|
+| `/drone/vio/odometry` | `nav_msgs/Odometry` | 50 Hz | Body odometry $T_{WB}$ |
+| `/drone/vio/camera_pose` | `geometry_msgs/PoseStamped` | 50 Hz | Camera optical $T_{WC}$ |
+| `/drone/vio/pointcloud` | `sensor_msgs/PointCloud2` | ~5 Hz | Sparse map (442 pts) |
+
+---
+
+## 🧱 Tech Stack
+
+| Layer | Technology | Notes |
+|---|---|---|
+| **Bridge** | Python 3.8+ · `http.server` · `hashlib`/`base64`/`struct` | Zero-dependency RFC 6455 WebSocket, `--port` / `--host` flags |
+| **Frontend** | Vanilla JS (ES5 IIFE) · Tailwind CSS (CDN) · HTML5 Canvas · SVG | No build step — open `index.html` and go |
+| **3D / Map** | Canvas 2D projection · PCD ASCII parser | Isometric / Top XY / Side XZ switcher |
+| **Graphs** | Pure SVG · rolling 20 s window · 250-pt buffer | Spline + gradient fills · hover crosshair |
+| **Data** | CSV trajectories · PCD v.7 ASCII · `real_data.js` | 5 datasets × 500 rows · 442 landmarks |
+| **ROS 2** | Humble · `rclpy` adapter (planned live path) | `geometry_msgs` · `sensor_msgs` · `nav_msgs` |
+
+<div align="center">
+
+*No `npm install`. No `pip install`. Clone → run → fly.*
+
+</div>
+
+---
+
+## ⚡ Quickstart
+
+### Prerequisites
+
+- **Python 3.8+** (only for the bridge — check with `python3 --version`)
+- Modern browser (Chrome / Firefox / Safari)
+- For LIVE mode: ROS 2 Humble + companion machine on same LAN
+
+### 1 — Clone
+
+```bash
+git clone https://github.com/iamakhilan/Drones-Dashboard.git
+cd Drones-Dashboard
+```
+
+### 2 — Start the bridge
+
+```bash
+# DEMO mode (default) — replays trajectories @ 50 Hz
+python3 bridge_server.py
+
+# Custom port / host
+python3 bridge_server.py --port 8000 --host 0.0.0.0
+
+# Help
+python3 bridge_server.py --help
+```
+
+You should see:
+
+```
+[Bridge] Loaded 5 trajectory datasets: ['orbit', 'hover', 'straight', 'multi_axis', 'stress']
+[Bridge] Serving HTTP on http://0.0.0.0:8000  —  WebSocket on ws://0.0.0.0:8000/ws
+```
+
+### 3 — Open the dashboard
+
+Open **`http://localhost:8000`** in your browser.
+
+Or just open `index.html` directly — set the WebSocket URL in the header input to `ws://localhost:8000/ws` and hit **Connect**.
+
+### 4 — Use it
+
+| Action | How |
+|---|---|
+| **Switch dataset** | Top bar pill selector — `orbit` / `hover` / `straight` / `multi_axis` / `stress` (also `?dataset=orbit` URL param) |
+| **Toggle trajectories** | 3D view — `T_WB` (body) vs `T_WC` (camera optical) layers |
+| **Change projection** | Isometric · Top (XY) · Side (XZ) buttons above 3D canvas |
+| **Inspect signals** | Scroll oscilloscope graphs — hover for crosshair, toggle Ax/Ay/Az channels, Pause / Clear / Undo |
+| **Search topics** | `⌘ K` or click header search — filters ROS 2 topics + params |
+| **Go LIVE** | Point header WS URL to `ws://<companion-ip>:8000/ws` · flip mode toggle |
+
+### LAN / Cross-machine
+
+```bash
+# On companion (ROS 2 machine)
+python3 bridge_server.py --host 0.0.0.0 --port 8000
+
+# On ground station — set header input to
+ws://192.168.1.42:8000/ws
+```
+
+### LIVE ROS 2 (upcoming)
+
+A thin `rclpy` adapter will subscribe to the topics above and push normalized JSON to `/ws` — dashboard stays identical. See [Roadmap](#-roadmap).
+
+---
+
+## ⚙️ Configuration
+
+| Setting | Where | Default | Description |
+|---|---|---|---|
+| `websocketUrl` | Header input · `localStorage: aerovio.wsUrl` · `APP_CONFIG` | `ws://localhost:8000/ws` | Bridge endpoint |
+| `rateHz` | `APP_CONFIG.rateHz` | `50.0` | Controller / broadcast rate |
+| `massKg` | `APP_CONFIG.massKg` | `1.5` | Vehicle mass for $F_d$ |
+| `gravity` | `APP_CONFIG.gravity` | `9.81` | $g$ |
+| `T_BC_OFFSET` | `bridge_server.py: T_BC_OFFSET` | `{x:0.10, y:0.00, z:-0.04}` | Body→Camera extrinsic |
+| `windowDurationSec` | `graphs.js` | `20.0` | Oscilloscope window |
+| `--port` / `--host` | CLI flags | `8000` / `0.0.0.0` | Bridge bind |
 
 ---
 
 ## 📂 Repository Structure
 
 ```
-.
-├── index.html                  # Ground Station UI & Visualization
-├── bridge_server.py            # HTTP & WebSocket Bridge Server
+Drones-Dashboard/
+├── index.html                  # Ground station — single-page dashboard
+├── bridge_server.py            # ★ Zero-dep HTTP + RFC6455 WebSocket bridge
+├── css/
+│   └── dashboard.css           # Light theme tokens (#F6F6F7, stone, brand)
 ├── js/
-│   ├── telemetry.js            # Normalized state store (Position, SO(3), VIO)
-│   ├── websocket.js            # Configurable WebSocket client (Local / Remote LAN)
-│   ├── controller.js           # 50 Hz Cascaded controller telemetry & setpoints
-│   ├── graphs.js               # 3 Live rolling SVG charts (Accel / Vel / Pos)
-│   ├── camera.js               # Monocular video & dynamic KLT feature HUD
-│   ├── vio.js                  # MSCKF estimator metrics & tracking quality
-│   └── ui.js                   # UI controller & modal helpers
+│   ├── websocket.js            # WS client, APP_CONFIG, reconnect, stale banner
+│   ├── telemetry.js            # Telemetry engine — T_WB/T_WC, controller math
+│   ├── controller.js           # SO(3) panel — e_p/e_v/F_d/b₃d/q_d/e_R/e_ω/M_d + FSM
+│   ├── vio.js                  # 3D spatial map — PCD + trajectory projection
+│   ├── camera.js               # Monocular HUD — KLT vectors, reticle, Brown-Conrady
+│   ├── graphs.js               # 3× SVG oscilloscopes — accel/vel/pos (20 s window)
+│   └── ui.js                   # Orchestrator — mode, datasets, search, modals, toasts
 ├── data/
-│   ├── real_data.js            # Calibrated trajectory datasets for instant replay
-│   ├── synthetic_orbit_estimated_trajectory.csv
-│   ├── synthetic_hover_estimated_trajectory.csv
-│   ├── synthetic_straight_estimated_trajectory.csv
-│   ├── synthetic_multi_axis_estimated_trajectory.csv
-│   ├── synthetic_stress_estimated_trajectory.csv
-│   └── synthetic_orbit_scanned_map.pcd  # 442 Triangulated 3D Landmarks
-├── monocular_tracking_feed.png # High-res monocular optical tracking frame
+│   ├── real_data.js                        # Preloaded dataset registry
+│   ├── synthetic_orbit_estimated_trajectory.csv       # 500 pts — circular orbit
+│   ├── synthetic_hover_estimated_trajectory.csv       # 500 pts — station-keeping
+│   ├── synthetic_straight_estimated_trajectory.csv    # 500 pts — corridor
+│   ├── synthetic_multi_axis_estimated_trajectory.csv  # 500 pts — coupled axes
+│   ├── synthetic_stress_estimated_trajectory.csv      # 500 pts — aggressive
+│   └── synthetic_orbit_scanned_map.pcd               # 442 landmarks — PCD v.7 ASCII
+├── drone_prototype_render.png
+├── drone_render_light.png
+├── monocular_tracking_feed.png
 └── README.md
 ```
 
 ---
 
-## 🚀 Quickstart & Usage
+## 🗺️ Roadmap
 
-### 1. Launch Ground Station Bridge
+| Status | Item |
+|:---:|---|
+| ✅ | Light-themed GCS with KPI cards + SO(3) matrices + topic inspector |
+| ✅ | Monocular HUD — KLT vectors, reticle, Brown-Conrady params |
+| ✅ | 3D map — 442-pt PCD + `T_WB`/`T_WC` trajectories + 3 projections |
+| ✅ | 50 Hz cascaded controller telemetry (outer / generator / inner / FSM) |
+| ✅ | 3× 20 s SVG oscilloscopes with channel toggles + crosshair |
+| ✅ | DEMO replay — 5 datasets @ 50 Hz, synthetic KLT + controller synthesis |
+| ✅ | Zero-dep bridge — HTTP + `/ws` + LAN + truthful status |
+| ⏳ | `rclpy` live adapter — subscribe to ROS 2 topics → normalize → `/ws` |
+| ⏳ | Live IMU + camera stream from hardware (ADIS16470 / BMI088) |
+| ⏳ | `/ap/v1/cmd_vel` forwarding to physical ArduPilot |
+| 🔜 | Bag replay + trajectory export (CSV / PCD) |
+| 🔜 | Dark mode + keyboard palette (`⌘ K`) |
+| 🔜 | Unit + integration tests (bridge + math) |
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome — especially VIO tuning, controller gains, and ROS 2 adapter work.
+
 ```bash
-python bridge_server.py
-```
-*Optional parameters:*
-```bash
-python bridge_server.py --port 8000 --mode demo
+# Fork & branch
+git checkout -b feat/your-feature
+
+# Keep style: vanilla JS (IIFE), no build step, stdlib Python
+# Run bridge locally and verify DEMO + WS reconnect
+
+# Commit (conventional)
+git commit -m "feat: add dark-mode toggle"
+
+# Push & open PR
+git push origin feat/your-feature
 ```
 
-### 2. Open in Browser
-Visit `http://localhost:8000` in any modern web browser.
-
-### 3. Remote ROS 2 Connection
-To connect the dashboard to a remote machine running ROS 2 on your local network:
-1. Open **Controller Parameters & Bridge Configuration** (click the gear icon or `⌘ K`).
-2. Set the **Remote WebSocket Bridge Endpoint** to `ws://<REMOTE_IP>:8000/ws`.
-3. Click **Connect Bridge**.
+- Open an [Issue](https://github.com/iamakhilan/Drones-Dashboard/issues) for bugs / ideas first if the change is large.
+- Match existing code style — no framework introductions without discussion.
+- Update topic contracts / math tables if you change gains or rates.
 
 ---
 
 ## 📄 License
-MIT License. Developed for Drone Visual-Inertial Odometry & Geometric $\mathrm{SO}(3)$ Control Research.
+
+[MIT](LICENSE) — © AeroVIO contributors.
+
+---
+
+<div align="center">
+
+**Built for autonomous flight. Designed for clarity.**
+
+*If AeroVIO helped your research or build, leave a ⭐ — it helps others find it.*
+
+<br/>
+
+<sub>Ground Station · VIO · SO(3) Control · 50 Hz · MSCKF · PCD Mapping</sub>
+
+</div>
