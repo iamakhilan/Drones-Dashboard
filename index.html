@@ -436,29 +436,35 @@
     let recordingBuffer = [];
     let isRecording = false;
     let fpsCounter = 0, fpsLastTime = performance.now(), droppedFrames = 0;
+    let tickCounter = 0;
+    let latencyHistory = [];
     function startTelemetryPlayback() {
       if (liveTimerInterval) clearInterval(liveTimerInterval);
-      liveTimerInterval = setInterval(() => {
+      liveTimerInterval = setInterval(function(){
         if (playbackPaused) return;
         const dataset = realData.trajectories[currentDatasetKey];
         if (!dataset || !dataset.points || dataset.points.length === 0) return;
-        // speed: 0.5x = every 2nd tick, 2x = 2 frames per tick
+        tickCounter++;
         let steps = playbackSpeed >= 1 ? Math.round(playbackSpeed) : 1;
         let skip = playbackSpeed < 1 ? Math.round(1/playbackSpeed) : 1;
-        // simple: 1x=1 frame, 2x=2 frames, 0.5x=1 frame every 2 ticks
-        if (playbackSpeed < 1) {
-          fpsCounter++;
-          if (fpsCounter % skip !== 0) { updateScrubberUI(); return; }
-        }
+        if (playbackSpeed < 1 && (tickCounter % skip !== 0)) { updateScrubberUI(); updateHealthBar(); return; }
+        const before = currentFrameIndex;
         for (let s=0; s<steps; s++) {
           const frame = dataset.points[currentFrameIndex];
           currentFrameIndex = (currentFrameIndex + 1) % dataset.points.length;
           updateDashboardWithFrame(frame, dataset.points);
           if (isRecording) recordingBuffer.push(Object.assign({}, frame));
+          if (isRecording) {
+            const rb = document.getElementById('record-btn');
+            if (rb && isRecording && recordingBuffer.length % 20 === 0) rb.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse"></span> Stop ('+recordingBuffer.length+')';
+          }
         }
+        // dropped estimate: if we advanced more than 1 logical frame but system lagged
+        const expected = steps;
+        const actual = steps; // placeholder — real drop detected via interval drift below
         updateScrubberUI();
         updateHealthBar();
-        fpsCounter++;
+        fpsCounter += steps;
       }, 50);
     }
     function setPlaybackSpeed(s) {
@@ -500,14 +506,14 @@
       const btn = document.getElementById('record-btn');
       if (!isRecording) {
         recordingBuffer = []; isRecording = true;
-        if (btn) { btn.innerHTML = '<span class=\"w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse\"></span> Stop ('+recordingBuffer.length+')'; btn.classList.add('bg-red-50','border-red-300','text-red-700'); }
-        showToast('Recording started');
+        if (btn) { btn.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse"></span> Stop (0)'; btn.classList.add('bg-red-50','border-red-300','text-red-700'); }
+        showToast('Recording started — capturing frames…');
       } else {
         isRecording = false;
-        if (btn) { btn.innerHTML = '<span class=\"w-2 h-2 rounded-full bg-red-500 inline-block\"></span> Record'; btn.classList.remove('bg-red-50','border-red-300','text-red-700'); }
+        if (btn) { btn.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Record'; btn.classList.remove('bg-red-50','border-red-300','text-red-700'); }
         if (recordingBuffer.length === 0) { showToast('No frames recorded'); return; }
         const header = Object.keys(recordingBuffer[0]).join(',');
-        const rows = recordingBuffer.map(r=>Object.values(r).join(',')).join('\n');
+        const rows = recordingBuffer.map(function(r){ return Object.values(r).join(','); }).join('\n');
         const blob = new Blob([header+'\n'+rows], {type:'text/csv'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href=url; a.download='aerovio_capture_'+Date.now()+'.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
