@@ -1,41 +1,57 @@
 <div align="center">
 
-# 🛰️ AeroVIO Ground Station
+<img src="docs/aerovio-architecture.svg" alt="AeroVIO dark architecture overview" width="100%" />
 
-### *Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Cascaded SO(3) Flight Control*
+# <span style="color:#7DD3FC">AeroVIO</span> Ground Station
 
-**Aerospace-grade real-time Ground Control Station (GCS) for autonomous drone VIO, 3D mapping & closed-loop flight.**
+### **See the state. Understand the flight.**
 
----
+Monocular Visual-Inertial Odometry · MSCKF State Estimation · Geometric SO(3) Control
 
-<!-- Badges -->
-<p>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-0EA5E9?style=for-the-badge" alt="MIT License" /></a>
-  <a href="bridge_server.py"><img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.8+" /></a>
-  <a href="index.html"><img src="https://img.shields.io/badge/Browser-Chrome%20%2F%20Firefox%20%2F%20Safari-1A1A1A?style=for-the-badge" alt="Browser" /></a>
-  <img src="https://img.shields.io/badge/Controller-50_Hz_SO(3)-10B981?style=for-the-badge" alt="50Hz SO3" />
-  <img src="https://img.shields.io/badge/VIO-MSCKF_/_VINS-8B5CF6?style=for-the-badge" alt="MSCKF" />
-</p>
+A telemetry-rich ground station for exploring drone state estimation, 3D mapping, and cascaded flight-control signals.
 
 <p>
-  <a href="https://github.com/iamakhilan/Drones-Dashboard"><img src="https://img.shields.io/github/stars/iamakhilan/Drones-Dashboard?style=social" alt="Stars" /></a>
-  <img src="https://img.shields.io/badge/status-DEMO_ready-success?style=flat-square" alt="demo" />
-  <img src="https://img.shields.io/badge/ROS_2-Humble-22314E?style=flat-square&logo=ros&logoColor=white" alt="ROS2" />
-  <img src="https://img.shields.io/badge/WebSocket-RFC6455-EF4444?style=flat-square" alt="ws" />
-  <img src="https://img.shields.io/badge/Tailwind-CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="tailwind" />
+  <a href="https://github.com/iamakhilan/Drones-Dashboard"><img src="https://img.shields.io/github/stars/iamakhilan/Drones-Dashboard?style=for-the-badge&logo=github&color=7C3AED&label=STARS" alt="GitHub stars" /></a>
+  <img src="https://img.shields.io/badge/CONTROL-50%20Hz-10B981?style=for-the-badge" alt="50 Hz controller" />
+  <img src="https://img.shields.io/badge/VIO-MSCKF-8B5CF6?style=for-the-badge" alt="MSCKF VIO" />
+  <img src="https://img.shields.io/badge/PYTHON-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.8+" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-06B6D4?style=for-the-badge" alt="MIT license" /></a>
 </p>
 
-[🚀 Live Demo](#-quickstart) · [📖 Docs](#-mathematical-formulations) · [🏗️ Architecture](#️-architecture) · [🐛 Issues](https://github.com/iamakhilan/Drones-Dashboard/issues)
+[Explore features](#-capabilities) · [Architecture](#-architecture) · [Mathematics](#-mathematical-formulations) · [Quickstart](#-quickstart)
 
 </div>
 
 ---
 
-<div align="center">
+## The flight-data problem
 
-> Companion repo: **[Drones_S5_CD2 — Controller & VIO Stack](https://github.com/Ravish2807/Drones_S5_CD2_3D_Mapping_using_normal_monocular_camera_controlling_Visual-Inertial-Odometry-VIO/tree/drones-controller)** — the 50 Hz `drones-controller` ROS 2 node this dashboard visualizes.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-</div>
+### <sub>01 / WITHOUT A UNIFIED VIEW</sub>
+
+- Scattered telemetry and disconnected plots
+- Body and camera frames are easy to confuse
+- Controller signals are hard to inspect together
+- Demo and live connectivity can be mistaken for one another
+
+</td>
+<td width="50%" valign="top">
+
+### <sub>02 / THE AEROVIO APPROACH</sub>
+
+- **One ground station** for state, map, camera, and controller telemetry
+- **Explicit frame separation** for body pose and camera pose
+- **Inspectable control pipeline** from position error to SO(3)
+- **Honest connection states** for bridge and live ROS 2 data
+
+</td>
+</tr>
+</table>
+
+> **Project scope:** AeroVIO currently includes a local dashboard and DEMO telemetry bridge. The live ROS 2 adapter and physical command forwarding are roadmap work; this repository should not be interpreted as a flight-certified controller.
 
 ---
 
@@ -95,64 +111,19 @@
 
 ## 🏗️ Architecture
 
-*Follow the data from sensing to estimation, control, transport, and visualization. The controller runs at 50 Hz; the dashboard consumes the bridge's normalized telemetry.*
+The architecture graphic below is a custom SVG designed for this README: dark technical canvas, color-coded stages, and a simplified data path. It remains readable without a tall Mermaid diagram.
 
-```mermaid
-flowchart LR
-  %% Keep this overview deliberately compact: details live in the sections below.
-  subgraph INPUTS["1 · Sensors"]
-    direction TB
-    CAM["Camera<br/>30 Hz"]
-    IMU["IMU<br/>200 Hz"]
-    AP["Autopilot status<br/>10 Hz"]
-  end
+<div align="center">
 
-  subgraph EST["2 · State estimation"]
-    direction TB
-    VIO["Monocular VIO / MSCKF<br/>Body pose · camera pose<br/>Sparse map (442 points)"]
-    STATE["Filtered pose + twist<br/>50 Hz"]
-    VIO --> STATE
-  end
+<img src="docs/aerovio-architecture.svg" alt="AeroVIO architecture: sensors, VIO state estimation, 50 Hz flight control, Python bridge, and dashboard" width="100%" />
 
-  subgraph CONTROL["3 · Flight control · 50 Hz"]
-    direction TB
-    POS["Position loop<br/>Position / velocity error"]
-    GEN["Attitude generator<br/>Desired thrust · R₍d₎ · q₍d₎"]
-    SO3["Geometric SO(3) loop<br/>Attitude / rate error"]
-    FSM["Flight state machine<br/>Arm · takeoff · navigate · failsafe"]
-    POS --> GEN --> SO3 --> FSM
-  end
-
-  subgraph GROUND["4 · Ground station"]
-    direction TB
-    BRIDGE["Python bridge<br/>HTTP :8000 · WebSocket /ws"]
-    UI["AeroVIO dashboard<br/>3D map · camera HUD · telemetry scopes"]
-    BRIDGE <--> |"Normalized JSON · ~50 Hz"| UI
-  end
-
-  CAM --> VIO
-  IMU --> VIO
-  AP --> STATE
-  STATE --> POS
-  FSM -->|"Command / telemetry contract"| BRIDGE
-  STATE -. "State telemetry" .-> BRIDGE
-  VIO -. "VIO telemetry" .-> BRIDGE
-
-  classDef sensor fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:1.5px;
-  classDef estimate fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:1.5px;
-  classDef control fill:#D1FAE5,stroke:#059669,color:#064E3B,stroke-width:1.5px;
-  classDef bridge fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:1.5px;
-  class CAM,IMU,AP sensor;
-  class VIO,STATE estimate;
-  class POS,GEN,SO3,FSM control;
-  class BRIDGE,UI bridge;
-```
+</div>
 
 <details>
-<summary><b>🔎 Data-flow notes</b></summary>
+<summary><b>Data-flow notes</b></summary>
 
-- **DEMO mode:** `bridge_server.py` replays the bundled CSV trajectories, synthesizes body/camera poses, computes demo controller telemetry, and broadcasts normalized JSON to `/ws` clients.
-- **LIVE mode:** the dashboard can connect to a bridge endpoint intended to receive normalized telemetry from a companion ROS 2 adapter. The `rclpy` live adapter and physical command forwarding remain roadmap items; this README does not imply the current bridge alone flies hardware.
+- **DEMO mode:** `bridge_server.py` replays bundled CSV trajectories, synthesizes body/camera poses, computes demo controller telemetry, and broadcasts normalized JSON to `/ws` clients.
+- **LIVE mode:** the dashboard can connect to a bridge endpoint intended to receive normalized telemetry from a companion ROS 2 adapter. The `rclpy` live adapter and physical command forwarding remain roadmap items.
 - **Connection status:** bridge connectivity and ROS 2/live-data availability are separate states.
 
 </details>
