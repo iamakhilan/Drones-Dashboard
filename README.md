@@ -123,7 +123,7 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 
 <div align="center">
 
-<img src="docs/aerovio-architecture.svg" width="100%" alt="AeroVIO architecture: sensors, VIO state estimation, cascaded control, Python bridge, and ground station." />
+<img src="docs/aerovio-architecture-v2.svg" width="100%" alt="AeroVIO architecture: sensors, VIO state estimation, cascaded control, Python bridge, and ground station." />
 
 <sub>System overview · color-coded stages · telemetry and control paths</sub>
 
