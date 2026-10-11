@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/diagrams/aerovio-hero-v2.svg" width="100%" alt="Animated AeroVIO hero: sensor data flows through VIO and geometric control into a telemetry monitor." />
+<img src="docs/diagrams/aerovio-hero-v3.svg" width="100%" alt="Animated AeroVIO hero: sensor data flows through VIO and geometric control into a telemetry monitor." />
 
 <br/>
 
