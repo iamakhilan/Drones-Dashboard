@@ -27,6 +27,8 @@
     ::-webkit-scrollbar-track{background:transparent}
     ::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:9999px}
     ::-webkit-scrollbar-thumb:hover{background:#9CA3AF}
+    @keyframes threshold-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.0)}50%{box-shadow:0 0 0 4px rgba(239,68,68,0.35)}}
+    .threshold-alert{animation:threshold-pulse 1s ease-in-out infinite; border-color:#EF4444 !important;}
     .reticle-grid{background-size:24px 24px;background-image:linear-gradient(to right, rgba(14,165,233,0.08) 1px, transparent 1px),linear-gradient(to bottom, rgba(14,165,233,0.08) 1px, transparent 1px)}
   </style>
   <script src="js/config.js"></script>
@@ -84,6 +86,13 @@
   <div id="stale-warning-banner" class="hidden bg-amber-400 text-stone-900 text-xs font-semibold px-4 py-2.5 text-center border-b border-amber-500 flex items-center justify-center gap-2">
     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
     <span id="stale-warning-text">Telemetry stale — no updates received. Check bridge connection or switch to DEMO.</span>
+  </div>
+  <div id="health-bar" class="flex flex-wrap items-center gap-3 px-4 py-1.5 bg-stone-900 text-stone-200 text-[11px] font-mono border-b border-stone-800">
+    <span class="flex items-center gap-1.5"><span id="health-dot" class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span><span id="health-ws-text">DEMO</span></span>
+    <span class="text-stone-600">|</span><span>lat <strong id="health-lat" class="text-white">—</strong></span>
+    <span class="text-stone-600">|</span><span>fps <strong id="health-fps" class="text-white">—</strong></span>
+    <span class="text-stone-600">|</span><span>dropped <strong id="health-dropped" class="text-white">0</strong></span>
+    <span class="text-stone-600">|</span><span id="health-alert" class="hidden px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-semibold">THRESHOLD</span>
   </div>
   <div id="sidebar-backdrop" class="fixed inset-0 bg-black/50 z-30 hidden lg:hidden" onclick="closeSidebarDrawer()"></div>
   <div class="flex flex-1 overflow-hidden relative">
@@ -150,6 +159,18 @@
           <button id="btn-traj-multi_axis" onclick="switchDataset('multi_axis')" class="traj-sel-btn min-h-[44px] px-3 py-1.5 hover:text-stone-900 rounded-lg transition whitespace-nowrap">Multi-Axis</button>
           <button id="btn-traj-stress" onclick="switchDataset('stress')" class="traj-sel-btn min-h-[44px] px-3 py-1.5 hover:text-stone-900 rounded-lg transition whitespace-nowrap">Stress</button>
         </div>
+      </div>
+      <!-- Playback Scrubber -->
+      <div id="scrubber-bar" class="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-stone-200 px-3 py-2 shadow-sm">
+        <button id="scrubber-play-btn" onclick="togglePlaybackPause()" class="min-h-[36px] min-w-[36px] w-9 h-9 inline-flex items-center justify-center bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition" title="Play/Pause">⏸</button>
+        <input id="scrubber-range" type="range" min="0" max="100" value="0" step="0.1" class="flex-1 min-w-[120px] accent-brand-600 h-2" oninput="onScrubberInput(this.value)" />
+        <span id="scrubber-label" class="text-xs font-mono text-stone-600 tabular-nums whitespace-nowrap">0.0s / 0.0s</span>
+        <div class="flex items-center gap-1 bg-stone-100 rounded-lg p-0.5 border border-stone-200">
+          <button onclick="setPlaybackSpeed(0.5)" id="speed-05" class="speed-btn min-h-[28px] px-2.5 py-1 text-xs font-mono font-semibold rounded-md text-stone-600 hover:bg-white">0.5×</button>
+          <button onclick="setPlaybackSpeed(1)" id="speed-10" class="speed-btn min-h-[28px] px-2.5 py-1 text-xs font-mono font-semibold rounded-md bg-white text-stone-900 shadow-sm border border-stone-200">1×</button>
+          <button onclick="setPlaybackSpeed(2)" id="speed-20" class="speed-btn min-h-[28px] px-2.5 py-1 text-xs font-mono font-semibold rounded-md text-stone-600 hover:bg-white">2×</button>
+        </div>
+        <button id="record-btn" onclick="toggleRecording()" class="min-h-[36px] px-3 py-1.5 bg-white border border-stone-300 text-stone-700 rounded-lg text-xs font-semibold hover:bg-stone-50 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Record</button>
       </div>
       <section class="bg-white rounded-2xl border border-stone-200/90 p-4 sm:p-5 shadow-sm" data-purpose="metrics-summary">
         <div class="flex flex-wrap items-center justify-between border-b border-stone-100 pb-3 mb-4 gap-2">
@@ -435,15 +456,104 @@
       const url=new URL(window.location); url.searchParams.set('dataset', datasetKey); window.history.replaceState({},'',url);
       showToast(`Loaded Dataset: ${realData.trajectories[datasetKey].title}`);
     }
+    let playbackSpeed = 1.0;
+    let playbackPaused = false;
+    let recordingBuffer = [];
+    let isRecording = false;
+    let fpsCounter = 0, fpsLastTime = performance.now(), droppedFrames = 0;
     function startTelemetryPlayback() {
       if (liveTimerInterval) clearInterval(liveTimerInterval);
       liveTimerInterval = setInterval(() => {
+        if (playbackPaused) return;
         const dataset = realData.trajectories[currentDatasetKey];
         if (!dataset || !dataset.points || dataset.points.length === 0) return;
-        const frame = dataset.points[currentFrameIndex];
-        currentFrameIndex = (currentFrameIndex + 1) % dataset.points.length;
-        updateDashboardWithFrame(frame, dataset.points);
+        // speed: 0.5x = every 2nd tick, 2x = 2 frames per tick
+        let steps = playbackSpeed >= 1 ? Math.round(playbackSpeed) : 1;
+        let skip = playbackSpeed < 1 ? Math.round(1/playbackSpeed) : 1;
+        // simple: 1x=1 frame, 2x=2 frames, 0.5x=1 frame every 2 ticks
+        if (playbackSpeed < 1) {
+          fpsCounter++;
+          if (fpsCounter % skip !== 0) { updateScrubberUI(); return; }
+        }
+        for (let s=0; s<steps; s++) {
+          const frame = dataset.points[currentFrameIndex];
+          currentFrameIndex = (currentFrameIndex + 1) % dataset.points.length;
+          updateDashboardWithFrame(frame, dataset.points);
+          if (isRecording) recordingBuffer.push(Object.assign({}, frame));
+        }
+        updateScrubberUI();
+        updateHealthBar();
+        fpsCounter++;
       }, 50);
+    }
+    function setPlaybackSpeed(s) {
+      playbackSpeed = s;
+      document.querySelectorAll('.speed-btn').forEach(b=>{ b.classList.remove('bg-white','text-stone-900','shadow-sm','border','border-stone-200'); b.classList.add('text-stone-600'); });
+      const ae = document.getElementById('speed-'+String(s*10).padStart(2,'0'));
+      if (ae) { ae.classList.add('bg-white','text-stone-900','shadow-sm','border','border-stone-200'); ae.classList.remove('text-stone-600'); }
+      showToast('Playback ' + s + 'x');
+    }
+    function togglePlaybackPause() {
+      playbackPaused = !playbackPaused;
+      const btn = document.getElementById('scrubber-play-btn');
+      if (btn) btn.textContent = playbackPaused ? '▶' : '⏸';
+      showToast(playbackPaused ? 'Paused' : 'Playing');
+    }
+    function onScrubberInput(pct) {
+      const dataset = realData.trajectories[currentDatasetKey];
+      if (!dataset || !dataset.points.length) return;
+      currentFrameIndex = Math.floor((parseFloat(pct)/100) * dataset.points.length) % dataset.points.length;
+      const frame = dataset.points[currentFrameIndex];
+      updateDashboardWithFrame(frame, dataset.points);
+      updateScrubberUI();
+    }
+    function updateScrubberUI() {
+      const dataset = realData.trajectories[currentDatasetKey];
+      if (!dataset || !dataset.points.length) return;
+      const pct = (currentFrameIndex / dataset.points.length) * 100;
+      const el = document.getElementById('scrubber-range');
+      if (el && document.activeElement !== el) el.value = pct.toFixed(1);
+      const lab = document.getElementById('scrubber-label');
+      if (lab) {
+        const cur = dataset.points[currentFrameIndex];
+        const t = cur ? cur.t.toFixed(1) : '0.0';
+        const total = dataset.points[dataset.points.length-1].t.toFixed(1);
+        lab.textContent = t + 's / ' + total + 's';
+      }
+    }
+    function toggleRecording() {
+      const btn = document.getElementById('record-btn');
+      if (!isRecording) {
+        recordingBuffer = []; isRecording = true;
+        if (btn) { btn.innerHTML = '<span class=\"w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse\"></span> Stop ('+recordingBuffer.length+')'; btn.classList.add('bg-red-50','border-red-300','text-red-700'); }
+        showToast('Recording started');
+      } else {
+        isRecording = false;
+        if (btn) { btn.innerHTML = '<span class=\"w-2 h-2 rounded-full bg-red-500 inline-block\"></span> Record'; btn.classList.remove('bg-red-50','border-red-300','text-red-700'); }
+        if (recordingBuffer.length === 0) { showToast('No frames recorded'); return; }
+        const header = Object.keys(recordingBuffer[0]).join(',');
+        const rows = recordingBuffer.map(r=>Object.values(r).join(',')).join('\n');
+        const blob = new Blob([header+'\n'+rows], {type:'text/csv'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download='aerovio_capture_'+Date.now()+'.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        showToast('Exported ' + recordingBuffer.length + ' frames as CSV');
+      }
+    }
+    function updateHealthBar() {
+      const lat = (window.wsBridge && window.wsBridge.latencyMs != null) ? window.wsBridge.latencyMs + ' ms' : '—';
+      const wsText = (window.wsBridge && window.wsBridge.status) ? window.wsBridge.status : 'DEMO';
+      const hl = document.getElementById('health-lat'); if (hl) hl.textContent = lat;
+      const hw = document.getElementById('health-ws-text'); if (hw) hw.textContent = wsText;
+      const hd = document.getElementById('health-dot');
+      if (hd) hd.className = 'w-2 h-2 rounded-full inline-block ' + (wsText==='CONNECTED' ? 'bg-emerald-500' : wsText==='CONNECTING' ? 'bg-amber-500' : 'bg-stone-500');
+      // FPS calc
+      const now = performance.now();
+      if (now - fpsLastTime >= 1000) {
+        const fps = Math.round(fpsCounter * 1000 / (now - fpsLastTime));
+        const hf = document.getElementById('health-fps'); if (hf) hf.textContent = fps + ' fps';
+        fpsCounter = 0; fpsLastTime = now;
+      }
+      const hdr = document.getElementById('health-dropped'); if (hdr) hdr.textContent = droppedFrames;
     }
     function updateDashboardWithFrame(frame, allPoints) {
       const px = frame.px; const py = frame.py; const pz = frame.pz;
@@ -460,7 +570,7 @@
       setElText('tel-euler', `R: ${(euler.roll>=0?'+':'')+euler.roll.toFixed(1)}° | P: ${(euler.pitch>=0?'+':'')+euler.pitch.toFixed(1)}° | Y: ${euler.yaw.toFixed(1)}°`);
       setElText('tel-rates', `[${(euler.roll*0.01).toFixed(2)}, ${(euler.pitch*0.01).toFixed(2)}, ${(euler.yaw*0.005).toFixed(2)}] rad/s`);
       setElText('tel-quat', `[${frame.qw.toFixed(3)}, ${frame.qx.toFixed(3)}, ${frame.qy.toFixed(3)}, ${frame.qz.toFixed(3)}]`);
-      const targetP = [20.0, 5.0, 20.0];
+      const targetP = (window.APP_CONFIG && window.APP_CONFIG.targetP) || [20.0, 5.0, 20.0];
       const epNorm = Math.sqrt((px - targetP[0])**2 + (py - targetP[1])**2 + (pz - targetP[2])**2);
       const evNorm = speed;
       const FdNorm = Math.sqrt((-0.5*(px-targetP[0]))**2 + (-0.5*(py-targetP[1]))**2 + (-0.5*(pz-targetP[2]) + 1.5*9.81)**2);
@@ -482,6 +592,19 @@
       const hudVw = document.getElementById('hud-vw');
       if (hudVw) hudVw.innerHTML = `V_WB: [ <span class="text-white">vx: ${vx.toFixed(2)}</span>, <span class="text-white">vy: ${vy.toFixed(2)}</span>, <span class="text-emerald-400">vz: ${vz.toFixed(2)}</span> ] m/s`;
       const banner=document.getElementById('stale-warning-banner'); if(banner) banner.classList.add('hidden');
+      // threshold pulse via APP_CONFIG
+      try {
+        const th = (window.APP_CONFIG && window.APP_CONFIG.thresholds) || {posErrNorm:2.0, attErrNorm:0.10, covTrace:1e-3};
+        const alertEl = document.getElementById('health-alert');
+        let tripped = (epNorm > th.posErrNorm) || ((0.015 + Math.abs(Math.sin(frame.t*0.5))*0.01) > th.attErrNorm);
+        if (tripped) {
+          document.getElementById('ctrl-ep-norm')?.closest('div.p-3\.5')?.classList.add('threshold-alert');
+          if (alertEl) alertEl.classList.remove('hidden');
+        } else {
+          document.querySelectorAll('.threshold-alert').forEach(e=>e.classList.remove('threshold-alert'));
+          if (alertEl) alertEl.classList.add('hidden');
+        }
+      } catch(e) {}
       if (window.graphs && typeof window.graphs.pushTelemetry === 'function' && !graphsPaused) {
         const ax = frame.vx * 0.2; const ay = frame.vy * 0.2; const az = 9.81 + (frame.vz * 0.1);
         window.graphs.pushTelemetry({ timestamp: Date.now(), acceleration: { ax, ay, az }, velocity: { vx: frame.vx, vy: frame.vy, vz: frame.vz }, position: { x: frame.px, y: frame.py, z: frame.pz } });
@@ -584,12 +707,16 @@
       const container=document.getElementById('search-results-list'); if(!container) return;
       const q=query.toLowerCase(); const filtered=searchTopics.filter(t=>t.name.toLowerCase().includes(q)||t.desc.toLowerCase().includes(q));
       if(filtered.length===0){ container.innerHTML=`<div class="py-6 text-center text-stone-500 font-sans">No topics match</div>`; return; }
-      container.innerHTML=filtered.map(t=>`<div class="py-2.5 px-3 hover:bg-stone-50 cursor-pointer rounded-lg transition min-h-[44px] flex flex-col justify-center" onclick="selectSearchItem('${t.name}')"><div class="flex items-center justify-between gap-2"><span class="font-bold text-stone-900 text-xs">${t.name}</span><span class="text-[10px] text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">${t.type}</span></div><p class="text-[11px] text-stone-600 font-sans mt-0.5">${t.desc}</p></div>`).join('');
+      container.innerHTML=filtered.map(t=>`<div class="py-2.5 px-3 hover:bg-stone-50 cursor-pointer rounded-lg transition min-h-[44px] flex flex-col justify-center group" onclick="selectSearchItem('${t.name}')"><div class="flex items-center justify-between gap-2"><span class="font-bold text-stone-900 text-xs">${t.name}</span><span class="text-[10px] text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">${t.type}</span></div><p class="text-[11px] text-stone-600 font-sans mt-0.5">${t.desc}</p><div class="flex gap-1 mt-1"><button onclick="event.stopPropagation(); copyTopicCmd('${t.name}')" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-600">copy rostopic echo</button><span class="text-[10px] text-stone-400 font-mono">10 Hz</span></div></div>`).join('');
     }
+    function copyTopicCmd(topic){ const cmd='rostopic echo '+topic; navigator.clipboard.writeText(cmd).then(()=>showToast('Copied: '+cmd)).catch(()=>showToast(cmd)); }
     function selectSearchItem(topicName){
       const gi=document.getElementById('global-search-input'); if(gi) gi.value=topicName;
       const mi=document.getElementById('search-modal-input'); if(mi) mi.value=topicName;
       closeSearchModal(); showToast(`Selected ROS 2 topic: ${topicName}`);
+      // highlight row in #nodes table
+      document.querySelectorAll('#nodes tbody tr').forEach(tr=>{ tr.classList.remove('bg-amber-50','ring-1','ring-amber-300'); const td=tr.querySelector('td:nth-child(2)'); if(td && td.textContent.trim()===topicName){ tr.classList.add('bg-amber-50','ring-1','ring-amber-300'); tr.scrollIntoView({behavior:'smooth', block:'center'}); }});
+      const sec=document.getElementById('nodes'); if(sec) sec.scrollIntoView({behavior:'smooth'});
     }
     function initKeyboardShortcuts(){
       document.addEventListener('keydown',(e)=>{
