@@ -181,8 +181,8 @@ $$
 | Parameter | Value |
 |---|---|
 | $m$ | $1.50\ \mathrm{kg}$ |
-| $K_p$ | $\operatorname{diag}(0.5,\,0.5,\,0.5)$ |
-| $K_v$ | $\operatorname{diag}(0.2,\,0.2,\,0.2)$ |
+| $K_p$ | `diag(0.5, 0.5, 0.5)` |
+| $K_v$ | `diag(0.2, 0.2, 0.2)` |
 | $g$ | $9.81\ \mathrm{m/s^2}$ |
 
 ### ② Attitude Generator
@@ -216,7 +216,7 @@ $$
 
 | Parameter | Value |
 |---|---|
-| $J$ | $\operatorname{diag}(0.02,\,0.02,\,0.04)\ \mathrm{kg\,m^2}$ |
+| $J$ | `diag(0.02, 0.02, 0.04) kg·m²` |
 | $k_R$ | $[4.85,\,4.85,\,2.50]$ |
 | $k_{\Omega}$ | $[0.35,\,0.35,\,0.20]$ |
 
