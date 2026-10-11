@@ -167,16 +167,16 @@ flowchart LR
 
 The position and velocity tracking errors are
 
-$
+$$
 \mathbf{e}_p = \mathbf{p} - \mathbf{p}_d, \qquad
 \mathbf{e}_v = \mathbf{v} - \mathbf{v}_d.
-$
+$$
 
 The desired force is
 
-$
+$$
 \mathbf{F}_d = -K_p\mathbf{e}_p - K_v\mathbf{e}_v + mg\mathbf{e}_3 + m\mathbf{a}_d.
-$
+$$
 
 | Parameter | Value |
 |---|---|
@@ -189,11 +189,11 @@ $
 
 The desired body thrust axis and thrust magnitude are
 
-$
+$$
 \mathbf{b}_{3d} = \frac{\mathbf{F}_d}{\lVert\mathbf{F}_d\rVert},
 \qquad
 T_d = \lVert\mathbf{F}_d\rVert.
-$
+$$
 
 The generator uses the thrust direction and yaw reference to construct the desired rotation $R_d \in \mathrm{SO}(3)$ and quaternion $q_d$.
 
@@ -201,18 +201,18 @@ The generator uses the thrust direction and yaw reference to construct the desir
 
 The attitude and angular-velocity errors are
 
-$
+$$
 \mathbf{e}_R = \frac{1}{2}\left(R_d^T R - R^T R_d\right)^{\vee},
 \qquad
 \mathbf{e}_{\omega} = \boldsymbol{\omega} - R^T R_d\boldsymbol{\omega}_d.
-$
+$$
 
 The desired control moment is
 
-$
+$$
 \mathbf{M}_d = -k_R\mathbf{e}_R - k_{\Omega}\mathbf{e}_{\omega}
                + \boldsymbol{\omega}\times J\boldsymbol{\omega}.
-$
+$$
 
 | Parameter | Value |
 |---|---|
@@ -224,11 +224,11 @@ $
 
 The camera pose is derived from the body pose and the body-to-camera transform:
 
-$
+$$
 T_{WC} = T_{WB}T_{BC},
 \qquad
 \mathbf{t}_{BC} = [0.10,\,0.00,\,-0.04]^T\ \mathrm{m}.
-$
+$$
 
 The camera is mounted **10 cm forward and 4 cm downward** relative to the body frame. The dashboard can render the $T_{WB}$ and $T_{WC}$ trajectories independently.
 
