@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+html{scroll-padding-top:56px;scroll-behavior:smooth}
+body{background-color:#F6F6F7;color:#202223;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:9999px}
+::-webkit-scrollbar-thumb:hover{background:#9CA3AF}
+@keyframes threshold-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.0)}50%{box-shadow:0 0 0 4px rgba(239,68,68,0.35)}}
+.threshold-alert{animation:threshold-pulse 1s ease-in-out infinite; border-color:#EF4444 !important;}
+.reticle-grid{background-size:24px 24px;background-image:linear-gradient(to right, rgba(14,165,233,0.08) 1px, transparent 1px),linear-gradient(to bottom, rgba(14,165,233,0.08) 1px, transparent 1px)}

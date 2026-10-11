@@ -4,33 +4,8 @@
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
   <title>AeroVIO Ground Station — Monocular Visual-Inertial Odometry & 50 Hz Cascaded SO(3) Controller</title>
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: { 50: '#F0F9FF', 100: '#E0F2FE', 500: '#0EA5E9', 600: '#0284C7', 700: '#0369A1' }
-          },
-          fontFamily: {
-            sans: ['-apple-system','BlinkMacSystemFont','\"Segoe UI\"','Roboto','Inter','Helvetica','Arial','sans-serif'],
-            mono: ['\"SF Mono\"','Monaco','Menlo','Consolas','\"Ubuntu Mono\"','monospace']
-          }
-        }
-      }
-    }
-  </script>
-  <style>
-    html{scroll-padding-top:56px;scroll-behavior:smooth}
-    body{background-color:#F6F6F7;color:#202223;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-    ::-webkit-scrollbar{width:6px;height:6px}
-    ::-webkit-scrollbar-track{background:transparent}
-    ::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:9999px}
-    ::-webkit-scrollbar-thumb:hover{background:#9CA3AF}
-    @keyframes threshold-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.0)}50%{box-shadow:0 0 0 4px rgba(239,68,68,0.35)}}
-    .threshold-alert{animation:threshold-pulse 1s ease-in-out infinite; border-color:#EF4444 !important;}
-    .reticle-grid{background-size:24px 24px;background-image:linear-gradient(to right, rgba(14,165,233,0.08) 1px, transparent 1px),linear-gradient(to bottom, rgba(14,165,233,0.08) 1px, transparent 1px)}
-  </style>
+  <link rel="stylesheet" href="css/output.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
   <script src="js/config.js"></script>
   <script src="data/real_data.js"></script>
   <script src="js/telemetry.js"></script>
