@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/diagrams/aerovio-hero-v4.svg" width="100%" alt="Animated AeroVIO hero: sensor data flows through VIO and geometric control into a telemetry monitor." />
+<img src="docs/diagrams/aerovio-hero.svg" width="100%" alt="Animated AeroVIO hero: sensor data flows through VIO and geometric control into a telemetry monitor." />
 
 <br/>
 
@@ -61,10 +61,6 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 </tr>
 </table>
 
-> **Project scope:** AeroVIO currently includes a local dashboard and DEMO telemetry bridge. The live ROS 2 adapter and physical command forwarding are roadmap work; this repository should not be interpreted as a flight-certified controller.
-
----
-
 ## ✨ Why AeroVIO?
 
 | | |
@@ -123,7 +119,7 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 
 <div align="center">
 
-<img src="docs/aerovio-architecture-v2.svg" width="100%" alt="AeroVIO architecture: sensors, VIO state estimation, cascaded control, Python bridge, and ground station." />
+<img src="docs/aerovio-architecture.svg" width="100%" alt="AeroVIO architecture: sensors, VIO state estimation, cascaded control, Python bridge, and ground station." />
 
 <sub>System overview · color-coded stages · telemetry and control paths</sub>
 

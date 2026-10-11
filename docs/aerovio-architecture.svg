@@ -10,7 +10,7 @@
  <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
  <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#7DD3FC"/></marker>
  <marker id="arrowV" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#C4B5FD"/></marker>
-</defs>
+<style>.flow{stroke-dasharray:7 10;animation:flow 1.8s linear infinite}.flow-soft{stroke-dasharray:4 8;animation:flow 2.8s linear infinite}@keyframes flow{to{stroke-dashoffset:-34}}@media(prefers-reduced-motion:reduce){.flow,.flow-soft{animation:none}}</style></defs>
 <rect width="1200" height="650" rx="22" fill="url(#bg)"/><rect width="1200" height="650" rx="22" fill="url(#grid)"/>
 <circle cx="1090" cy="80" r="170" fill="#7C3AED" opacity=".06"/><circle cx="100" cy="590" r="200" fill="#06B6D4" opacity=".05"/>
 <text x="56" y="55" fill="#7DD3FC" font-family="Arial,sans-serif" font-size="13" font-weight="700" letter-spacing="3">AEROVIO / SYSTEM MAP</text>
@@ -46,12 +46,7 @@
  <g fill="#F1F5F9"><text x="866" y="386" font-size="16" font-weight="700">AeroVIO dashboard</text><text x="866" y="411" font-size="12" fill="#CBD5E1">3D map · camera HUD</text><text x="866" y="433" font-size="12" fill="#CBD5E1">Telemetry scopes · controller view</text><text x="866" y="453" font-size="10" fill="#94A3B8">GROUND STATION UI</text></g>
  <text x="866" y="514" fill="#94A3B8" font-size="11">LIVE ROS 2 adapter</text><text x="866" y="535" fill="#64748B" font-size="11">Planned integration · not yet hardware control</text>
 </g>
-<!-- arrows -->
-<g fill="none" stroke-width="2" stroke-linecap="round" marker-end="url(#arrow)">
- <path d="M228 244H268"/><path d="M228 372H254V303H268"/><path d="M502 250H530V238H538"/><path d="M502 399H530V359H538"/><path d="M673 290V302"/><path d="M673 410V422"/><path d="M798 476H822V276H834"/><path d="M994 334V346"/>
-</g>
-<path d="M502 400H522V560H830V410H834" fill="none" stroke="#C4B5FD" stroke-width="1.5" stroke-dasharray="5 6" marker-end="url(#arrowV)" opacity=".9"/>
-<g filter="url(#glow)"><circle cx="248" cy="244" r="3" fill="#7DD3FC"/><circle cx="516" cy="250" r="3" fill="#C4B5FD"/><circle cx="816" cy="476" r="3" fill="#6EE7B7"/></g>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M228 244H268" stroke="#7DD3FC" class="flow" marker-end="url(#arrow)"/><path d="M228 372H250V320H268" stroke="#7DD3FC" class="flow" marker-end="url(#arrow)"/><path d="M502 244H538" stroke="#C4B5FD" class="flow" marker-end="url(#arrowV)"/><path d="M502 399H526V360H538" stroke="#C4B5FD" class="flow" marker-end="url(#arrowV)"/><path d="M673 290V310" stroke="#6EE7B7" class="flow" marker-end="url(#arrow)"/><path d="M673 410V430" stroke="#6EE7B7" class="flow" marker-end="url(#arrow)"/><path d="M798 240H820V276H838" stroke="#7DD3FC" class="flow" marker-end="url(#arrow)"/><path d="M994 334V350" stroke="#FCD34D" class="flow" marker-end="url(#arrow)"/><path d="M502 420H522V568H830V440H838" stroke="#C4B5FD" stroke-width="1.6" class="flow-soft" marker-end="url(#arrowV)" opacity=".9"/></g>
 <text x="56" y="610" fill="#64748B" font-family="Arial,sans-serif" font-size="11">ARCHITECTURE OVERVIEW · Topic names and rates are documented in the README below.</text>
 <text x="1144" y="610" text-anchor="end" fill="#64748B" font-family="Arial,sans-serif" font-size="11">AEROVIO / 01</text>
 </svg>
