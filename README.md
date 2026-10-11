@@ -24,8 +24,6 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 
 ---
 
-## The flight-data problem
-
 <div align="center">
 
 <img src="docs/diagrams/aerovio-comparison.svg" width="100%" alt="Animated visual comparison of scattered drone telemetry versus AeroVIO's unified state estimation, flight control, and ground station pipeline." />
@@ -173,9 +171,9 @@ $$
 The desired body thrust axis and thrust magnitude are
 
 $$
-\mathbf{b}_{3d} = \frac{\mathbf{F}_d}{\lVert\mathbf{F}_d\rVert},
+\mathbf{b}_{3d} = \frac{\mathbf{F}_d}{\left\|\mathbf{F}_d\right\|},
 \qquad
-T_d = \lVert\mathbf{F}_d\rVert.
+T_d = \left\|\mathbf{F}_d\right\|.
 $$
 
 The generator uses the thrust direction and yaw reference to construct the desired rotation $R_d \in \mathrm{SO}(3)$ and quaternion $q_d$.
