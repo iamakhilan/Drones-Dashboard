@@ -1,8 +1,5 @@
 <div align="center">
 
-<!-- ============ HERO BANNER ============ -->
-<img src="drone_prototype_render.png" width="720" alt="AeroVIO — Autonomous Drone VIO Platform" />
-
 # 🛰️ AeroVIO Ground Station
 
 ### *Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Cascaded SO(3) Flight Control*
@@ -48,40 +45,10 @@
 |---|---|
 | 🎯 **Truthful by design** | Explicitly separates **WebSocket bridge** connectivity from **ROS 2 live-node** connectivity — no fake "connected" states. |
 | ⚡ **50 Hz closed-loop** | Full cascaded pipeline at controller rate: Position → Attitude Generator → Geometric SO(3) → FSM → ArduPilot. |
-| 👁️ **Frame-rigorous VIO** | Strict `T_WB` (body) vs `T_WC = T_WB · T_BC` (camera optical) separation. No shortcuts. |
+| 👁️ **Frame-rigorous VIO** | Strict `T_WB` (body) vs $T_{WC} = T_{WB} \cdot T_{BC}$ (camera optical) separation. No shortcuts. |
 | 🗺️ **Real 3D mapping** | 442-point `synthetic_orbit_scanned_map.pcd` reconstruction, multi-projection (Isometric / Top XY / Side XZ). |
 | 🔌 **Zero-dependency bridge** | Pure stdlib Python — `http.server` + hand-rolled RFC 6455 WebSocket. No `pip install`. |
 | 📡 **5 flight regimes** | Calibrated datasets: `orbit` · `hover` · `straight` · `multi_axis` · `stress` (500 pts each). |
-
----
-
-## 🖼️ Screenshots
-
-<div align="center">
-
-| Ground Station Dashboard | Monocular Tracking Feed | 3D Spatial Map |
-|---|---|---|
-| <img src="drone_vio_screen_89764d85cb77486e852b5b488c2f5fff.png" width="360" alt="Dashboard" /> | <img src="monocular_tracking_feed.png" width="360" alt="Camera feed" /> | <img src="stitch_screen_5f02e90f849a4a9b90ee2d2da12b516a.png" width="360" alt="3D map" /> |
-| *KPI cards · SO(3) telemetry · oscilloscope graphs* | *KLT velocity vectors · Brown-Conrady · reticle grid* | *442 landmarks · T_WB / T_WC trajectories* |
-
-*Light theme · #F6F6F7 surfaces · stone neutrals · SF Mono / Inter*
-
-</div>
-
-<details>
-<summary><b>📸 More renders</b></summary>
-
-<br/>
-
-<div align="center">
-
-| Prototype Airframe | Light Render |
-|---|---|
-| <img src="drone_prototype_render.png" width="400" alt="prototype" /> | <img src="drone_render_light.png" width="400" alt="light render" /> |
-
-</div>
-
-</details>
 
 ---
 
@@ -97,15 +64,15 @@
 - Brown-Conrady camera model overlay
 - Optical reticle + epipolar toggle
 - 442-landmark PCD map (`HEIGHT=1`)
-- `T_WC = T_WB · T_BC` projection
+- $T_{WC} = T_{WB} \cdot T_{BC}$ projection
 
 </td>
 <td width="33%" valign="top">
 
 #### 🎛️ 50 Hz Cascaded Control
-- **Outer:** `F_d = -K_p e_p - K_v e_v + m g e₃ + m a_d`
-- **Generator:** `b₃d = F_d/‖F_d‖`, `T_d = ‖F_d‖`, `R_d / q_d`
-- **Inner:** `e_R = ½(R_dᵀR − RᵀR_d)∨`, `M_d = −k_R e_R − k_Ω e_ω + ω×Jω`
+- **Outer:** $F_d = -K_p e_p - K_v e_v + m g e_3 + m a_d$
+- **Generator:** $b_{3d} = F_d/\lVert F_d \rVert$, $T_d = \lVert F_d \rVert$, $R_d / q_d$
+- **Inner:** $e_R = \tfrac{1}{2}(R_d^T R - R^T R_d)^{\vee}$, $M_d = -k_R e_R - k_{\Omega} e_{\omega} + \omega \times J \omega$
 - FSM: `IDLE → ARMING → TAKEOFF → NAVIGATING → HOVER / FAILSAFE`
 - Watchdog heartbeat + failsafe
 
@@ -188,7 +155,7 @@ flowchart TB
 <details>
 <summary><b>🔍 Data-flow notes</b></summary>
 
-- **DEMO mode** — `bridge_server.py` replays CSV trajectories, synthesizes `T_WB`/`T_WC`, computes controller outputs on-the-fly @ 50 Hz, broadcasts normalized JSON to all `/ws` clients.
+- **DEMO mode** — `bridge_server.py` replays CSV trajectories, synthesizes $T_{WB}$/$T_{WC}$, computes controller outputs on-the-fly @ 50 Hz, broadcasts normalized JSON to all `/ws` clients.
 - **LIVE mode** — bridge forwards frames from a companion `rclpy` adapter subscribing to real ROS 2 topics. Dashboard unchanged.
 - **Truthful status** — header pills show `Bridge: ● Connected` vs `ROS 2: ○ DEMO` independently. No conflation.
 
@@ -237,9 +204,9 @@ Produces $R_d \in \mathrm{SO}(3)$ and $q_d$ (desired quaternion) from thrust dir
 
 ### ④ Frame Extrinsics
 
-$$T_{WC} = T_{WB} \cdot T_{BC} \qquad T_{BC} = [+0.10,\ 0.00,\ -0.04]\ \text{m}$$
+$$T_{WC} = T_{WB} \cdot T_{BC} \qquad T_{BC} = [+0.10,\, 0.00,\, -0.04]\,\text{m}$$
 
-Camera mounted **10 cm forward, 4 cm downward** on airframe. Dashboard renders both trajectories independently — toggle `T_WB` / `T_WC` layers in 3D view.
+Camera mounted **10 cm forward, 4 cm downward** on airframe. Dashboard renders both trajectories independently — toggle $T_{WB}$ / $T_{WC}$ layers in 3D view.
 
 ---
 
@@ -345,7 +312,7 @@ Or just open `index.html` directly — set the WebSocket URL in the header input
 | Action | How |
 |---|---|
 | **Switch dataset** | Top bar pill selector — `orbit` / `hover` / `straight` / `multi_axis` / `stress` (also `?dataset=orbit` URL param) |
-| **Toggle trajectories** | 3D view — `T_WB` (body) vs `T_WC` (camera optical) layers |
+| **Toggle trajectories** | 3D view — $T_{WB}$ (body) vs $T_{WC}$ (camera optical) layers |
 | **Change projection** | Isometric · Top (XY) · Side (XZ) buttons above 3D canvas |
 | **Inspect signals** | Scroll oscilloscope graphs — hover for crosshair, toggle Ax/Ay/Az channels, Pause / Clear / Undo |
 | **Search topics** | `⌘ K` or click header search — filters ROS 2 topics + params |
@@ -405,9 +372,6 @@ Drones-Dashboard/
 │   ├── synthetic_multi_axis_estimated_trajectory.csv  # 500 pts — coupled axes
 │   ├── synthetic_stress_estimated_trajectory.csv      # 500 pts — aggressive
 │   └── synthetic_orbit_scanned_map.pcd               # 442 landmarks — PCD v.7 ASCII
-├── drone_prototype_render.png
-├── drone_render_light.png
-├── monocular_tracking_feed.png
 └── README.md
 ```
 
@@ -419,7 +383,7 @@ Drones-Dashboard/
 |:---:|---|
 | ✅ | Light-themed GCS with KPI cards + SO(3) matrices + topic inspector |
 | ✅ | Monocular HUD — KLT vectors, reticle, Brown-Conrady params |
-| ✅ | 3D map — 442-pt PCD + `T_WB`/`T_WC` trajectories + 3 projections |
+| ✅ | 3D map — 442-pt PCD + $T_{WB}$/$T_{WC}$ trajectories + 3 projections |
 | ✅ | 50 Hz cascaded controller telemetry (outer / generator / inner / FSM) |
 | ✅ | 3× 20 s SVG oscilloscopes with channel toggles + crosshair |
 | ✅ | DEMO replay — 5 datasets @ 50 Hz, synthetic KLT + controller synthesis |
