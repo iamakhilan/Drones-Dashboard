@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+<title id="title">AeroVIO system architecture</title><desc id="desc">A dark technical architecture illustration showing sensors, visual inertial odometry, cascaded flight control, telemetry bridge, and ground station dashboard.</desc>
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#090D18"/><stop offset="1" stop-color="#11172A"/></linearGradient>
+ <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#123A55"/><stop offset="1" stop-color="#10283B"/></linearGradient>
+ <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#30204F"/><stop offset="1" stop-color="#1D1938"/></linearGradient>
+ <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#123D36"/><stop offset="1" stop-color="#102A2C"/></linearGradient>
+ <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#49331D"/><stop offset="1" stop-color="#28202A"/></linearGradient>
+ <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#A7B5D5" stroke-opacity=".075" stroke-width="1"/></pattern>
+ <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#7DD3FC"/></marker>
+ <marker id="arrowV" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#C4B5FD"/></marker>
+<style>.flow{stroke-dasharray:7 10;animation:flow 1.8s linear infinite}.flow-soft{stroke-dasharray:4 8;animation:flow 2.8s linear infinite}@keyframes flow{to{stroke-dashoffset:-34}}@media(prefers-reduced-motion:reduce){.flow,.flow-soft{animation:none}}</style></defs>
+<rect width="1200" height="650" rx="22" fill="url(#bg)"/><rect width="1200" height="650" rx="22" fill="url(#grid)"/>
+<circle cx="1090" cy="80" r="170" fill="#7C3AED" opacity=".06"/><circle cx="100" cy="590" r="200" fill="#06B6D4" opacity=".05"/>
+<text x="56" y="55" fill="#7DD3FC" font-family="Arial,sans-serif" font-size="13" font-weight="700" letter-spacing="3">AEROVIO / SYSTEM MAP</text>
+<text x="56" y="91" fill="#F8FAFC" font-family="Arial,sans-serif" font-size="27" font-weight="700">From sensor fusion to flight telemetry</text>
+<text x="56" y="118" fill="#94A3B8" font-family="Arial,sans-serif" font-size="14">A compact view of the data path · 50 Hz cascaded controller · DEMO / planned LIVE integration</text>
+<!-- stage headers -->
+<g font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="1.5">
+ <text x="58" y="168" fill="#7DD3FC">01 / INPUTS</text><text x="292" y="168" fill="#C4B5FD">02 / ESTIMATION</text><text x="552" y="168" fill="#6EE7B7">03 / CONTROL</text><text x="866" y="168" fill="#FCD34D">04 / GROUND STATION</text>
+</g>
+<!-- cards -->
+<g stroke-width="1.4">
+ <rect x="54" y="190" width="174" height="116" rx="14" fill="url(#cyan)" stroke="#0EA5E9" stroke-opacity=".75"/>
+ <rect x="54" y="326" width="174" height="92" rx="14" fill="#141F31" stroke="#475569"/>
+ <rect x="282" y="190" width="220" height="142" rx="14" fill="url(#violet)" stroke="#A78BFA" stroke-opacity=".8"/>
+ <rect x="282" y="352" width="220" height="94" rx="14" fill="#1A1A34" stroke="#8B5CF6" stroke-opacity=".7"/>
+ <rect x="548" y="190" width="250" height="100" rx="14" fill="url(#green)" stroke="#34D399" stroke-opacity=".8"/>
+ <rect x="548" y="310" width="250" height="100" rx="14" fill="url(#green)" stroke="#34D399" stroke-opacity=".8"/>
+ <rect x="548" y="430" width="250" height="94" rx="14" fill="#132D2C" stroke="#10B981" stroke-opacity=".8"/>
+ <rect x="844" y="218" width="300" height="116" rx="14" fill="url(#amber)" stroke="#FBBF24" stroke-opacity=".8"/>
+ <rect x="844" y="356" width="300" height="110" rx="14" fill="#151D30" stroke="#64748B"/>
+ <rect x="844" y="488" width="300" height="64" rx="12" fill="#101B2A" stroke="#334155"/>
+</g>
+<!-- card text -->
+<g font-family="Arial,sans-serif">
+ <g fill="#E0F2FE"><text x="74" y="222" font-size="15" font-weight="700">Camera</text><text x="74" y="246" font-size="12" fill="#BAE6FD">Monocular image stream</text><text x="74" y="269" font-size="12" fill="#BAE6FD">30 Hz · image_raw</text><text x="74" y="289" font-size="10" fill="#7DD3FC">OPTICAL FEATURES</text></g>
+ <g fill="#E2E8F0"><text x="74" y="355" font-size="15" font-weight="700">IMU + autopilot</text><text x="74" y="379" font-size="12" fill="#CBD5E1">IMU · 200 Hz</text><text x="74" y="399" font-size="12" fill="#CBD5E1">Status · 10 Hz</text></g>
+ <g fill="#F5F3FF"><text x="302" y="222" font-size="15" font-weight="700">Monocular VIO / MSCKF</text><text x="302" y="249" font-size="12" fill="#DDD6FE">Body pose · T_WB</text><text x="302" y="270" font-size="12" fill="#DDD6FE">Camera pose · T_WC</text><text x="302" y="291" font-size="12" fill="#DDD6FE">Sparse 3D map · 442 pts</text><text x="302" y="314" font-size="10" fill="#C4B5FD">POSE + MAPPING</text></g>
+ <g fill="#EDE9FE"><text x="302" y="383" font-size="14" font-weight="700">Filtered vehicle state</text><text x="302" y="407" font-size="12" fill="#DDD6FE">Pose + twist · 50 Hz</text><text x="302" y="428" font-size="11" fill="#C4B5FD">Frame-aware telemetry</text></g>
+ <g fill="#D1FAE5"><text x="568" y="220" font-size="15" font-weight="700">① Position loop</text><text x="568" y="245" font-size="12">eₚ · eᵥ → desired force Fd</text><text x="568" y="267" font-size="11" fill="#6EE7B7">OUTER LOOP</text></g>
+ <g fill="#D1FAE5"><text x="568" y="340" font-size="15" font-weight="700">② Attitude generator</text><text x="568" y="365" font-size="12">Thrust axis · Rd · qd</text><text x="568" y="387" font-size="11" fill="#6EE7B7">DESIRED ORIENTATION</text></g>
+ <g fill="#D1FAE5"><text x="568" y="460" font-size="15" font-weight="700">③ SO(3) + flight state</text><text x="568" y="484" font-size="12">Attitude / rate error · FSM</text><text x="568" y="506" font-size="11" fill="#6EE7B7">50 HZ CONTROL PIPELINE</text></g>
+ <g fill="#FEF3C7"><text x="866" y="250" font-size="16" font-weight="700">Python bridge</text><text x="866" y="275" font-size="12" fill="#FDE68A">HTTP :8000 · WebSocket /ws</text><text x="866" y="299" font-size="12" fill="#FDE68A">DEMO replay / normalized data</text><text x="866" y="319" font-size="10" fill="#FCD34D">TRANSPORT LAYER</text></g>
+ <g fill="#F1F5F9"><text x="866" y="386" font-size="16" font-weight="700">AeroVIO dashboard</text><text x="866" y="411" font-size="12" fill="#CBD5E1">3D map · camera HUD</text><text x="866" y="433" font-size="12" fill="#CBD5E1">Telemetry scopes · controller view</text><text x="866" y="453" font-size="10" fill="#94A3B8">GROUND STATION UI</text></g>
+ <text x="866" y="514" fill="#94A3B8" font-size="11">LIVE ROS 2 adapter</text><text x="866" y="535" fill="#64748B" font-size="11">Planned integration · not yet hardware control</text>
+</g>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M228 244H268" stroke="#7DD3FC" class="flow" marker-end="url(#arrow)"/><path d="M228 372H250V320H268" stroke="#7DD3FC" class="flow" marker-end="url(#arrow)"/><path d="M502 244H538" stroke="#C4B5FD" class="flow" marker-end="url(#arrowV)"/><path d="M502 399H526V360H538" stroke="#C4B5FD" class="flow" marker-end="url(#arrowV)"/><path d="M673 290V310" stroke="#6EE7B7" class="flow" marker-end="url(#arrow)"/><path d="M673 410V430" stroke="#6EE7B7" class="flow" marker-end="url(#arrow)"/><path d="M798 240H820V276H838" stroke="#7DD3FC" class="flow" marker-end="url(#arrow)"/><path d="M994 334V350" stroke="#FCD34D" class="flow" marker-end="url(#arrow)"/><path d="M502 420H522V568H830V440H838" stroke="#C4B5FD" stroke-width="1.6" class="flow-soft" marker-end="url(#arrowV)" opacity=".9"/></g>
+<text x="56" y="610" fill="#64748B" font-family="Arial,sans-serif" font-size="11">ARCHITECTURE OVERVIEW · Topic names and rates are documented in the README below.</text>
+<text x="1144" y="610" text-anchor="end" fill="#64748B" font-family="Arial,sans-serif" font-size="11">AEROVIO / 01</text>
+</svg>
