@@ -1,12 +1,14 @@
 <div align="center">
 
-# <span style="color:#7DD3FC">AeroVIO</span> Ground Station
+<img src="docs/diagrams/aerovio-hero.svg" width="100%" alt="Animated AeroVIO hero: sensor data flows through VIO and geometric control into a telemetry monitor." />
+
+<br/>
+
+# 🛰️ AeroVIO — Ground Station for Autonomous Flight
 
 ### **See the state. Understand the flight.**
 
-Monocular Visual-Inertial Odometry · MSCKF State Estimation · Geometric SO(3) Control
-
-A telemetry-rich ground station for exploring drone state estimation, 3D mapping, and cascaded flight-control signals.
+Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric SO(3) Control
 
 <p>
   <a href="https://github.com/iamakhilan/Drones-Dashboard"><img src="https://img.shields.io/github/stars/iamakhilan/Drones-Dashboard?style=for-the-badge&logo=github&color=7C3AED&label=STARS" alt="GitHub stars" /></a>
@@ -19,6 +21,18 @@ A telemetry-rich ground station for exploring drone state estimation, 3D mapping
 [Explore features](#-feature-highlights) · [Architecture](#-architecture) · [Mathematics](#-mathematical-formulations) · [Quickstart](#-quickstart)
 
 </div>
+
+---
+
+## The flight-data problem
+
+<div align="center">
+
+<img src="docs/diagrams/aerovio-comparison.svg" width="100%" alt="Animated visual comparison of scattered drone telemetry versus AeroVIO's unified state estimation, flight control, and ground station pipeline." />
+
+</div>
+
+> **Project scope:** AeroVIO currently includes a local dashboard and DEMO telemetry bridge. The live ROS 2 adapter and physical command forwarding are roadmap work; this repository should not be interpreted as a flight-certified controller.
 
 ---
 
@@ -109,11 +123,11 @@ A telemetry-rich ground station for exploring drone state estimation, 3D mapping
 
 ## 🏗️ Architecture
 
-The architecture graphic below is a custom SVG designed for this README: dark technical canvas, color-coded stages, and a simplified data path. It remains readable without a tall Mermaid diagram.
-
 <div align="center">
 
-<img src="docs/aerovio-architecture.svg" alt="AeroVIO architecture: sensors, VIO state estimation, 50 Hz flight control, Python bridge, and dashboard" width="100%" />
+<img src="docs/aerovio-architecture.svg" width="100%" alt="AeroVIO architecture: sensors, VIO state estimation, cascaded control, Python bridge, and ground station." />
+
+<sub>System overview · color-coded stages · telemetry and control paths</sub>
 
 </div>
 
