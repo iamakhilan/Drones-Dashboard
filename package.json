@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "AeroVIO Ground Station — VIO & 50 Hz SO(3) Controller",
   "scripts": {
+    "dev": "python bridge_server.py",
+    "start": "python bridge_server.py",
+    "test": "python test_bridge_and_math.py",
     "build:css": "tailwindcss -i ./css/input.css -o ./css/output.css --minify",
     "watch:css": "tailwindcss -i ./css/input.css -o ./css/output.css --watch",
     "build": "npm run build:css"
