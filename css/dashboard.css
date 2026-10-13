@@ -329,3 +329,305 @@ aside {
   .sidebar-backdrop { transition: none; }
   .stale-warning { animation: none; }
 }
+
+/* === Responsive: tablet & mobile ===
+   Pure-CSS responsive pass for the AeroVIO GCS dashboard.
+   Breakpoints: tablet <= 1200px / mobile <= 768px / small phones <= 480px.
+   All rules are additive; Tailwind utilities stay intact at wider widths.
+   ----------------------------------------------------------------------- */
+
+/* Prevent any stray fixed-width child from causing page-level x-scroll.
+   Inner scroll containers (tables, toolbars) keep their own overflow-x. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* Fluid headline sizes everywhere (desktop included — clamp floor/cap
+   keeps design intent at wide viewports) */
+h1, #overview h1 {
+  font-size: clamp(1.25rem, 0.95rem + 1.4vw, 1.5rem);
+}
+h2 {
+  font-size: clamp(0.8125rem, 0.72rem + 0.35vw, 0.875rem);
+}
+section[id],
+.scroll-mt-14 {
+  scroll-margin-top: clamp(56px, 10vw, 72px);
+}
+
+/* --------------------------------------------------------------------------
+   (a) Tablet — <= 1200px
+   -------------------------------------------------------------------------- */
+@media (max-width: 1200px) {
+  /* Workspaces section (camera + pointcloud, lg:grid-cols-12): force a clean
+     1:1 two-column collapse so panels wrap instead of squeezing */
+  section[data-purpose="workspaces-section"] {
+    grid-template-columns: 1fr !important;
+  }
+  section[data-purpose="workspaces-section"] > #camera,
+  section[data-purpose="workspaces-section"] > #pointcloud {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Header: let the ws-link input shrink so the bar wraps without overflow */
+  #header-ws-url {
+    width: 10rem !important;
+  }
+
+  /* Controller chain cards: 2x2 grid instead of a squeezed 4-up row */
+  #controller-section .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Kinematics matrix 3-up -> 2-up, last card spans */
+  section[data-purpose="kinematics-matrix"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  section[data-purpose="kinematics-matrix"] > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  /* KPI 5-up row: allow earlier wrap */
+  section[data-purpose="metrics-summary"] .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  /* Dataset selector stays scrollable instead of pushing the page wide */
+  #dataset-selector-bar {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   (b) Mobile — <= 768px
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Sticky top header compaction */
+  header {
+    padding: 6px 10px !important;
+    row-gap: 6px !important;
+    min-height: 48px;
+  }
+  header .text-sm.font-bold {
+    font-size: 13px;
+  }
+  /* Tighten the status pill cluster */
+  #top-latency-badge {
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #top-mode-toggle-btn span#top-mode-toggle-text {
+    font-size: 11px;
+  }
+
+  /* Health bar: compress gaps */
+  #health-bar {
+    gap: 8px !important;
+    padding: 4px 12px !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+  }
+  #health-bar > span {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Main content: single-column, tighter gutters */
+  main {
+    padding: 12px !important;
+    --tw-space-y-reverse: 0;
+  }
+  main > section,
+  main > #overview,
+  main > #scrubber-bar {
+    margin-top: 16px !important;
+  }
+
+  /* All multi-column grids collapse to a single column */
+  section[data-purpose="workspaces-section"],
+  section[data-purpose="kinematics-matrix"],
+  #controller-section .grid,
+  #graphs-section .grid,
+  section[data-purpose="metrics-summary"] .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Wide toolbar / tab rows scroll horizontally instead of overflowing */
+  #dataset-selector-bar,
+  #scrubber-bar,
+  section[data-purpose="metrics-summary"] .overflow-x-auto,
+  #perspective-controls {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  #dataset-selector-bar .traj-sel-btn,
+  #perspective-controls .persp-btn,
+  #scrubber-bar .speed-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* Scrubber: keep range usable, let labels wrap to their own line */
+  #scrubber-range {
+    min-width: 100px;
+  }
+  #scrubber-bar {
+    gap: 8px !important;
+  }
+
+  /* Canvas / graph containers: flexible width, guaranteed min-height */
+  .aspect-video {
+    aspect-ratio: auto !important;
+    min-height: 220px;
+  }
+  #camera .aspect-video,
+  #pointcloud .aspect-video {
+    width: 100%;
+    height: auto;
+    min-height: 240px;
+  }
+  #svg-spatial-canvas,
+  #optical-flow-svg {
+    width: 100%;
+    height: 100%;
+    min-height: 220px;
+  }
+  /* Waveform graph panels (h-44): keep visible height */
+  #graphs-section .h-44 {
+    height: auto !important;
+    min-height: 176px;
+  }
+
+  /* ROS 2 nodes table: keep min width, page does NOT scroll — the
+     wrapper div (overflow-x-auto) handles it; ensure it on narrow screens */
+  section[data-purpose="ros-nodes-table"] > .overflow-x-auto {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 44px minimum touch targets (superset of the earlier a/button rule —
+     extends to range input + chip buttons used here) */
+  button,
+  a.nav-link,
+  input[type="range"],
+  input[type="text"],
+  input[type="number"],
+  [role="button"],
+  .traj-sel-btn,
+  .persp-btn,
+  .speed-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .speed-btn {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* >=16px font-size on all inputs prevents iOS focus zoom */
+  input[type="text"],
+  input[type="number"],
+  input:not([type]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+  #global-search-input,
+  #header-ws-url,
+  #mobile-ws-url,
+  #search-modal-input {
+    font-size: 16px !important;
+  }
+
+  /* Modals: full-width sheets with breathing room */
+  #tuning-modal > div,
+  #search-modal > div {
+    width: calc(100% - 24px) !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+  #search-modal {
+    padding-top: 12px !important;
+  }
+  #tuning-modal .grid {
+    gap: 10px !important;
+  }
+
+  /* Toast stack: clamp to viewport */
+  #toast-box {
+    right: 8px;
+    left: 8px;
+    bottom: 12px;
+    align-items: stretch;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   (c) Small phones — <= 480px
+   -------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  /* Hide non-critical decorations / secondary chrome */
+  header kbd,                       /* ⌘ K hint */
+  #health-bar > span.text-stone-600,/* vertical pipe separators */
+  #sidebar-pointcount,
+  #camera .absolute.top-3.right-3,  /* FOV badge over camera feed */
+  footer.font-mono {
+    display: none !important;
+  }
+
+  /* Tighten paddings on panels */
+  main {
+    padding: 8px !important;
+  }
+  section[data-purpose="metrics-summary"],
+  section[data-purpose="workspaces-section"] > #camera,
+  section[data-purpose="workspaces-section"] > #pointcloud,
+  #controller-section,
+  #graphs-section,
+  section[data-purpose="kinematics-matrix"] > div {
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Slim header further: drop the "GCS Station" chip and latency text */
+  header .bg-stone-800.text-stone-300.rounded-full {
+    display: none;
+  }
+
+  /* Camera/pointcloud overlays: reduce HUD clutter on tiny screens */
+  #hud-pw,
+  #hud-vw {
+    font-size: 9px;
+    padding: 4px 8px !important;
+  }
+  #camera .aspect-video,
+  #pointcloud .aspect-video {
+    min-height: 180px;
+  }
+  #graphs-section .h-44 {
+    min-height: 140px;
+  }
+
+  /* KPI values shrink gracefully */
+  section[data-purpose="metrics-summary"] .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Modal forms: single column */
+  #tuning-modal .grid.grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+  #tuning-modal .px-6 {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+}

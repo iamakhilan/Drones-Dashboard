@@ -1,0 +1,16 @@
+# AeroVIO — Git attributes
+#
+# Large binary/data assets below are candidates for Git LFS.
+# They are COMMENTED OUT so this file has no effect until the maintainer
+# installs git-lfs and runs the migration in docs/lfs-migration.md.
+#
+# To enable: install git-lfs, uncomment the patterns, then follow
+# docs/lfs-migration.md step by step.
+
+# --- LFS candidates (uncomment after `git lfs install`) ---
+# data/*.csv filter=lfs diff=lfs merge=lfs -text
+# data/*.pcd filter=lfs diff=lfs merge=lfs -text
+# *.png     filter=lfs diff=lfs merge=lfs -text
+
+# Line endings: keep everything LF (matches .editorconfig)
+* text=auto eol=lf

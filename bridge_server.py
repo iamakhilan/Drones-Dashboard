@@ -377,6 +377,25 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                             "ros2_connected": SERVER_STATE["ros2_connected"]
                         })
                         sock.sendall(encode_ws_frame(pong_msg))
+                    elif data.get("type") == "telemetry":
+                        # LIVE ingest over WS: forward inbound normalized frame to all other clients
+                        data.setdefault("bridge_connected", True)
+                        data.setdefault("ros2_connected", True)
+                        SERVER_STATE["ros2_connected"] = True
+                        frame_bytes = encode_ws_frame(json.dumps(data))
+                        with WS_LOCK:
+                            others = [c for c in WS_CLIENTS if c is not sock]
+                        dead = set()
+                        for c in others:
+                            try:
+                                c.sendall(frame_bytes)
+                            except Exception:
+                                dead.add(c)
+                        if dead:
+                            with WS_LOCK:
+                                for d in dead:
+                                    WS_CLIENTS.discard(d)
+                        SERVER_STATE["frames_broadcast"] += 1
                     elif data.get("type") == "switch_dataset":
                         ds_key = data.get("dataset", "orbit")
                         if ds_key in DATASETS:
@@ -404,6 +423,41 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             print(f"[Bridge] Client disconnected (Remaining: {len(WS_CLIENTS)})")
 
     def do_POST(self):
+        # LIVE ingest endpoint: accepts one normalized telemetry JSON frame and
+        # forwards it to all connected /ws clients. Read-only w.r.t. DEMO replay.
+        if self.path == "/ingest":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                frame = json.loads(body)
+                if frame.get("type") != "telemetry":
+                    raise ValueError("frame.type must be 'telemetry'")
+                frame.setdefault("bridge_connected", True)
+                frame.setdefault("ros2_connected", True)
+                with WS_LOCK:
+                    snapshot = list(WS_CLIENTS)
+                dead = set()
+                frame_bytes = encode_ws_frame(json.dumps(frame))
+                for sock in snapshot:
+                    try:
+                        sock.sendall(frame_bytes)
+                    except Exception:
+                        dead.add(sock)
+                if dead:
+                    with WS_LOCK:
+                        for d in dead:
+                            WS_CLIENTS.discard(d)
+                SERVER_STATE["frames_broadcast"] += 1
+                SERVER_STATE["ros2_connected"] = True
+                response = {"status": "success", "clients_notified": len(snapshot) - len(dead)}
+            except Exception as e:
+                response = {"status": "error", "message": str(e)}
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            return
+
         # Configuration / Parameter adjustment endpoint
         if self.path == "/api/command":
             content_length = int(self.headers.get('Content-Length', 0))

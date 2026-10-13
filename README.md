@@ -11,6 +11,7 @@
 Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric SO(3) Control
 
 <p>
+  <a href="https://github.com/iamakhilan/Drones-Dashboard/actions/workflows/ci.yml"><img src="https://github.com/iamakhilan/Drones-Dashboard/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/iamakhilan/Drones-Dashboard"><img src="https://img.shields.io/github/stars/iamakhilan/Drones-Dashboard?style=for-the-badge&logo=github&color=7C3AED&label=STARS" alt="GitHub stars" /></a>
   <img src="https://img.shields.io/badge/CONTROL-50%20Hz-10B981?style=for-the-badge" alt="50 Hz controller" />
   <img src="https://img.shields.io/badge/VIO-MSCKF-8B5CF6?style=for-the-badge" alt="MSCKF VIO" />
@@ -129,7 +130,7 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 <summary><b>Data-flow notes</b></summary>
 
 - **DEMO mode:** `bridge_server.py` replays bundled CSV trajectories, synthesizes body/camera poses, computes demo controller telemetry, and broadcasts normalized JSON to `/ws` clients.
-- **LIVE mode:** the dashboard can connect to a bridge endpoint intended to receive normalized telemetry from a companion ROS 2 adapter. The `rclpy` live adapter and physical command forwarding remain roadmap items.
+- **LIVE mode:** `ros2_adapter` (see `ros2_adapter/README.md`) connects a `rclpy` node to the topics above and pushes normalized telemetry to the bridge over `/ws` or `POST /ingest`, which forwards it to dashboard clients. Physical command forwarding remains roadmap work.
 - **Connection status:** bridge connectivity and ROS 2/live-data availability are separate states.
 
 </details>
@@ -257,7 +258,7 @@ The camera is mounted **10 cm forward and 4 cm downward** relative to the body f
 | **3D / Map** | Canvas 2D projection · PCD ASCII parser | Isometric / Top XY / Side XZ switcher |
 | **Graphs** | Pure SVG · rolling 20 s window · 250-pt buffer | Spline + gradient fills · hover crosshair |
 | **Data** | CSV trajectories · PCD v.7 ASCII · `real_data.js` | 5 datasets × 500 rows · 442 landmarks |
-| **ROS 2** | Humble · `rclpy` adapter (planned live path) | `geometry_msgs` · `sensor_msgs` · `nav_msgs` |
+| **ROS 2** | Humble · `rclpy` adapter (`ros2_adapter/`) | `geometry_msgs` · `sensor_msgs` · `nav_msgs` |
 
 <div align="center">
 
@@ -329,9 +330,23 @@ python3 bridge_server.py --host 0.0.0.0 --port 8000
 ws://192.168.1.42:8000/ws
 ```
 
-### LIVE ROS 2 (upcoming)
+### LIVE mode with ROS 2
 
-A thin `rclpy` adapter will subscribe to the topics above and push normalized JSON to `/ws` — dashboard stays identical. See [Roadmap](#-roadmap).
+The `ros2_adapter/` package is a thin `rclpy` node that subscribes to the
+topics above, normalizes them into the dashboard's JSON telemetry schema, and
+forwards frames to the bridge — the dashboard stays identical.
+
+```bash
+# Terminal 1 — bridge
+python3 bridge_server.py --mode live
+
+# Terminal 2 — adapter (in a sourced ROS 2 Humble env)
+python3 ros2_adapter/adapter.py --endpoint http://localhost:8000 --rate 50
+```
+
+It connects as a WebSocket client to `ws://localhost:8000/ws` (with automatic
+fallback to HTTP `POST /ingest`). Build/run details and all topic flags:
+[ros2_adapter/README.md](ros2_adapter/README.md).
 
 ---
 
@@ -389,12 +404,21 @@ Drones-Dashboard/
 | ✅ | 3× 20 s SVG oscilloscopes with channel toggles + crosshair |
 | ✅ | DEMO replay — 5 datasets @ 50 Hz, synthetic KLT + controller synthesis |
 | ✅ | Zero-dep bridge — HTTP + `/ws` + LAN + truthful status |
-| ⏳ | `rclpy` live adapter — subscribe to ROS 2 topics → normalize → `/ws` |
+| ✅ | `rclpy` live adapter — subscribe to ROS 2 topics → normalize → `/ws` |
 | ⏳ | Live IMU + camera stream from hardware (ADIS16470 / BMI088) |
 | ⏳ | `/ap/v1/cmd_vel` forwarding to physical ArduPilot |
 | 🔜 | Bag replay + trajectory export (CSV / PCD) |
 | 🔜 | Dark mode + keyboard palette (`⌘ K`) |
 | 🔜 | Unit + integration tests (bridge + math) |
+
+---
+
+## 🛠 Development
+
+- **Editor settings:** `.editorconfig` enforces LF line endings, trailing-whitespace trimming, 2-space indent for JS/HTML/CSS, and 4-space for Python — most editors pick it up automatically.
+- **Formatting:** `.prettierrc` matches the existing JS style (single quotes, semicolons, 2-space indent). Run `npx prettier --write .` before opening a PR.
+- **CI:** every push/PR runs a Python syntax check, `node --check` over `js/*`, the Tailwind build, and a WebSocket smoke test against the bridge (see `.github/workflows/ci.yml`).
+- **Large assets:** `data/*.csv`, `data/*.pcd`, and `*.png` are Git LFS candidates — patterns live (commented) in `.gitattributes`; migration steps are in [docs/lfs-migration.md](docs/lfs-migration.md).
 
 ---
 

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>ros2_adapter</name>
+  <version>0.1.0</version>
+  <description>AeroVIO dashboard bridge adapter: normalizes controller/VIO ROS 2 topics into the AeroVIO JSON telemetry schema and forwards to bridge_server.py.</description>
+  <maintainer email="akhilan@example.com">iamakhilan</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Python syntax check
+        run: python -m py_compile bridge_server.py ros2_adapter/adapter.py
+
+      - name: JS syntax check
+        run: for f in js/*.js; do node --check "$f"; done
+
+      - name: Tailwind build
+        run: |
+          npm ci
+          npx tailwindcss -i css/input.css -o css/output.css --minify
+          test -s css/output.css
+
+      - name: Bridge smoke test
+        run: |
+          python bridge_server.py --port 8765 &
+          BRIDGE_PID=$!
+          sleep 1
+          python - "$BRIDGE_PID" <<'PYEOF'
+          import json, socket, base64, os, struct, sys, time
+          pid = int(sys.argv[1])
+          try:
+              s = socket.create_connection(("127.0.0.1", 8765), timeout=5)
+              key = base64.b64encode(os.urandom(16)).decode()
+              req = (f"GET /ws HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nUpgrade: websocket\r\n"
+                     f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+              s.sendall(req.encode())
+              resp = b""
+              while b"\r\n\r\n" not in resp:
+                  resp += s.recv(4096)
+              assert b"101" in resp.split(b"\r\n", 1)[0], resp
+              s.settimeout(10.0)
+              deadline = time.time() + 10
+              buf = b""
+              frame = None
+              while time.time() < deadline:
+                  try:
+                      buf += s.recv(65536)
+                  except socket.timeout:
+                      break
+                  # parse first full text frame in buf
+                  if len(buf) >= 2:
+                      b1, b2 = buf[0], buf[1]
+                      ln = b2 & 0x7F
+                      off = 2
+                      if ln == 126 and len(buf) >= 4:
+                          ln = struct.unpack("!H", buf[2:4])[0]; off = 4
+                      elif ln == 127 and len(buf) >= 10:
+                          ln = struct.unpack("!Q", buf[2:10])[0]; off = 10
+                      if len(buf) >= off + ln:
+                          frame = json.loads(buf[off:off+ln].decode())
+                          break
+              assert frame is not None, "no telemetry frame within 10s"
+              assert frame.get("type") == "telemetry", frame.get("type")
+              assert "pose_wb" in frame["data"], "missing pose_wb"
+              print("smoke OK: telemetry frame received, source =", frame.get("source"))
+          finally:
+              os.kill(pid, 15)
+          PYEOF

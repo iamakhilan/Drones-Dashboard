@@ -1,0 +1,110 @@
+/* AeroVIO — feature panels (alerts, markers, VIO health, compare, snapshot)
+   Scoped to .av-* classes only; reuses the app's stone/brand palette. */
+
+.av-hidden { display: none !important; }
+
+/* --- Playback event markers on the scrubber timeline --- */
+#scrubber-range-wrap { position: relative; flex: 1 1 120px; min-width: 120px; }
+#scrubber-range-wrap input[type="range"] { width: 100%; }
+#scrubber-marker-track {
+  position: absolute;
+  left: 0; right: 0; bottom: -6px;
+  height: 10px;
+  pointer-events: none;
+}
+.av-marker {
+  position: absolute;
+  top: 1px;
+  width: 8px; height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.25);
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 0;
+  background: #F59E0B;
+}
+.av-marker-critical { background: #EF4444; }
+.av-marker:hover { transform: scale(1.5); }
+
+/* --- Alert log panel --- */
+#alert-log-panel .av-alert-body { max-height: 220px; overflow-y: auto; }
+#alert-log-panel.av-collapsed .av-alert-body { display: none; }
+.av-alert-row {
+  display: grid;
+  grid-template-columns: 74px 96px 1fr 84px 64px;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  border: 1px solid #E7E5E4;
+  margin-bottom: 4px;
+  background: #FAFAF9;
+  color: #44403C;
+}
+.av-alert-warn { border-left: 3px solid #F59E0B; }
+.av-alert-crit { border-left: 3px solid #EF4444; background: #FEF2F2; }
+.av-alert-metric { font-weight: 700; color: #1C1917; }
+.av-alert-sev { text-align: right; font-size: 10px; font-weight: 700; }
+.av-alert-warn .av-alert-sev { color: #B45309; }
+.av-alert-crit .av-alert-sev { color: #B91C1C; }
+.av-alert-time, .av-alert-th { color: #78716C; font-size: 10px; }
+
+#alert-log-badge {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  min-width: 20px; height: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: #EF4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* --- VIO health panel --- */
+.av-vio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+.av-vio-cell {
+  background: #FAFAF9;
+  border: 1px solid #E7E5E4;
+  border-radius: 8px;
+  padding: 8px;
+}
+.av-vio-cell .av-vio-label { display: block; font-size: 10px; color: #78716C; }
+.av-vio-cell .av-vio-value { font-weight: 700; color: #1C1917; }
+#vio-cov-spark { width: 100%; height: 80px; background: #0B0F19; border-radius: 8px; }
+
+/* --- Compare panel --- */
+#compare-err-plot { width: 100%; height: 140px; background: #0B0F19; border-radius: 8px; }
+.av-cmp-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #E7E5E4;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: #44403C;
+}
+.av-cmp-better { color: #047857; font-weight: 700; }
+.av-cmp-worse { color: #B91C1C; font-weight: 700; }
+
+.av-file-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 6px 12px;
+  background: #fff; border: 1px solid #D6D3D1; border-radius: 8px;
+  color: #44403C; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.av-file-btn:hover { background: #FAFAF9; }
+
+@media print {
+  .av-marker, #snapshot-btn { display: none !important; }
+}
