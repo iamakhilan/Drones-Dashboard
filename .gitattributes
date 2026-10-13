@@ -1,0 +1,23 @@
+# AeroVIO line endings & normalization
+* text=auto eol=lf
+
+# Explicit text types
+*.py    text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.svg   text eol=lf
+
+# Git LFS candidates
+# Large binary/data assets should live in Git LFS rather than the object store.
+# The patterns below are commented out intentionally: enabling them on an
+# existing history requires `git lfs migrate` (rewrites history). Follow the
+# exact commands in docs/lfs-migration.md before uncommenting.
+#
+# data/*.csv filter=lfs diff=lfs merge=lfs -text
+# data/*.pcd filter=lfs diff=lfs merge=lfs -text
+# *.png filter=lfs diff=lfs merge=lfs -text

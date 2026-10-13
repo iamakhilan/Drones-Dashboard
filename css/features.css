@@ -1,0 +1,104 @@
+/* ============================================================================
+ * AeroVIO — Diagnostics feature modules (light theme)
+ * Loaded by index.html. Covers: alert log, scrubber markers, VIO health,
+ * session comparison overlays, snapshot print rules.
+ * ========================================================================== */
+
+/* --- Scrubber playback event markers --- */
+#scrubber-wrap {
+  position: relative;
+  flex: 1 1 120px;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+}
+#scrubber-wrap input[type="range"] {
+  width: 100%;
+}
+#scrubber-marker-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+.aerovio-marker {
+  position: absolute;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 120ms ease;
+}
+.aerovio-marker:hover { transform: scale(1.35); }
+.aerovio-marker.severity-warning { background: #F59E0B; }
+.aerovio-marker.severity-critical { background: #EF4444; }
+
+/* --- Alert log entries --- */
+.aerovio-alert-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.5rem;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  border: 1px solid #E7E5E4; /* stone-200 */
+  background: #FAFAF9;      /* stone-50 */
+  color: #44403C;           /* stone-700 */
+}
+.aerovio-alert-entry.severity-warning { border-color: #FDE68A; background: #FFFBEB; }
+.aerovio-alert-entry.severity-critical { border-color: #FECACA; background: #FEF2F2; color: #7F1D1D; }
+.aerovio-alert-entry .sev-dot {
+  width: 8px; height: 8px; border-radius: 9999px; flex-shrink: 0;
+}
+.aerovio-alert-entry.severity-warning .sev-dot { background: #F59E0B; }
+.aerovio-alert-entry.severity-critical .sev-dot { background: #EF4444; }
+
+/* Collapsible */
+.aerovio-collapsed .aerovio-collapsible-body { display: none; }
+.aerovio-collapse-chevron { transition: transform 150ms ease; }
+.aerovio-collapsed .aerovio-collapse-chevron { transform: rotate(-90deg); }
+
+/* --- VIO health sparkline canvas --- */
+#vio-cov-canvas {
+  width: 100%;
+  height: 80px;
+  display: block;
+  background: #FAFAF9;
+  border: 1px solid #E7E5E4;
+  border-radius: 0.5rem;
+}
+
+/* --- Comparison SVG plots --- */
+.aerovio-plot-box {
+  width: 100%;
+  height: 176px;
+  background: #FAFAF9;
+  border: 1px solid #E7E5E4;
+  border-radius: 0.75rem;
+}
+.aerovio-plot-box text {
+  font-family: ui-monospace, monospace;
+  font-size: 8.5px;
+  fill: #78716C;
+}
+
+/* --- Print rules (snapshot fallback) --- */
+@media print {
+  header, #sidebar, #sidebar-backdrop, #health-bar, #stale-warning-banner,
+  #toast-box, #scrubber-bar, #tuning-modal, #search-modal,
+  .nav-link, button { display: none !important; }
+  main { padding: 0 !important; overflow: visible !important; }
+  body { background: #fff !important; }
+  section, .bg-white { box-shadow: none !important; border: 1px solid #ddd !important; }
+  #spatial-3d-viewport, #camera .aspect-video { max-height: 320px; }
+}

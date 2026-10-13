@@ -674,6 +674,40 @@ def try_init_ros2_live_bridge():
         return False
 
 
+def _build_live_payload(now):
+    """Assemble a LIVE-mode telemetry frame from the ROS 2 adapter's latest state."""
+    node_state = LIVE_ROS2_STATE["node"].current_state
+    if node_state.get("pose_wb") is None:
+        return None
+
+    p_wb_dict = node_state["pose_wb"]["position"]
+    q_wb_dict = node_state["pose_wb"]["orientation"]
+    p_wb = [p_wb_dict["x"], p_wb_dict["y"], p_wb_dict["z"]]
+    q_wb = [q_wb_dict["qx"], q_wb_dict["qy"], q_wb_dict["qz"], q_wb_dict["qw"]]
+    pose_wc = node_state.get("pose_wc")
+    if pose_wc is None:
+        p_wc, q_wc = compute_camera_optical_pose(p_wb, q_wb)
+        pose_wc = {
+            "position": {"x": round(float(p_wc[0]), 4), "y": round(float(p_wc[1]), 4), "z": round(float(p_wc[2]), 4)},
+            "orientation": {"qx": round(float(q_wc[0]), 4), "qy": round(float(q_wc[1]), 4), "qz": round(float(q_wc[2]), 4), "qw": round(float(q_wc[3]), 4)}
+        }
+
+    return {
+        "type": "telemetry",
+        "source": "ros2_live",
+        "bridge_connected": True,
+        "ros2_connected": True,
+        "timestamp": now,
+        "data": {
+            "pose_wb": node_state["pose_wb"],
+            "pose_wc": pose_wc,
+            "twist": node_state.get("twist") or {"linear": {"vx": 0, "vy": 0, "vz": 0}, "angular": {"p": 0, "q": 0, "r": 0}},
+            "imu": node_state.get("imu") or {"accel": {"ax": 0, "ay": 0, "az": 9.81}},
+            "controller": node_state.get("controller", {})
+        }
+    }
+
+
 # ==============================================================================
 # HTTP Request Handler & REST Endpoints
 # ==============================================================================
@@ -873,6 +907,71 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             print(f"[Bridge] Client disconnected (Remaining: {len(WS_CLIENTS)})")
 
     def do_POST(self):
+        if self.path == "/ingest":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                frame = json.loads(body)
+                if not isinstance(frame, dict) or frame.get("type") != "telemetry":
+                    raise ValueError("frame must be an object with type='telemetry'")
+                data = frame.get("data")
+                if not isinstance(data, dict):
+                    raise ValueError("frame.data must be a telemetry object")
+                pose = data.get("pose_wb")
+                if not isinstance(pose, dict) or "position" not in pose or "orientation" not in pose:
+                    raise ValueError("frame.data.pose_wb with position and orientation is required")
+                if "pose_wc" not in data:
+                    p = pose["position"]
+                    q = pose["orientation"]
+                    p_wc, q_wc = compute_camera_optical_pose(
+                        [float(p["x"]), float(p["y"]), float(p["z"])],
+                        [float(q["qx"]), float(q["qy"]), float(q["qz"]), float(q["qw"])]
+                    )
+                    data["pose_wc"] = {
+                        "position": {"x": round(float(p_wc[0]), 4), "y": round(float(p_wc[1]), 4), "z": round(float(p_wc[2]), 4)},
+                        "orientation": {"qx": round(float(q_wc[0]), 4), "qy": round(float(q_wc[1]), 4), "qz": round(float(q_wc[2]), 4), "qw": round(float(q_wc[3]), 4)}
+                    }
+
+                # Direct ingest: normalize + broadcast (DEMO replay is untouched and continues in parallel)
+                payload = dict(frame)
+                payload["source"] = frame.get("source") or "ros2_adapter"
+                payload["bridge_connected"] = True
+                payload["ros2_connected"] = True
+                payload["timestamp"] = time.time()
+
+                with WS_LOCK:
+                    snapshot = list(WS_CLIENTS)
+                frame_bytes = encode_ws_frame(json.dumps(payload))
+                dead_socks = set()
+                for sock in snapshot:
+                    try:
+                        sock.sendall(frame_bytes)
+                    except Exception:
+                        dead_socks.add(sock)
+                if dead_socks:
+                    with WS_LOCK:
+                        for dead in dead_socks:
+                            WS_CLIENTS.discard(dead)
+                SERVER_STATE["frames_broadcast"] += 1
+
+                # If the ingester is the live bridge adapter, also feed the LIVE path
+                node = LIVE_ROS2_STATE.get("node")
+                if node is not None:
+                    node.current_state["pose_wb"] = pose
+                    for key in ("twist", "controller", "imu"):
+                        if key in data:
+                            node.current_state[key] = data[key]
+
+                response = {"status": "success", "broadcast_clients": len(snapshot)}
+                self.send_response(200)
+            except Exception as e:
+                response = {"status": "error", "message": str(e)}
+                self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            return
+
         if self.path == "/api/command":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')
@@ -956,33 +1055,9 @@ def telemetry_broadcaster():
                 # Do not emit synthetic data in LIVE mode
                 continue
 
-            node_state = LIVE_ROS2_STATE["node"].current_state
-            if node_state["pose_wb"] is None:
+            payload = _build_live_payload(now)
+            if payload is None:
                 continue
-
-            p_wb_dict = node_state["pose_wb"]["position"]
-            q_wb_dict = node_state["pose_wb"]["orientation"]
-            p_wb = [p_wb_dict["x"], p_wb_dict["y"], p_wb_dict["z"]]
-            q_wb = [q_wb_dict["qx"], q_wb_dict["qy"], q_wb_dict["qz"], q_wb_dict["qw"]]
-            p_wc, q_wc = compute_camera_optical_pose(p_wb, q_wb)
-
-            payload = {
-                "type": "telemetry",
-                "source": "ros2_live",
-                "bridge_connected": True,
-                "ros2_connected": True,
-                "timestamp": now,
-                "data": {
-                    "pose_wb": node_state["pose_wb"],
-                    "pose_wc": {
-                        "position": {"x": round(float(p_wc[0]), 4), "y": round(float(p_wc[1]), 4), "z": round(float(p_wc[2]), 4)},
-                        "orientation": {"qx": round(float(q_wc[0]), 4), "qy": round(float(q_wc[1]), 4), "qz": round(float(q_wc[2]), 4), "qw": round(float(q_wc[3]), 4)}
-                    },
-                    "twist": node_state["twist"] or {"linear": {"vx": 0, "vy": 0, "vz": 0}, "angular": {"p": 0, "q": 0, "r": 0}},
-                    "imu": node_state["imu"] or {"accel": {"ax": 0, "ay": 0, "az": 9.81}},
-                    "controller": node_state["controller"]
-                }
-            }
 
         # ----------------------------------------------------------------------
         # Case B: DEMO Mode (Full Analytical Replay with Real Mathematics)
