@@ -1,8 +1,17 @@
 /**
  * ============================================================================
  * AeroVIO Ground Control Station - Monocular Vision & Feature HUD
- * Renders the optical camera stream, dynamic KLT feature velocity vectors,
- * epipolar geometry, optical center reticles, and stream status overlays.
+ * ============================================================================
+ * Manages the camera feed display for both DEMO and LIVE modes:
+ * - LIVE mode: Subscribes to /camera/image_raw (sensor_msgs/msg/Image, mono8).
+ *   Monitors stream health, calculates genuine frame rate and frame age from
+ *   actual message arrival timestamps, and presents clear disconnected/waiting
+ *   states when no stream is present.
+ * - DEMO mode: Honest presentation of reference frame snapshot (monocular_tracking_feed.png).
+ *   Labeled explicitly as DEMO SNAPSHOT. Never fabricates fake video or simulated
+ *   random feature coordinates.
+ * - Calibrated Pinhole Reticle: Calibrated intrinsics (fx=615.2, fy=615.4, cx=320.0, cy=240.0)
+ *   optical center crosshairs, FOV brackets (55.0° H × 42.6° V), and optical frame indicator.
  * ============================================================================
  */
 
@@ -17,29 +26,41 @@
       this.placeholder = null;
       this.statusBadge = null;
       this.fpsBadge = null;
-      this.featureCountBadge = null;
-      this.trackedCountBadge = null;
       this.latencyBadge = null;
-      this.hudTimer = null;
+      this.resBadge = null;
+      this.featuresBadge = null;
 
-      // HUD Toggles
-      this.showEpipolar = true;
-      this.showFeatureIds = false;
-      this.showDenseCloud = false;
-      this.depthColor = 'VIO';
+      // Overlay toggles
+      this.showReticle = true;
+      this.showHud = true;
+      this.objectFit = 'contain';
 
-      // Live stream state
-      this.hasLiveStream = false;
-      this.fps = 30.0;
-      this.lastFrameTime = performance.now();
+      // Stream state
+      this.mode = 'DEMO'; // 'DEMO' or 'LIVE'
+      this.hasLiveFrame = false;
+      this.lastFrameArrivalTime = 0;
+      this.lastFrameRosTimestamp = null;
+      this.measuredFps = 0.0;
       this.frameCount = 0;
       this.fpsTimer = performance.now();
+      this.staleCheckInterval = null;
 
-      // Synthesized feature points for HUD
+      // Calibrated Camera Intrinsics (from reference VIO project_vio.yaml / test_camera.py)
+      this.intrinsics = {
+        width: 640,
+        height: 480,
+        fx: 615.2,
+        fy: 615.4,
+        cx: 320.0,
+        cy: 240.0,
+        fovH_deg: 54.95,
+        fovV_deg: 42.62
+      };
+
+      // Genuine feature points delivered by estimator overlay topic (empty by default)
+      // We NEVER synthesize fake feature coordinates!
       this.features = [];
-      this._initFeatures();
 
-      // Bind on DOM ready
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => this.init());
       } else {
@@ -53,153 +74,201 @@
         this.ctx = this.canvas.getContext('2d');
       }
       this.imgElement = document.getElementById('camera-feed-img');
-      this.placeholder = document.getElementById('camera-waiting-placeholder');
+      this.placeholder = document.getElementById('camera-placeholder');
       this.statusBadge = document.getElementById('cam-status-badge');
       this.fpsBadge = document.getElementById('cam-fps-badge');
-      this.featureCountBadge = document.getElementById('cam-feat-count');
-      this.trackedCountBadge = document.getElementById('cam-trk-count');
       this.latencyBadge = document.getElementById('cam-latency-badge');
-      this.hudTimer = document.getElementById('hud-timer');
+      this.resBadge = document.getElementById('cam-res-badge');
+      this.featuresBadge = document.getElementById('cam-features-badge');
 
       // Hook WebSocket camera frames
-      if (window.wsBridge) {
+      if (window.wsBridge && typeof window.wsBridge.onCameraFrame === 'function') {
         window.wsBridge.onCameraFrame((frameData) => this.onFrameReceived(frameData));
       }
 
       // Hook Telemetry Engine
-      if (window.telemetry) {
+      if (window.telemetry && typeof window.telemetry.onTelemetry === 'function') {
         window.telemetry.onTelemetry((state) => this.onTelemetryUpdate(state));
         window.telemetry.onStateChange((state) => this.onStateChange(state));
       }
 
-      // Start HUD render loop
-      this._startOverlayLoop();
-    }
+      // Window resize listener to keep overlay pixel-aligned
+      window.addEventListener('resize', () => this._syncCanvasResolution());
 
-    _initFeatures() {
-      // Create initial batch of 64 tracked features
-      for (let i = 0; i < 64; i++) {
-        this.features.push({
-          id: i + 101,
-          x: 0.15 + Math.random() * 0.70,
-          y: 0.20 + Math.random() * 0.65,
-          vx: (Math.random() - 0.5) * 0.004,
-          vy: (Math.random() - 0.5) * 0.003,
-          age: Math.floor(Math.random() * 50),
-          quality: 0.8 + Math.random() * 0.2
-        });
-      }
+      // Periodic health/stale check (every 500ms)
+      this.staleCheckInterval = setInterval(() => this._checkStreamHealth(), 500);
+
+      // Start render loop for calibrated HUD overlay
+      this._startOverlayLoop();
+
+      // Initial state sync
+      this._syncModeUI();
     }
 
     /**
-     * When a raw camera frame arrives from ROS 2 WebSocket bridge
+     * Called when a genuine camera frame arrives via WebSocket
      */
     onFrameReceived(frameData) {
-      this.hasLiveStream = true;
-      if (this.imgElement) {
-        if (typeof frameData === 'string' && frameData.startsWith('data:image')) {
-          this.imgElement.src = frameData;
+      const now = performance.now();
+      this.hasLiveFrame = true;
+      this.lastFrameArrivalTime = now;
+
+      // Unpack frame data
+      let imageUrl = null;
+      if (typeof frameData === 'string') {
+        if (frameData.startsWith('data:image')) {
+          imageUrl = frameData;
         } else {
-          this.imgElement.src = `data:image/jpeg;base64,${frameData}`;
+          imageUrl = `data:image/jpeg;base64,${frameData}`;
+        }
+      } else if (frameData && typeof frameData === 'object') {
+        if (frameData.image) {
+          imageUrl = frameData.image.startsWith('data:') ? frameData.image : `data:image/jpeg;base64,${frameData.image}`;
+        }
+        if (frameData.timestamp) {
+          this.lastFrameRosTimestamp = frameData.timestamp;
+        }
+        // Genuine feature points delivered by live ROS 2 tracker
+        if (Array.isArray(frameData.features)) {
+          this.features = frameData.features;
         }
       }
+
+      if (this.imgElement && imageUrl) {
+        this.imgElement.src = imageUrl;
+        this.imgElement.classList.remove('hidden');
+      }
+
+      if (this.placeholder) {
+        this.placeholder.classList.add('hidden');
+      }
+
       this._calcFps();
+      this._updateFrameAgeDisplay();
     }
 
     onTelemetryUpdate(state) {
-      if (this.featureCountBadge) {
-        this.featureCountBadge.textContent = state.vio.active_features !== null ? state.vio.active_features : '--';
-      }
-      if (this.trackedCountBadge) {
-        this.trackedCountBadge.textContent = state.vio.tracked_features !== null ? state.vio.tracked_features : '--';
-      }
-      if (this.latencyBadge) {
-        this.latencyBadge.textContent = state.connection.latency_ms !== null ? `${state.connection.latency_ms} ms` : '18.2 ms';
+      if (!state) return;
+
+      // Update mode if connection state changed
+      if (state.connection && state.connection.mode && state.connection.mode !== this.mode) {
+        this.setMode(state.connection.mode);
       }
 
-      // Update timer HUD
-      if (this.hudTimer) {
-        const now = new Date();
-        const ms = String(now.getMilliseconds()).padStart(3, '0');
-        const s = String(now.getSeconds()).padStart(2, '0');
-        const m = String(now.getMinutes()).padStart(2, '0');
-        this.hudTimer.textContent = `00:${m}:${s}.${ms}`;
+      // Update features count badge if estimator exposes it
+      if (this.featuresBadge && state.vio) {
+        const trk = state.vio.tracked_features;
+        const act = state.vio.active_features;
+        if (trk !== null && trk !== undefined) {
+          this.featuresBadge.textContent = `${trk} TRK / ${act || trk} ACT`;
+        }
       }
     }
 
     onStateChange(state) {
-      const mode = state.connection.mode;
-      const isConn = state.connection.websocket;
+      if (state && state.connection && state.connection.mode) {
+        this.setMode(state.connection.mode);
+      }
+    }
 
-      if (mode === 'DEMO') {
+    setMode(newMode) {
+      this.mode = newMode;
+      this._syncModeUI();
+    }
+
+    _syncModeUI() {
+      if (this.mode === 'DEMO') {
+        // DEMO mode: display reference snapshot
         if (this.placeholder) this.placeholder.classList.add('hidden');
         if (this.imgElement) {
           this.imgElement.classList.remove('hidden');
           this.imgElement.src = 'monocular_tracking_feed.png';
         }
         if (this.statusBadge) {
-          this.statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span> DEMO FEED';
-          this.statusBadge.className = 'flex items-center gap-1 text-secondary font-mono text-xs';
+          this.statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-cyan-400"></span> DEMO SNAPSHOT';
+          this.statusBadge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-800/80';
+        }
+        if (this.fpsBadge) {
+          this.fpsBadge.textContent = 'REF FRAME';
+        }
+        if (this.latencyBadge) {
+          this.latencyBadge.textContent = 'STATIC REF';
+        }
+        if (this.resBadge) {
+          this.resBadge.textContent = `${this.intrinsics.width}×${this.intrinsics.height} mono8`;
         }
       } else {
         // LIVE mode
-        if (isConn && this.hasLiveStream) {
+        if (this.hasLiveFrame && (performance.now() - this.lastFrameArrivalTime < 3000)) {
           if (this.placeholder) this.placeholder.classList.add('hidden');
           if (this.imgElement) this.imgElement.classList.remove('hidden');
           if (this.statusBadge) {
-            this.statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> LIVE';
-            this.statusBadge.className = 'flex items-center gap-1 text-error font-mono text-xs';
+            this.statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> LIVE STREAM';
+            this.statusBadge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-red-950/80 text-red-300 border border-red-800/80';
           }
         } else {
+          // Live stream disconnected or waiting
           if (this.placeholder) this.placeholder.classList.remove('hidden');
           if (this.imgElement) this.imgElement.classList.add('hidden');
           if (this.statusBadge) {
-            this.statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-stone-500"></span> WAITING FOR STREAM';
-            this.statusBadge.className = 'flex items-center gap-1 text-outline font-mono text-xs';
+            this.statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> AWAITING STREAM';
+            this.statusBadge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/80';
           }
+          if (this.fpsBadge) this.fpsBadge.textContent = '0.0 FPS';
+          if (this.latencyBadge) this.latencyBadge.textContent = 'NO DATA';
         }
-      }
-    }
-
-    toggleEpipolar() {
-      this.showEpipolar = !this.showEpipolar;
-      const btn = document.getElementById('btn-epipolar');
-      if (btn) {
-        btn.classList.toggle('bg-primary', this.showEpipolar);
-        btn.classList.toggle('text-on-primary', this.showEpipolar);
-        btn.classList.toggle('bg-surface-container-high', !this.showEpipolar);
-        btn.textContent = `EPIPOLAR LINES [${this.showEpipolar ? 'ON' : 'OFF'}]`;
-      }
-    }
-
-    toggleFeatureIds() {
-      this.showFeatureIds = !this.showFeatureIds;
-      const btn = document.getElementById('btn-feature-ids');
-      if (btn) {
-        btn.classList.toggle('bg-primary', this.showFeatureIds);
-        btn.classList.toggle('text-on-primary', this.showFeatureIds);
-        btn.classList.toggle('bg-surface-container-high', !this.showFeatureIds);
-      }
-    }
-
-    toggleDenseCloud() {
-      this.showDenseCloud = !this.showDenseCloud;
-      const btn = document.getElementById('btn-dense-cloud');
-      if (btn) {
-        btn.classList.toggle('bg-primary', this.showDenseCloud);
-        btn.classList.toggle('text-on-primary', this.showDenseCloud);
-        btn.classList.toggle('bg-surface-container-high', !this.showDenseCloud);
       }
     }
 
     _calcFps() {
       this.frameCount++;
       const now = performance.now();
-      if (now - this.fpsTimer >= 1000) {
-        this.fps = +(this.frameCount / ((now - this.fpsTimer) / 1000)).toFixed(1);
+      const elapsed = (now - this.fpsTimer) / 1000;
+      if (elapsed >= 1.0) {
+        this.measuredFps = +(this.frameCount / elapsed).toFixed(1);
         this.frameCount = 0;
         this.fpsTimer = now;
-        if (this.fpsBadge) this.fpsBadge.textContent = this.fps;
+        if (this.fpsBadge) {
+          this.fpsBadge.textContent = `${this.measuredFps} FPS`;
+        }
+      }
+    }
+
+    _updateFrameAgeDisplay() {
+      if (this.latencyBadge && this.lastFrameArrivalTime > 0) {
+        const ageMs = Math.round(performance.now() - this.lastFrameArrivalTime);
+        this.latencyBadge.textContent = `${ageMs} ms age`;
+      }
+    }
+
+    _checkStreamHealth() {
+      if (this.mode === 'LIVE') {
+        const now = performance.now();
+        if (this.hasLiveFrame && (now - this.lastFrameArrivalTime > 2500)) {
+          // Stream went stale
+          if (this.statusBadge) {
+            this.statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> STREAM STALE';
+            this.statusBadge.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/80';
+          }
+          if (this.fpsBadge) this.fpsBadge.textContent = '0.0 FPS';
+          if (this.latencyBadge) {
+            const ageMs = Math.round(now - this.lastFrameArrivalTime);
+            this.latencyBadge.textContent = `${(ageMs / 1000).toFixed(1)}s stale`;
+          }
+        }
+      }
+    }
+
+    _syncCanvasResolution() {
+      if (!this.canvas) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.floor(rect.width * dpr);
+      const height = Math.floor(rect.height * dpr);
+
+      if (this.canvas.width !== width || this.canvas.height !== height) {
+        this.canvas.width = width;
+        this.canvas.height = height;
       }
     }
 
@@ -214,65 +283,154 @@
     }
 
     _drawHudOverlay() {
-      const w = this.canvas.width = this.canvas.parentElement.clientWidth || 640;
-      const h = this.canvas.height = this.canvas.parentElement.clientHeight || 360;
+      const canvas = this.canvas;
       const ctx = this.ctx;
+      const w = canvas.width;
+      const h = canvas.height;
 
       ctx.clearRect(0, 0, w, h);
+      if (!this.showReticle && !this.showHud) return;
 
-      // Optical principal point
-      const cx = w * 0.50;
-      const cy = h * 0.50;
+      const scaleX = w / this.intrinsics.width;
+      const scaleY = h / this.intrinsics.height;
 
-      // 1. Draw Epipolar geometry if enabled
-      if (this.showEpipolar) {
-        ctx.strokeStyle = 'rgba(125, 244, 255, 0.15)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-        
+      // Calibrated Optical Principal Point (cx, cy)
+      const cx = this.intrinsics.cx * scaleX;
+      const cy = this.intrinsics.cy * scaleY;
+
+      // 1. Draw Calibrated Pinhole Reticle & Crosshair
+      if (this.showReticle) {
+        ctx.save();
+
+        // Subtle optical center crosshair
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)'; // Sky cyan
+        ctx.lineWidth = Math.max(1, 1 * (window.devicePixelRatio || 1));
+
+        // Horizontal line with gap at center
+        const armLen = 30 * scaleX;
+        const gap = 8 * scaleX;
         ctx.beginPath();
-        ctx.moveTo(w * 0.1, h * 0.3);
-        ctx.lineTo(w * 0.9, h * 0.7);
-        ctx.moveTo(w * 0.15, h * 0.8);
-        ctx.lineTo(w * 0.85, h * 0.2);
+        ctx.moveTo(cx - armLen, cy);
+        ctx.lineTo(cx - gap, cy);
+        ctx.moveTo(cx + gap, cy);
+        ctx.lineTo(cx + armLen, cy);
+
+        // Vertical line with gap at center
+        ctx.moveTo(cx, cy - armLen);
+        ctx.lineTo(cx, cy - gap);
+        ctx.moveTo(cx, cy + gap);
+        ctx.lineTo(cx, cy + armLen);
         ctx.stroke();
-        ctx.setLineDash([]);
+
+        // Optical center circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, gap, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+        ctx.stroke();
+
+        // Principal point dot
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2 * (window.devicePixelRatio || 1), 0, Math.PI * 2);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fill();
+
+        // Corner crop brackets for 640x480 active sensor area
+        const bracketLen = 20 * scaleX;
+        const padX = 12 * scaleX;
+        const padY = 12 * scaleY;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.beginPath();
+        // Top-Left
+        ctx.moveTo(padX + bracketLen, padY);
+        ctx.lineTo(padX, padY);
+        ctx.lineTo(padX, padY + bracketLen);
+        // Top-Right
+        ctx.moveTo(w - padX - bracketLen, padY);
+        ctx.lineTo(w - padX, padY);
+        ctx.lineTo(w - padX, padY + bracketLen);
+        // Bottom-Left
+        ctx.moveTo(padX + bracketLen, h - padY);
+        ctx.lineTo(padX, h - padY);
+        ctx.lineTo(padX, h - padY - bracketLen);
+        // Bottom-Right
+        ctx.moveTo(w - padX - bracketLen, h - padY);
+        ctx.lineTo(w - padX, h - padY);
+        ctx.lineTo(w - padX, h - padY - bracketLen);
+        ctx.stroke();
+
+        ctx.restore();
       }
 
-      // 2. Draw KLT Feature tracking points and motion vectors
-      this.features.forEach((feat, idx) => {
-        // Move slightly
-        feat.x += feat.vx;
-        feat.y += feat.vy;
-        if (feat.x < 0.05 || feat.x > 0.95) feat.vx *= -1;
-        if (feat.y < 0.10 || feat.y > 0.90) feat.vy *= -1;
+      // 2. Draw Genuine Feature Tracking Points (if delivered by live estimator)
+      if (this.features && this.features.length > 0) {
+        ctx.save();
+        ctx.fillStyle = '#10b981'; // Emerald
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)';
+        ctx.lineWidth = 1;
 
-        const px = feat.x * w;
-        const py = feat.y * h;
+        for (let i = 0; i < this.features.length; i++) {
+          const pt = this.features[i];
+          const px = pt[0] * scaleX;
+          const py = pt[1] * scaleY;
 
-        // Point box
-        ctx.strokeStyle = '#7df4ff';
-        ctx.lineWidth = 1.2;
-        ctx.strokeRect(px - 3, py - 3, 6, 6);
+          ctx.beginPath();
+          ctx.arc(px, py, 2.5 * (window.devicePixelRatio || 1), 0, Math.PI * 2);
+          ctx.fill();
 
-        // Center dot
-        ctx.fillStyle = feat.quality > 0.9 ? '#00eefc' : '#d1bcff';
-        ctx.fillRect(px - 1, py - 1, 2, 2);
-
-        // Motion vector trail
-        ctx.strokeStyle = 'rgba(125, 244, 255, 0.7)';
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + feat.vx * w * 12, py + feat.vy * h * 12);
-        ctx.stroke();
-
-        // Feature ID label
-        if (this.showFeatureIds) {
-          ctx.fillStyle = '#dfe2ed';
-          ctx.font = '8px "Space Mono", monospace';
-          ctx.fillText(`F${feat.id}`, px + 5, py - 3);
+          // Small ring around feature
+          ctx.beginPath();
+          ctx.arc(px, py, 5 * (window.devicePixelRatio || 1), 0, Math.PI * 2);
+          ctx.stroke();
         }
-      });
+        ctx.restore();
+      }
+    }
+
+    toggleReticle() {
+      this.showReticle = !this.showReticle;
+      const btn = document.getElementById('btn-toggle-reticle');
+      if (btn) {
+        btn.classList.toggle('bg-stone-900', this.showReticle);
+        btn.classList.toggle('text-white', this.showReticle);
+        btn.classList.toggle('bg-white', !this.showReticle);
+        btn.classList.toggle('text-stone-700', !this.showReticle);
+      }
+      if (window.showToast) {
+        window.showToast(`Optical Reticle: ${this.showReticle ? 'Enabled' : 'Disabled'}`);
+      }
+    }
+
+    toggleHud() {
+      this.showHud = !this.showHud;
+      const hudEl = document.getElementById('camera-hud-overlay');
+      if (hudEl) {
+        hudEl.style.display = this.showHud ? 'flex' : 'none';
+      }
+      const btn = document.getElementById('btn-toggle-hud');
+      if (btn) {
+        btn.classList.toggle('bg-stone-900', this.showHud);
+        btn.classList.toggle('text-white', this.showHud);
+        btn.classList.toggle('bg-white', !this.showHud);
+        btn.classList.toggle('text-stone-700', !this.showHud);
+      }
+      if (window.showToast) {
+        window.showToast(`Camera HUD: ${this.showHud ? 'Visible' : 'Hidden'}`);
+      }
+    }
+
+    toggleFitMode() {
+      this.objectFit = this.objectFit === 'contain' ? 'cover' : 'contain';
+      if (this.imgElement) {
+        this.imgElement.classList.toggle('object-contain', this.objectFit === 'contain');
+        this.imgElement.classList.toggle('object-cover', this.objectFit === 'cover');
+      }
+      const btn = document.getElementById('btn-toggle-fit');
+      if (btn) {
+        btn.textContent = this.objectFit === 'contain' ? 'Fit: 1:1 Aspect' : 'Fit: Fill Box';
+      }
+      if (window.showToast) {
+        window.showToast(`Display Aspect: ${this.objectFit.toUpperCase()}`);
+      }
     }
   }
 

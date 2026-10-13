@@ -415,6 +415,34 @@ if not DATASETS:
     sys.exit(1)
 print(f"[Bridge] Loaded {len(DATASETS)} trajectory datasets: {list(DATASETS.keys())}")
 
+DEMO_POINTCLOUD = []
+
+def load_demo_pointcloud():
+    global DEMO_POINTCLOUD
+    pcd_path = DIRECTORY / "data" / "synthetic_orbit_scanned_map.pcd"
+    if not pcd_path.exists():
+        return
+    try:
+        pts = []
+        with open(pcd_path, "r", encoding="utf-8") as f:
+            is_data = False
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if is_data:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        pts.append([round(float(parts[0]), 4), round(float(parts[1]), 4), round(float(parts[2]), 4)])
+                elif line.startswith("DATA"):
+                    is_data = True
+        DEMO_POINTCLOUD = pts
+        print(f"[Bridge] Loaded {len(DEMO_POINTCLOUD)} points from {pcd_path.name}")
+    except Exception as e:
+        print(f"[Bridge] Warning: Failed to parse {pcd_path.name}: {e}")
+
+load_demo_pointcloud()
+
 
 # ==============================================================================
 # WebSocket Framing (RFC 6455)
@@ -741,6 +769,34 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                 "version": "2.0.0"
             }
             self.wfile.write(json.dumps(health_data).encode('utf-8'))
+            return
+
+        if self.path == "/api/pointcloud":
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(DEMO_POINTCLOUD).encode('utf-8'))
+            return
+
+        if self.path == "/api/camera_status":
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            cam_status = {
+                "mode": SERVER_STATE["mode"],
+                "topic": "/camera/image_raw",
+                "encoding": "mono8",
+                "demo_image_available": (DIRECTORY / "monocular_tracking_feed.png").exists(),
+                "demo_image_url": "/monocular_tracking_feed.png",
+                "live_stream_available": False,  # No MJPEG bridge implemented; requires cv_bridge + ROS 2
+                "note": (
+                    "In LIVE mode, camera images are published as sensor_msgs/msg/Image on /camera/image_raw "
+                    "(mono8 encoding) and as bgr8 overlay on /camera/vio_overlay. "
+                    "A real-time MJPEG bridge endpoint is not yet implemented. "
+                    "Connect a ROS 2 image_transport republisher to stream frames."
+                )
+            }
+            self.wfile.write(json.dumps(cam_status).encode('utf-8'))
             return
 
         super().do_GET()

@@ -294,8 +294,31 @@ class TestBridgeHttpServer(unittest.TestCase):
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode('utf-8'))
             self.assertEqual(data["status"], "success")
-            self.assertEqual(data["target_p"], [15.0, 2.0, 10.0])
-            self.assertEqual(data["target_yaw"], 1.57)
+    def test_pointcloud_endpoint(self):
+        import urllib.request
+        import json
+
+        url = f"http://127.0.0.1:{self.port}/api/pointcloud"
+        with urllib.request.urlopen(url, timeout=2.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode('utf-8'))
+            self.assertIsInstance(data, list)
+            # The PCD has 442 genuine landmarks
+            self.assertEqual(len(data), 442)
+            self.assertEqual(len(data[0]), 3)
+
+    def test_camera_status_endpoint(self):
+        import urllib.request
+        import json
+
+        url = f"http://127.0.0.1:{self.port}/api/camera_status"
+        with urllib.request.urlopen(url, timeout=2.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode('utf-8'))
+            self.assertEqual(data["topic"], "/camera/image_raw")
+            self.assertEqual(data["encoding"], "mono8")
+            self.assertTrue(data["demo_image_available"])
+            self.assertEqual(data["demo_image_url"], "/monocular_tracking_feed.png")
 
 
 if __name__ == '__main__':

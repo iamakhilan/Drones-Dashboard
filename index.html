@@ -6,6 +6,8 @@
   <title>AeroVIO Ground Station — Monocular Visual-Inertial Odometry & 50 Hz Cascaded SO(3) Controller</title>
   <link rel="stylesheet" href="css/output.css" />
   <link rel="stylesheet" href="css/dashboard.css" />
+  <script src="js/three.min.js"></script>
+  <script src="js/OrbitControls.js"></script>
   <script src="js/config.js"></script>
   <script src="data/real_data.js"></script>
   <script src="js/telemetry.js"></script>
@@ -169,49 +171,125 @@
         </div>
       </section>
       <section class="grid grid-cols-1 lg:grid-cols-12 gap-6" data-purpose="workspaces-section">
+                <!-- Monocular Optical Feed -->
         <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between scroll-mt-14" id="camera">
           <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
-            <div class="flex items-center gap-2"><h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5"><svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>Monocular Optical Feed</h2><span class="text-[11px] font-mono text-stone-500">/camera/image_raw</span></div>
-            <div class="flex items-center gap-1 text-xs font-mono bg-stone-100 px-2 py-1 rounded text-stone-700"><span id="cam-fps">30 FPS</span><span class="text-stone-400">•</span><span id="cam-lat">14 ms</span></div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                Monocular Optical Feed
+              </h2>
+              <span class="text-[11px] font-mono text-stone-500">/camera/image_raw</span>
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span id="cam-status-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-800/80"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> DEMO SNAPSHOT</span>
+              <span id="cam-res-badge" class="text-[10px] font-mono bg-stone-100 text-stone-600 px-2 py-0.5 rounded border border-stone-200">640×480 mono8</span>
+              <div class="flex items-center gap-1 text-xs font-mono bg-stone-100 px-2 py-0.5 rounded text-stone-700 border border-stone-200">
+                <span id="cam-fps-badge">REF FRAME</span>
+                <span class="text-stone-400">•</span>
+                <span id="cam-latency-badge">STATIC REF</span>
+              </div>
+            </div>
           </div>
-          <div class="relative w-full aspect-video bg-stone-900 rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center">
-            <img id="camera-feed-bg" class="absolute inset-0 w-full h-full object-cover opacity-90" src="monocular_tracking_feed.png" alt="Monocular Camera Stream" />
-            <div class="absolute inset-0 pointer-events-none flex items-center justify-center"><div class="w-8 h-8 border border-white/40 rounded-full flex items-center justify-center"><div class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div></div><div class="absolute w-24 h-[1px] bg-white/25"></div><div class="absolute h-24 w-[1px] bg-white/25"></div></div>
-            <svg id="optical-flow-svg" class="absolute inset-0 w-full h-full pointer-events-none"><g id="klt-points-group"></g></svg>
-            <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded border border-white/10 text-[11px] font-mono text-white flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>KLT TRACKER: <strong id="klt-count">248 pts</strong></span></div>
-            <div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded border border-white/10 text-[10px] font-mono text-stone-300"><span>FOV: 92.4° H | 74.1° V</span></div>
-            <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono text-stone-300 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10"><div>Pinhole Model (fx=615, fy=615)</div><div class="text-emerald-400 font-semibold">T<sub>WC</sub> CAMERA OPTICAL FRAME</div></div>
+          <!-- Viewport with calibrated optical display -->
+          <div class="relative w-full aspect-video bg-[#070A0F] rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center">
+            <img id="camera-feed-img" class="w-full h-full object-contain" src="monocular_tracking_feed.png" alt="Monocular Optical Feed" />
+            <canvas id="camera-overlay-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+            
+            <!-- Disconnected / Stream Waiting Placeholder -->
+            <div id="camera-placeholder" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-stone-950/95 text-stone-300 z-10 space-y-2">
+              <svg class="w-10 h-10 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              <div class="text-sm font-bold text-white">No Live Camera Stream Detected</div>
+              <p class="text-xs text-stone-400 max-w-sm">Topic <span class="font-mono text-cyan-400">/camera/image_raw</span> (mono8) is inactive. In LIVE mode, frames require an active ROS 2 publisher or image bridge.</p>
+              <span class="text-[10px] font-mono text-stone-500 bg-stone-900 px-2 py-1 rounded border border-stone-800">Switch to DEMO to view calibrated reference frame</span>
+            </div>
+
+            <!-- Optical HUD Badges -->
+            <div id="camera-hud-overlay" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="bg-black/70 backdrop-blur-md px-2.5 py-1 rounded border border-white/10 text-[10px] font-mono text-stone-300">
+                  <span class="text-cyan-400 font-semibold">PINHOLE INTRINSICS:</span> fx=615.2, fy=615.4 | FOV: 55.0°H × 42.6°V
+                </div>
+                <div class="bg-black/70 backdrop-blur-md px-2 py-1 rounded border border-white/10 text-[10px] font-mono text-stone-300">
+                  <span class="text-emerald-400 font-semibold">TRACKER:</span> <span id="cam-features-badge">RAW MONO FEED</span>
+                </div>
+              </div>
+              <div class="flex items-end justify-between gap-2">
+                <div class="bg-black/70 backdrop-blur-md px-2.5 py-1 rounded border border-white/10 text-[10px] font-mono text-stone-300">
+                  PRINCIPAL POINT: <span class="text-white">cx=320.0, cy=240.0</span>
+                </div>
+                <div class="bg-black/70 backdrop-blur-md px-2.5 py-1 rounded border border-white/10 text-[10px] font-mono text-emerald-400 font-semibold">
+                  T<sub>WC</sub> CAMERA OPTICAL FRAME (+Z FWD, +X RIGHT, +Y DOWN)
+                </div>
+              </div>
+            </div>
           </div>
+          <!-- Camera Controls Footer -->
           <div class="flex items-center justify-between pt-3 text-xs flex-wrap gap-2">
             <div class="flex items-center gap-2">
-              <button id="btn-toggle-features" onclick="toggleFeatureOverlay()" class="min-h-[44px] px-3 py-2 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Toggle Features</button>
-              <button id="btn-toggle-vectors" onclick="toggleFlowVectors()" class="min-h-[44px] px-3 py-2 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Show Velocity Vectors</button>
+              <button id="btn-toggle-reticle" onclick="toggleReticleOverlay()" class="min-h-[38px] px-3 py-1.5 bg-stone-900 text-white font-medium rounded-lg border border-stone-800 transition">Calibrated Reticle</button>
+              <button id="btn-toggle-hud" onclick="toggleCameraHud()" class="min-h-[38px] px-3 py-1.5 bg-stone-900 text-white font-medium rounded-lg border border-stone-800 transition">Camera HUD</button>
+              <button id="btn-toggle-fit" onclick="toggleCameraFitMode()" class="min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Fit: 1:1 Aspect</button>
             </div>
             <span class="text-stone-500 font-mono text-[11px]">Subscribed: /camera/image_raw</span>
           </div>
         </div>
+        <!-- 3D Spatial Map & Trajectories -->
         <div class="lg:col-span-6 bg-white rounded-2xl border border-stone-200 shadow-sm p-4 flex flex-col justify-between scroll-mt-14" id="pointcloud">
           <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
-            <div class="flex items-center gap-2"><h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5"><svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>3D Spatial Map &amp; Trajectories</h2><span class="text-[11px] font-mono text-stone-500 hidden sm:inline">/drone/vio/pointcloud</span></div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                3D Spatial Map &amp; Trajectories
+              </h2>
+              <span class="text-[11px] font-mono text-stone-500 hidden sm:inline">/drone/vio/pointcloud</span>
+            </div>
             <div class="flex items-center gap-1 text-xs bg-stone-100 p-0.5 rounded-lg border border-stone-200 font-medium" id="perspective-controls">
               <button onclick="setPerspective('iso')" id="btn-persp-iso" class="persp-btn min-h-[32px] px-2 py-1 bg-white text-stone-900 rounded shadow-sm">Isometric</button>
               <button onclick="setPerspective('top')" id="btn-persp-top" class="persp-btn min-h-[32px] text-stone-600 hover:text-stone-900 px-2 py-1 rounded">Top (XY)</button>
               <button onclick="setPerspective('side')" id="btn-persp-side" class="persp-btn min-h-[32px] text-stone-600 hover:text-stone-900 px-2 py-1 rounded">Side (XZ)</button>
+              <button onclick="setPerspective('follow')" id="btn-persp-follow" class="persp-btn min-h-[32px] text-stone-600 hover:text-stone-900 px-2 py-1 rounded">Follow</button>
             </div>
           </div>
-          <div class="relative w-full aspect-video bg-[#0C1017] rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center reticle-grid">
-            <svg id="svg-spatial-canvas" class="w-full h-full" viewBox="0 0 600 350"><defs><linearGradient id="trajGrad" x1="0%" x2="100%" y1="100%" y2="0%"><stop offset="0%" stop-color="#0284C7" stop-opacity="0.3"></stop><stop offset="60%" stop-color="#0EA5E9" stop-opacity="0.8"></stop><stop offset="100%" stop-color="#10B981" stop-opacity="1"></stop></linearGradient></defs><g id="svg-floor-grid" stroke="rgba(255,255,255,0.08)" stroke-width="1"><path d="M 120 280 L 320 340 L 520 270 L 320 210 Z" fill="rgba(14, 165, 233, 0.02)"></path><line x1="220" x2="420" y1="245" y2="305"></line><line x1="320" x2="320" y1="210" y2="340"></line></g><g id="svg-origin-triad" transform="translate(180, 270)"><line stroke="#EF4444" stroke-width="2" x1="0" x2="25" y1="0" y2="8"></line><line stroke="#10B981" stroke-width="2" x1="0" x2="-15" y1="0" y2="12"></line><line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-25"></line><text fill="#EF4444" font-family="monospace" font-size="9" x="30" y="10">X_w (ENU)</text></g><g id="svg-pcd-points-group"></g><path id="svg-trajectory-path" d="M 180 270 Q 230 250, 270 210 T 360 170 T 430 115" fill="none" stroke="url(#trajGrad)" stroke-linecap="round" stroke-width="3"></path><g id="svg-drone-body" transform="translate(430, 115)"><polygon fill="rgba(16, 185, 129, 0.2)" points="0,0 -16,-22 16,-22" stroke="#10B981" stroke-width="1.8"></polygon><circle cx="0" cy="0" fill="#10B981" r="4.5"></circle><line stroke="#EF4444" stroke-width="2" x1="0" x2="20" y1="0" y2="0"></line><line stroke="#3B82F6" stroke-width="2" x1="0" x2="0" y1="0" y2="-20"></line></g><g id="svg-drone-callout" transform="translate(445, 95)"><rect fill="rgba(15, 23, 42, 0.85)" height="38" rx="6" stroke="rgba(255,255,255,0.15)" width="135" x="0" y="0"></rect><text fill="#E2E8F0" font-family="monospace" font-size="10" font-weight="bold" x="8" y="15">BODY POSE T_WB</text><text id="svg-callout-subtext" fill="#38BDF8" font-family="monospace" font-size="9" x="8" y="29">Z: 14.8m | V: 3.2 m/s</text></g></svg>
-            <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 text-[11px] font-mono text-slate-300 space-y-0.5"><div id="hud-pw">P_WB: [ <span class="text-white">x: 4.00</span>, <span class="text-white">y: 0.00</span>, <span class="text-emerald-400">z: -2.00</span> ] m</div><div id="hud-vw">V_WB: [ <span class="text-white">vx: 1.25</span>, <span class="text-white">vy: 0.10</span>, <span class="text-emerald-400">vz: 0.02</span> ] m/s</div></div>
-            <div class="absolute top-3 right-3 flex flex-col gap-1 items-end"><span class="bg-slate-900/80 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">MSCKF SLIDING MAP</span><span class="bg-slate-900/80 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">LANDMARKS: <strong id="hud-map-pts">442</strong></span></div>
+          <!-- 3D Interactive WebGL Scene -->
+          <div id="spatial-3d-viewport" class="relative w-full aspect-video bg-[#070A0F] rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center cursor-grab active:cursor-grabbing select-none">
+            <canvas id="three-spatial-canvas" class="w-full h-full block"></canvas>
+            
+            <!-- Top HUD overlay -->
+            <div class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded border border-slate-700/60 text-[10px] font-mono text-slate-300 flex items-center gap-2 pointer-events-none">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span>ORBIT: Left-drag | PAN: Right-drag | ZOOM: Scroll</span>
+            </div>
+            <div class="absolute top-3 right-3 flex flex-col gap-1 items-end pointer-events-none">
+              <span class="bg-slate-900/80 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">MSCKF SLIDING MAP</span>
+              <span class="bg-slate-900/80 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700">LANDMARKS: <strong id="hud-map-pts">442</strong></span>
+            </div>
+
+            <!-- Bottom HUD overlay -->
+            <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 text-[11px] font-mono text-slate-300 space-y-0.5 pointer-events-none">
+              <div id="hud-pw">P_WB: [ <span class="text-white">x: 0.00</span>, <span class="text-white">y: 0.00</span>, <span class="text-emerald-400">z: 2.00</span> ] m</div>
+              <div id="hud-vw">V_WB: [ <span class="text-white">vx: 0.00</span>, <span class="text-white">vy: 0.00</span>, <span class="text-emerald-400">vz: 0.00</span> ] m/s</div>
+            </div>
+            <div class="absolute bottom-3 right-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded border border-slate-700/60 text-[10px] font-mono text-cyan-400 pointer-events-none">
+              WORLD: ENU (+X East, +Y North, +Z Up)
+            </div>
           </div>
+          <!-- VIO Mapping Note Disclaimer (Preserved verbatim) -->
           <div class="mt-2.5 p-2 bg-stone-50 rounded-lg border border-stone-200 text-[10px] font-sans text-stone-600 flex items-center gap-2">
             <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span><strong>VIO Mapping Note:</strong> Triangulated sparse visual landmarks in world frame (ENU). Metric scale is observable only under IMU excitation. Monocular features do not guarantee certified obstacle distance or dense collision classification.</span>
           </div>
+          <!-- 3D Map Controls Footer -->
           <div class="flex items-center justify-between pt-3 text-xs flex-wrap gap-2">
             <div class="flex items-center gap-2">
-              <button onclick="resetTrajectoryCenter()" class="min-h-[44px] px-3 py-2 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Center Viewport</button>
-              <button onclick="exportPCDFile()" class="min-h-[44px] px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white font-semibold rounded-lg border border-stone-900 transition flex items-center gap-1 font-mono text-[11px]"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>Export PCD (442 pts)</button>
+              <button onclick="center3DOnDrone()" class="min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Center on Drone</button>
+              <button onclick="toggle3DTrajectory()" class="min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Toggle Trail</button>
+              <button onclick="toggle3DLandmarks()" class="min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Toggle Landmarks</button>
+              <button onclick="toggle3DFrustum()" class="min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Toggle Frustum</button>
+              <button onclick="exportPCDFile()" class="min-h-[38px] px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white font-semibold rounded-lg border border-stone-900 transition flex items-center gap-1 font-mono text-[11px]">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                Export PCD (442 pts)
+              </button>
             </div>
             <span class="text-stone-500 font-mono text-[11px] hidden sm:inline">World Frame: ENU (East-North-Up) • Camera: OpenCV Pinhole</span>
           </div>
@@ -314,6 +392,7 @@
   <script>
     let currentDatasetKey = 'orbit';
     let currentFrameIndex = 0;
+      if (window.vio && typeof window.vio.clearTrajectory === 'function') window.vio.clearTrajectory();
     let perspectiveMode = 'iso';
     let showFeatures = true;
     let showVectors = true;
@@ -587,13 +666,10 @@
       setElText('ctrl-er-norm', `${(0.015 + Math.abs(Math.sin(frame.t*0.5))*0.01).toFixed(3)} rad`);
       setElText('ctrl-ew-norm', `${(0.012 + Math.abs(Math.cos(frame.t*0.5))*0.005).toFixed(3)} rad/s`);
       setElText('ctrl-md-norm', `${(0.118 + Math.sin(frame.t*0.4)*0.02).toFixed(3)} N·m`);
-      const projected = project3DToSVG(px, py, pz);
-      const droneBody = document.getElementById('svg-drone-body');
-      if (droneBody) droneBody.setAttribute('transform', `translate(${projected.x}, ${projected.y}) rotate(${euler.yaw - 90})`);
-      const callout = document.getElementById('svg-drone-callout');
-      if (callout) callout.setAttribute('transform', `translate(${Math.min(450, projected.x + 15)}, ${Math.max(20, projected.y - 30)})`);
-      const calloutSubtext = document.getElementById('svg-callout-subtext');
-      if (calloutSubtext) calloutSubtext.textContent = `Z: ${pz.toFixed(2)}m | V: ${speed.toFixed(1)} m/s`;
+      // Forward 6-DOF pose to Three.js VIO 3D Spatial Scene
+      if (window.vio && typeof window.vio.updatePose === 'function') {
+        window.vio.updatePose(px, py, pz, frame.qw, frame.qx, frame.qy, frame.qz, vx, vy, vz);
+      }
       const hudPw = document.getElementById('hud-pw');
       if (hudPw) hudPw.innerHTML = `P_WB: [ <span class="text-white">x: ${px.toFixed(2)}</span>, <span class="text-white">y: ${py.toFixed(2)}</span>, <span class="text-emerald-400">z: ${pz.toFixed(2)}</span> ] m`;
       const hudVw = document.getElementById('hud-vw');
@@ -667,6 +743,11 @@
     }
     function setElText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
     function setPerspective(mode) {
+      perspectiveMode = mode;
+      if (window.vio && typeof window.vio.setPerspective === 'function') {
+        window.vio.setPerspective(mode);
+        return;
+      }
       perspectiveMode = mode;
       document.querySelectorAll('.persp-btn').forEach(b => { b.classList.remove('bg-white','text-stone-900','shadow-sm'); b.classList.add('text-stone-600'); });
       const activeBtn = document.getElementById(`btn-persp-${mode}`);
@@ -746,6 +827,18 @@
       requestAnimationFrame(()=>toast.classList.remove('translate-y-3','opacity-0'));
       setTimeout(()=>{ toast.classList.add('opacity-0','translate-y-2'); setTimeout(()=>toast.remove(),300); },3000);
     }
+  
+    // Camera feed helper controls
+    function toggleReticleOverlay() { if (window.cameraView) window.cameraView.toggleReticle(); }
+    function toggleCameraHud() { if (window.cameraView) window.cameraView.toggleHud(); }
+    function toggleCameraFitMode() { if (window.cameraView) window.cameraView.toggleFitMode(); }
+
+    // 3D Spatial Map helper controls
+    function center3DOnDrone() { if (window.vio) window.vio.centerOnDrone(); }
+    function toggle3DTrajectory() { if (window.vio) window.vio.toggleTrajectory(); }
+    function toggle3DLandmarks() { if (window.vio) window.vio.toggleLandmarks(); }
+    function toggle3DFrustum() { if (window.vio) window.vio.toggleCameraFrustum(); }
+
   </script>
 </body>
 </html>
