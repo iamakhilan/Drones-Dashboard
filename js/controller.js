@@ -237,12 +237,29 @@
     }
 
     _updateFsmProgression(activeState) {
-      const states = ['IDLE', 'ARMING', 'TAKEOFF', 'NAVIGATING', 'HOVER', 'FAILSAFE'];
+      const stateMap = {
+        'WAIT_FOR_CONNECTION': 'idle',
+        'PREARM': 'arming',
+        'GUIDED': 'arming',
+        'ARMED': 'arming',
+        'TAKEOFF': 'takeoff',
+        'FLYING': 'navigating',
+        'POSITION_CONTROL': 'navigating',
+        'TARGET_REACHED': 'hover',
+        'HOLD': 'hover',
+        'FAILSAFE': 'failsafe',
+        'IDLE': 'idle',
+        'ARMING': 'arming',
+        'NAVIGATING': 'navigating',
+        'HOVER': 'hover'
+      };
+      const activeKey = stateMap[activeState] || (activeState ? activeState.toLowerCase() : 'idle');
+      const states = ['idle', 'arming', 'takeoff', 'navigating', 'hover', 'failsafe'];
       states.forEach(s => {
-        const el = document.getElementById(`fsm-node-${s.toLowerCase()}`);
+        const el = document.getElementById(`fsm-node-${s}`);
         if (el) {
-          const isActive = (s === activeState);
-          if (s === 'FAILSAFE' && isActive) {
+          const isActive = (s === activeKey);
+          if (s === 'failsafe' && isActive) {
             el.className = 'px-2 py-1 bg-red-600 text-white font-bold rounded shadow-[0_0_10px_rgba(239,68,68,0.5)]';
           } else if (isActive) {
             el.className = 'px-2 py-1 bg-emerald-500 text-black font-bold rounded shadow-[0_0_10px_rgba(16,185,129,0.5)]';

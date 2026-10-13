@@ -465,21 +465,25 @@
     _mapRosToTelemetry(msg) {
       const update = { timestamp: Date.now(), controller: {} };
 
-      // 1. /ap/v1/pose/filtered (geometry_msgs/PoseStamped)
+      // 1. /ap/v1/pose/filtered (geometry_msgs/msg/PoseStamped)
       if (msg.topic === '/ap/v1/pose/filtered') {
         const p = msg.data?.pose?.position || msg.data?.position || {};
         const q = msg.data?.pose?.orientation || msg.data?.orientation || {};
+        const qx = q.x !== undefined ? q.x : (q.qx !== undefined ? q.qx : 0.0);
+        const qy = q.y !== undefined ? q.y : (q.qy !== undefined ? q.qy : 0.0);
+        const qz = q.z !== undefined ? q.z : (q.qz !== undefined ? q.qz : 0.0);
+        const qw = q.w !== undefined ? q.w : (q.qw !== undefined ? q.qw : 1.0);
         if (p.x !== undefined) update.position = { x: p.x, y: p.y, z: p.z };
-        if (q.w !== undefined) {
-          const euler = window.telemetry.quaternionToEuler(q.w, q.x, q.y, q.z);
-          update.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw, qw: q.w, qx: q.x, qy: q.y, qz: q.z };
+        if (qw !== undefined) {
+          const euler = window.telemetry.quaternionToEuler(qw, qx, qy, qz);
+          update.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw, qw: qw, qx: qx, qy: qy, qz: qz };
           if (p.x !== undefined) {
-            update.camera_pose = window.telemetry.computeCameraPose(p.x, p.y, p.z, euler.roll, euler.pitch, euler.yaw);
+            update.camera_pose = window.telemetry.computeCameraPose(p.x, p.y, p.z, qw, qx, qy, qz);
           }
         }
       }
 
-      // 2. /ap/v1/twist/filtered (geometry_msgs/TwistStamped)
+      // 2. /ap/v1/twist/filtered (geometry_msgs/msg/TwistStamped)
       if (msg.topic === '/ap/v1/twist/filtered') {
         const v = msg.data?.twist?.linear || msg.data?.linear || {};
         const w = msg.data?.twist?.angular || msg.data?.angular || {};
@@ -487,72 +491,89 @@
         if (w.x !== undefined) update.orientation = Object.assign(update.orientation || {}, { roll_rate: w.x, pitch_rate: w.y, yaw_rate: w.z });
       }
 
-      // 3. /ap/v1/status (ardupilot_msgs/Status)
+      // 3. /ap/v1/status (ardupilot_msgs/msg/Status)
       if (msg.topic === '/ap/v1/status') {
         const st = msg.data || {};
         update.controller.armed = !!st.armed;
+        update.controller.flying = !!st.flying;
         update.controller.failsafe = !!st.failsafe;
-        update.controller.flight_state = st.flight_state || (st.armed ? 'NAVIGATING' : 'IDLE');
+        update.controller.mode = st.mode;
+        update.controller.flight_state = st.flight_state || (st.failsafe ? 'FAILSAFE' : (st.flying ? 'FLYING' : (st.armed ? 'ARMED' : 'GUIDED')));
         update.controller.watchdog_status = st.failsafe ? 'FAILSAFE' : 'OK';
       }
 
-      // 4. /drones_controller/position_error (geometry_msgs/Vector3)
-      if (msg.topic === '/drones_controller/position_error') {
-        const ep = msg.data || {};
-        const norm = Math.sqrt((ep.x||0)**2 + (ep.y||0)**2 + (ep.z||0)**2);
-        update.controller.position_error = { x: ep.x, y: ep.y, z: ep.z, norm };
-      }
-
-      // 5. /drones_controller/velocity_error (geometry_msgs/Vector3)
-      if (msg.topic === '/drones_controller/velocity_error') {
-        const ev = msg.data || {};
-        const norm = Math.sqrt((ev.x||0)**2 + (ev.y||0)**2 + (ev.z||0)**2);
-        update.controller.velocity_error = { x: ev.x, y: ev.y, z: ev.z, norm };
-      }
-
-      // 6. /drones_controller/desired_force (geometry_msgs/Vector3)
-      if (msg.topic === '/drones_controller/desired_force') {
-        const fd = msg.data || {};
-        const norm = Math.sqrt((fd.x||0)**2 + (fd.y||0)**2 + (fd.z||0)**2);
-        update.controller.desired_force = { x: fd.x, y: fd.y, z: fd.z, norm };
-        update.controller.attitude_generator = {
-          b3d: norm > 0 ? { x: fd.x/norm, y: fd.y/norm, z: fd.z/norm } : { x: 0, y: 0, z: 1 },
-          collective_thrust: norm
+      // 4. /ap/v1/cmd_vel (geometry_msgs/msg/TwistStamped - commanded vehicle output)
+      if (msg.topic === '/ap/v1/cmd_vel') {
+        const v = msg.data?.twist?.linear || msg.data?.linear || {};
+        const w = msg.data?.twist?.angular || msg.data?.angular || {};
+        update.controller.command_velocity = {
+          vx: v.x, vy: v.y, vz: v.z,
+          yaw_rate: w.z,
+          speed: Math.sqrt((v.x||0)**2 + (v.y||0)**2 + (v.z||0)**2)
         };
       }
 
-      // 7. /drones_controller/desired_moment (geometry_msgs/Vector3)
-      if (msg.topic === '/drones_controller/desired_moment') {
-        const md = msg.data || {};
-        const norm = Math.sqrt((md.x||0)**2 + (md.y||0)**2 + (md.z||0)**2);
-        update.controller.so3_controller = update.controller.so3_controller || {};
-        update.controller.so3_controller.desired_moment = { x: md.x, y: md.y, z: md.z, norm };
+      // 5. /drones_controller/position_error (geometry_msgs/msg/Vector3Stamped)
+      if (msg.topic === '/drones_controller/position_error') {
+        const vec = msg.data?.vector || msg.data || {};
+        const norm = Math.sqrt((vec.x||0)**2 + (vec.y||0)**2 + (vec.z||0)**2);
+        update.controller.position_error = { x: vec.x, y: vec.y, z: vec.z, norm };
       }
 
-      // 8. /drones_controller/attitude_error (geometry_msgs/Vector3)
-      if (msg.topic === '/drones_controller/attitude_error') {
-        const er = msg.data || {};
-        const norm = Math.sqrt((er.x||0)**2 + (er.y||0)**2 + (er.z||0)**2);
-        update.controller.so3_controller = update.controller.so3_controller || {};
-        update.controller.so3_controller.attitude_error = { x: er.x, y: er.y, z: er.z, norm };
+      // 6. /drones_controller/velocity_error (geometry_msgs/msg/Vector3Stamped)
+      if (msg.topic === '/drones_controller/velocity_error') {
+        const vec = msg.data?.vector || msg.data || {};
+        const norm = Math.sqrt((vec.x||0)**2 + (vec.y||0)**2 + (vec.z||0)**2);
+        update.controller.velocity_error = { x: vec.x, y: vec.y, z: vec.z, norm };
       }
 
-      // 9. /drones_controller/angular_velocity_error (geometry_msgs/Vector3)
-      if (msg.topic === '/drones_controller/angular_velocity_error') {
-        const ew = msg.data || {};
-        const norm = Math.sqrt((ew.x||0)**2 + (ew.y||0)**2 + (ew.z||0)**2);
-        update.controller.so3_controller = update.controller.so3_controller || {};
-        update.controller.so3_controller.angular_velocity_error = { x: ew.x, y: ew.y, z: ew.z, norm };
-      }
-
-      // 10. /drones_controller/desired_attitude (geometry_msgs/Quaternion)
-      if (msg.topic === '/drones_controller/desired_attitude') {
-        const qd = msg.data || {};
+      // 7. /drones_controller/desired_force (geometry_msgs/msg/Vector3Stamped)
+      if (msg.topic === '/drones_controller/desired_force') {
+        const vec = msg.data?.vector || msg.data || {};
+        const norm = Math.sqrt((vec.x||0)**2 + (vec.y||0)**2 + (vec.z||0)**2);
+        update.controller.desired_force = { x: vec.x, y: vec.y, z: vec.z, norm };
         update.controller.attitude_generator = update.controller.attitude_generator || {};
-        update.controller.attitude_generator.desired_attitude = qd;
+        update.controller.attitude_generator.b3d = norm > 0 ? { x: vec.x/norm, y: vec.y/norm, z: vec.z/norm } : { x: 0, y: 0, z: 1 };
+        update.controller.attitude_generator.collective_thrust = norm;
       }
 
-      // 11. /drone/vio/odometry (nav_msgs/Odometry)
+      // 8. /drones_controller/desired_moment (geometry_msgs/msg/Vector3Stamped)
+      if (msg.topic === '/drones_controller/desired_moment') {
+        const vec = msg.data?.vector || msg.data || {};
+        const norm = Math.sqrt((vec.x||0)**2 + (vec.y||0)**2 + (vec.z||0)**2);
+        update.controller.so3_controller = update.controller.so3_controller || {};
+        update.controller.so3_controller.desired_moment = { x: vec.x, y: vec.y, z: vec.z, norm };
+      }
+
+      // 9. /drones_controller/attitude_error (geometry_msgs/msg/Vector3Stamped)
+      if (msg.topic === '/drones_controller/attitude_error') {
+        const vec = msg.data?.vector || msg.data || {};
+        const norm = Math.sqrt((vec.x||0)**2 + (vec.y||0)**2 + (vec.z||0)**2);
+        update.controller.so3_controller = update.controller.so3_controller || {};
+        update.controller.so3_controller.attitude_error = { x: vec.x, y: vec.y, z: vec.z, norm };
+      }
+
+      // 10. /drones_controller/angular_velocity_error (geometry_msgs/msg/Vector3Stamped)
+      if (msg.topic === '/drones_controller/angular_velocity_error') {
+        const vec = msg.data?.vector || msg.data || {};
+        const norm = Math.sqrt((vec.x||0)**2 + (vec.y||0)**2 + (vec.z||0)**2);
+        update.controller.so3_controller = update.controller.so3_controller || {};
+        update.controller.so3_controller.angular_velocity_error = { x: vec.x, y: vec.y, z: vec.z, norm };
+      }
+
+      // 11. /drones_controller/desired_attitude (geometry_msgs/msg/PoseStamped)
+      if (msg.topic === '/drones_controller/desired_attitude') {
+        const q = msg.data?.pose?.orientation || msg.data?.orientation || msg.data || {};
+        update.controller.attitude_generator = update.controller.attitude_generator || {};
+        update.controller.attitude_generator.desired_attitude = {
+          qx: q.x !== undefined ? q.x : (q.qx !== undefined ? q.qx : 0.0),
+          qy: q.y !== undefined ? q.y : (q.qy !== undefined ? q.qy : 0.0),
+          qz: q.z !== undefined ? q.z : (q.qz !== undefined ? q.qz : 0.0),
+          qw: q.w !== undefined ? q.w : (q.qw !== undefined ? q.qw : 1.0)
+        };
+      }
+
+      // 12. /drone/vio/odometry (nav_msgs/msg/Odometry)
       if (msg.topic === '/drone/vio/odometry') {
         const odom = msg.data || {};
         const p = odom.pose?.pose?.position || odom.position;
@@ -561,14 +582,30 @@
         if (p) update.position = { x: p.x, y: p.y, z: p.z };
         if (v) update.velocity = { vx: v.x, vy: v.y, vz: v.z, norm: Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z) };
         if (q) {
-          const euler = window.telemetry.quaternionToEuler(q.w, q.x, q.y, q.z);
-          update.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw, qw: q.w, qx: q.x, qy: q.y, qz: q.z };
-          if (p) update.camera_pose = window.telemetry.computeCameraPose(p.x, p.y, p.z, euler.roll, euler.pitch, euler.yaw);
+          const qx = q.x !== undefined ? q.x : (q.qx !== undefined ? q.qx : 0.0);
+          const qy = q.y !== undefined ? q.y : (q.qy !== undefined ? q.qy : 0.0);
+          const qz = q.z !== undefined ? q.z : (q.qz !== undefined ? q.qz : 0.0);
+          const qw = q.w !== undefined ? q.w : (q.qw !== undefined ? q.qw : 1.0);
+          const euler = window.telemetry.quaternionToEuler(qw, qx, qy, qz);
+          update.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw, qw, qx, qy, qz };
+          if (p) update.camera_pose = window.telemetry.computeCameraPose(p.x, p.y, p.z, qw, qx, qy, qz);
         }
       }
 
-      // 12. /imu/data (sensor_msgs/Imu)
-      if (msg.topic === '/imu/data') {
+      // 13. /drone/vio/camera_pose (geometry_msgs/msg/PoseStamped)
+      if (msg.topic === '/drone/vio/camera_pose') {
+        const p = msg.data?.pose?.position || msg.data?.position || {};
+        const q = msg.data?.pose?.orientation || msg.data?.orientation || {};
+        const qx = q.x !== undefined ? q.x : (q.qx !== undefined ? q.qx : 0.0);
+        const qy = q.y !== undefined ? q.y : (q.qy !== undefined ? q.qy : 0.0);
+        const qz = q.z !== undefined ? q.z : (q.qz !== undefined ? q.qz : 0.0);
+        const qw = q.w !== undefined ? q.w : (q.qw !== undefined ? q.qw : 1.0);
+        const euler = window.telemetry.quaternionToEuler(qw, qx, qy, qz);
+        update.camera_pose = { x: p.x, y: p.y, z: p.z, roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw, qw, qx, qy, qz };
+      }
+
+      // 14. /imu/data or /imu/data_raw (sensor_msgs/msg/Imu)
+      if (msg.topic === '/imu/data' || msg.topic === '/imu/data_raw') {
         const imu = msg.data || {};
         const a = imu.linear_acceleration || {};
         if (a.x !== undefined) update.acceleration = { ax: a.x, ay: a.y, az: a.z, norm: Math.sqrt(a.x*a.x + a.y*a.y + a.z*a.z) };

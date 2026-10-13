@@ -22,15 +22,73 @@
   }
 
   // Extrinsic transform from Body (IMU) to Camera optical frame: T_BC
-  // Camera is mounted +10cm forward, -4cm downward on the airframe
+  // Defined in reference repository config/synthetic.yaml & config/ros2.yaml:
+  // p_BC: [0.10, 0.00, 0.00] m, R_BC maps OpenCV camera optical vectors to body ENU vectors
   const EXTRINSIC_T_BC = {
-    translation: { x: 0.10, y: 0.00, z: -0.04 },
+    translation: { x: 0.10, y: 0.00, z: 0.00 },
     rotation: [
-      [ 0,  0,  1],
-      [-1,  0,  0],
-      [ 0, -1,  0]
+      [ 0.0,  0.0,  1.0],
+      [-1.0,  0.0,  0.0],
+      [ 0.0, -1.0,  0.0]
     ]
   };
+
+  function quatToMatrix(qx, qy, qz, qw) {
+    var norm = Math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw);
+    if (!norm || norm < 1e-9) return [[1,0,0],[0,1,0],[0,0,1]];
+    var x = qx/norm, y = qy/norm, z = qz/norm, w = qw/norm;
+    return [
+      [1 - 2*(y*y + z*z), 2*(x*y - z*w),     2*(x*z + y*w)],
+      [2*(x*y + z*w),     1 - 2*(x*x + z*z), 2*(y*z - x*w)],
+      [2*(x*z - y*w),     2*(y*z + x*w),     1 - 2*(x*x + y*y)]
+    ];
+  }
+
+  function matrixToQuat(R) {
+    var tr = R[0][0] + R[1][1] + R[2][2];
+    var qx, qy, qz, qw;
+    if (tr > 0) {
+      var s = 0.5 / Math.sqrt(tr + 1.0);
+      qw = 0.25 / s;
+      qx = (R[2][1] - R[1][2]) * s;
+      qy = (R[0][2] - R[2][0]) * s;
+      qz = (R[1][0] - R[0][1]) * s;
+    } else if (R[0][0] > R[1][1] && R[0][0] > R[2][2]) {
+      var s = 2.0 * Math.sqrt(1.0 + R[0][0] - R[1][1] - R[2][2]);
+      qw = (R[2][1] - R[1][2]) / s;
+      qx = 0.25 * s;
+      qy = (R[0][1] + R[1][0]) / s;
+      qz = (R[0][2] + R[2][0]) / s;
+    } else if (R[1][1] > R[2][2]) {
+      var s = 2.0 * Math.sqrt(1.0 + R[1][1] - R[0][0] - R[2][2]);
+      qw = (R[0][2] - R[2][0]) / s;
+      qx = (R[0][1] + R[1][0]) / s;
+      qy = 0.25 * s;
+      qz = (R[1][2] + R[2][1]) / s;
+    } else {
+      var s = 2.0 * Math.sqrt(1.0 + R[2][2] - R[0][0] - R[1][1]);
+      qw = (R[1][0] - R[0][1]) / s;
+      qx = (R[0][2] + R[2][0]) / s;
+      qy = (R[1][2] + R[2][1]) / s;
+      qz = 0.25 * s;
+    }
+    var qn = Math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw) || 1;
+    return { qx: qx/qn, qy: qy/qn, qz: qz/qn, qw: qw/qn };
+  }
+
+  function matrixMultiply(A, B) {
+    var C = [[0,0,0],[0,0,0],[0,0,0]];
+    for (var i=0; i<3; i++) {
+      for (var j=0; j<3; j++) {
+        C[i][j] = A[i][0]*B[0][j] + A[i][1]*B[1][j] + A[i][2]*B[2][j];
+      }
+    }
+    return C;
+  }
+
+  function veeOp(S) {
+    return [S[2][1], S[0][2], S[1][0]];
+  }
 
   class TelemetryEngine {
     constructor() {
@@ -151,14 +209,17 @@
             desired_moment: { x: null, y: null, z: null, norm: null }          // M_d = -k_R e_R - k_w e_w + w x J w
           },
 
-          // Controller Parameters from ROS 2 Node Config
+          // Controller Parameters from ROS 2 Node Config (config/controller.yaml & vehicle.yaml)
           gains: {
             kp_pos: [0.5, 0.5, 0.5],
             kv_pos: [0.2, 0.2, 0.2],
-            kr_att: [4.85, 4.85, 2.50],
-            kw_rates: [0.35, 0.35, 0.20],
+            kr_att: [4.0, 4.0, 2.0],
+            kw_rates: [0.8, 0.8, 0.5],
             mass_kg: 1.5,
-            inertia_diag: [0.02, 0.02, 0.04]
+            inertia_diag: [0.02, 0.02, 0.04],
+            max_velocity: 0.5,
+            position_tolerance: 0.10,
+            velocity_tolerance: 0.05
           }
         },
 
@@ -316,6 +377,7 @@
 
     /**
      * Step through trajectory and compute true cascaded SO(3) controller outputs
+     * Aligned with position_controller.py, attitude_generator.py, and so3_controller.py
      */
     _stepDemoPlayback() {
       const datasets = window.AERO_DATASETS || {};
@@ -334,10 +396,10 @@
       const qy = row.qy;
       const qz = row.qz;
 
-      // Euler angles
+      // Euler angles of body
       const euler = this.quaternionToEuler(qw, qx, qy, qz);
 
-      // Estimate velocity
+      // Estimate linear velocity from displacement
       let vx = 0, vy = 0, vz = 0;
       if (this.lastPos) {
         const dt = 0.020; // 50 Hz
@@ -348,65 +410,165 @@
         this.totalTraveledDist += dDist;
       }
       this.lastPos = { x, y, z };
+      const v_norm = Math.sqrt(vx*vx + vy*vy + vz*vz);
 
-      // Compute Camera Pose: T_WC = T_WB * T_BC
-      const camPose = this.computeCameraPose(x, y, z, euler.roll, euler.pitch, euler.yaw);
+      // Gyro rates from dataset or zero
+      const wx = row.bgx || 0.0;
+      const wy = row.bgy || 0.0;
+      const wz = row.bgz || 0.0;
+
+      // Compute Camera Pose: T_WC = T_WB * T_BC (matrix composition)
+      const camPose = this.computeCameraPose(x, y, z, qw, qx, qy, qz);
 
       // Features
       const activeFeat = 120 + Math.floor(Math.sin(this.demoIndex * 0.05) * 15);
       const trackedFeat = Math.min(activeFeat, Math.floor(activeFeat * 0.91 + Math.cos(this.demoIndex * 0.08) * 8));
       const trackingQuality = Math.round((trackedFeat / activeFeat) * 100);
 
-      // Target Setpoint from Controller Node: target = [20, 5, 20]
-      const target = this.state.controller.desired_position;
-      const Kp = this.state.controller.gains.kp_pos;
-      const Kv = this.state.controller.gains.kv_pos;
-      const m = this.state.controller.gains.mass_kg;
+      // Controller Target & Gains (from reference repository)
+      const target = this.state.controller.desired_position || { x: 20.0, y: 5.0, z: 20.0, yaw: 2.0 };
+      const Kp = this.state.controller.gains.kp_pos || [0.5, 0.5, 0.5];
+      const Kv = this.state.controller.gains.kv_pos || [0.2, 0.2, 0.2];
+      const KR = this.state.controller.gains.kr_att || [4.0, 4.0, 2.0];
+      const KOmega = this.state.controller.gains.kw_rates || [0.8, 0.8, 0.5];
+      const m = this.state.controller.gains.mass_kg || 1.5;
       const g = 9.81;
+      const J = this.state.controller.gains.inertia_diag || [0.02, 0.02, 0.04];
+      const maxVel = this.state.controller.gains.max_velocity || 0.5;
+      const posTol = this.state.controller.gains.position_tolerance || 0.10;
+      const velTol = this.state.controller.gains.velocity_tolerance || 0.05;
 
-      // Position Error: e_p = p - p_d
-      const epx = x - target.x;
-      const epy = y - target.y;
-      const epz = z - target.z;
+      // 1. Position Controller (e_p = p_d - p, e_v = v_d - v)
+      const epx = target.x - x;
+      const epy = target.y - y;
+      const epz = target.z - z;
       const ep_norm = Math.sqrt(epx*epx + epy*epy + epz*epz);
 
-      // Velocity Error: e_v = v - v_d (v_d = 0)
-      const evx = vx - 0.0;
-      const evy = vy - 0.0;
-      const evz = vz - 0.0;
+      const target_v = this.state.controller.desired_velocity || { x: 0, y: 0, z: 0 };
+      const evx = target_v.x - vx;
+      const evy = target_v.y - vy;
+      const evz = target_v.z - vz;
       const ev_norm = Math.sqrt(evx*evx + evy*evy + evz*evz);
 
-      // Desired Force: F_d = -Kp e_p - Kv e_v + m*g*e3
-      const Fdx = -Kp[0] * epx - Kv[0] * evx;
-      const Fdy = -Kp[1] * epy - Kv[1] * evy;
-      const Fdz = -Kp[2] * epz - Kv[2] * evz + m * g;
+      const targetReached = (ep_norm < posTol && v_norm < velTol);
+
+      // Commanded velocity (saturated)
+      const rawVx = Kp[0] * epx + Kv[0] * evx;
+      const rawVy = Kp[1] * epy + Kv[1] * evy;
+      const rawVz = Kp[2] * epz + Kv[2] * evz;
+      const rawSpeed = Math.sqrt(rawVx*rawVx + rawVy*rawVy + rawVz*rawVz);
+      let v_cmd_x = 0, v_cmd_y = 0, v_cmd_z = 0;
+      if (!targetReached) {
+        if (rawSpeed > maxVel && rawSpeed > 1e-6) {
+          const scale = maxVel / rawSpeed;
+          v_cmd_x = rawVx * scale;
+          v_cmd_y = rawVy * scale;
+          v_cmd_z = rawVz * scale;
+        } else {
+          v_cmd_x = rawVx;
+          v_cmd_y = rawVy;
+          v_cmd_z = rawVz;
+        }
+      }
+
+      // Desired force: F_d = m * (Kp*e_p + Kv*e_v + a_d + g*e3)
+      const Fdx = m * (Kp[0] * epx + Kv[0] * evx);
+      const Fdy = m * (Kp[1] * epy + Kv[1] * evy);
+      const Fdz = m * (Kp[2] * epz + Kv[2] * evz + g);
       const Fd_norm = Math.sqrt(Fdx*Fdx + Fdy*Fdy + Fdz*Fdz);
 
-      // Attitude Generator: b3d = F_d / ||F_d||
-      const b3dx = Fdx / Fd_norm;
-      const b3dy = Fdy / Fd_norm;
-      const b3dz = Fdz / Fd_norm;
-      const collectiveThrust = Fd_norm;
+      // 2. Attitude Generator
+      let b3dx = 0, b3dy = 0, b3dz = 1;
+      let collectiveThrust = 0;
+      let R_d = [[1,0,0],[0,1,0],[0,0,1]];
+      if (Fd_norm > 1e-6) {
+        b3dx = Fdx / Fd_norm;
+        b3dy = Fdy / Fd_norm;
+        b3dz = Fdz / Fd_norm;
+        collectiveThrust = Fd_norm;
 
-      // SO(3) Attitude Error: e_R
-      const eRx = -0.015 * Math.sin(this.demoIndex * 0.05);
-      const eRy = +0.020 * Math.cos(this.demoIndex * 0.05);
-      const eRz = 0.010 * Math.sin(this.demoIndex * 0.03);
+        const yaw_d = target.yaw !== undefined ? target.yaw : 2.0;
+        let hy_x = Math.cos(yaw_d);
+        let hy_y = Math.sin(yaw_d);
+        let hy_z = 0.0;
+
+        // b2 = b3d x heading
+        let b2x = b3dy * hy_z - b3dz * hy_y;
+        let b2y = b3dz * hy_x - b3dx * hy_z;
+        let b2z = b3dx * hy_y - b3dy * hy_x;
+        let norm_b2 = Math.sqrt(b2x*b2x + b2y*b2y + b2z*b2z);
+        if (norm_b2 < 1e-6) {
+          const yaw_mod = yaw_d + 1e-3;
+          hy_x = Math.cos(yaw_mod);
+          hy_y = Math.sin(yaw_mod);
+          b2x = b3dy * hy_z - b3dz * hy_y;
+          b2y = b3dz * hy_x - b3dx * hy_z;
+          b2z = b3dx * hy_y - b3dy * hy_x;
+          norm_b2 = Math.sqrt(b2x*b2x + b2y*b2y + b2z*b2z);
+        }
+        b2x /= norm_b2; b2y /= norm_b2; b2z /= norm_b2;
+
+        // b1 = b2 x b3d
+        let b1x = b2y * b3dz - b2z * b3dy;
+        let b1y = b2z * b3dx - b2x * b3dz;
+        let b1z = b2x * b3dy - b2y * b3dx;
+        const norm_b1 = Math.sqrt(b1x*b1x + b1y*b1y + b1z*b1z);
+        b1x /= norm_b1; b1y /= norm_b1; b1z /= norm_b1;
+
+        R_d = [
+          [b1x, b2x, b3dx],
+          [b1y, b2y, b3dy],
+          [b1z, b2z, b3dz]
+        ];
+      }
+      const q_d = matrixToQuat(R_d);
+
+      // 3. SO(3) Attitude Controller
+      const R_wb = quatToMatrix(qx, qy, qz, qw);
+      const Rd_T = [
+        [R_d[0][0], R_d[1][0], R_d[2][0]],
+        [R_d[0][1], R_d[1][1], R_d[2][1]],
+        [R_d[0][2], R_d[1][2], R_d[2][2]]
+      ];
+      const R_T = [
+        [R_wb[0][0], R_wb[1][0], R_wb[2][0]],
+        [R_wb[0][1], R_wb[1][1], R_wb[2][1]],
+        [R_wb[0][2], R_wb[1][2], R_wb[2][2]]
+      ];
+
+      const RdT_R = matrixMultiply(Rd_T, R_wb);
+      const RT_Rd = matrixMultiply(R_T, R_d);
+      const E = [
+        [RdT_R[0][0] - RT_Rd[0][0], RdT_R[0][1] - RT_Rd[0][1], RdT_R[0][2] - RT_Rd[0][2]],
+        [RdT_R[1][0] - RT_Rd[1][0], RdT_R[1][1] - RT_Rd[1][1], RdT_R[1][2] - RT_Rd[1][2]],
+        [RdT_R[2][0] - RT_Rd[2][0], RdT_R[2][1] - RT_Rd[2][1], RdT_R[2][2] - RT_Rd[2][2]]
+      ];
+      const eR_vec = veeOp(E);
+      const eRx = 0.5 * eR_vec[0];
+      const eRy = 0.5 * eR_vec[1];
+      const eRz = 0.5 * eR_vec[2];
       const eR_norm = Math.sqrt(eRx*eRx + eRy*eRy + eRz*eRz);
 
-      // Angular velocity error: e_w
-      const ewx = 0.005 * Math.cos(this.demoIndex * 0.05);
-      const ewy = -0.008 * Math.sin(this.demoIndex * 0.05);
-      const ewz = 0.012;
+      // Angular rate error: e_omega = omega - R^T * R_d * omega_d (with omega_d = 0)
+      const ewx = wx;
+      const ewy = wy;
+      const ewz = wz;
       const ew_norm = Math.sqrt(ewx*ewx + ewy*ewy + ewz*ewz);
 
-      // Desired Moment: M_d = -k_R e_R - k_w e_w
-      const kr = this.state.controller.gains.kr_att;
-      const kw = this.state.controller.gains.kw_rates;
-      const Mx = -kr[0] * eRx - kw[0] * ewx;
-      const My = -kr[1] * eRy - kw[1] * ewy;
-      const Mz = -kr[2] * eRz - kw[2] * ewz;
+      // Coriolis = omega x (J * omega)
+      const Jw_x = J[0] * wx;
+      const Jw_y = J[1] * wy;
+      const Jw_z = J[2] * wz;
+      const coriolis_x = wy * Jw_z - wz * Jw_y;
+      const coriolis_y = wz * Jw_x - wx * Jw_z;
+      const coriolis_z = wx * Jw_y - wy * Jw_x;
+
+      const Mx = -KR[0] * eRx - KOmega[0] * ewx + coriolis_x;
+      const My = -KR[1] * eRy - KOmega[1] * ewy + coriolis_y;
+      const Mz = -KR[2] * eRz - KOmega[2] * ewz + coriolis_z;
       const Md_norm = Math.sqrt(Mx*Mx + My*My + Mz*Mz);
+
+      const flightState = targetReached ? 'TARGET_REACHED' : (v_norm > 0.05 ? 'FLYING' : 'POSITION_CONTROL');
 
       // Normalized update payload
       this.updateFromNormalizedData({
@@ -429,21 +591,21 @@
           vx: vx,
           vy: vy,
           vz: vz,
-          norm: Math.sqrt(vx*vx + vy*vy + vz*vz)
+          norm: v_norm
         },
         acceleration: {
-          ax: (Math.sin(this.demoIndex * 0.1) * 0.4),
-          ay: (Math.cos(this.demoIndex * 0.1) * 0.3),
-          az: 9.81 + (Math.sin(this.demoIndex * 0.15) * 0.2),
+          ax: (row.bax ? row.bax * 10 : 0.0),
+          ay: (row.bay ? row.bay * 10 : 0.0),
+          az: 9.81,
           norm: 9.81
         },
         orientation: {
           roll: euler.roll,
           pitch: euler.pitch,
           yaw: euler.yaw,
-          roll_rate: (euler.roll * 0.05),
-          pitch_rate: (euler.pitch * 0.05),
-          yaw_rate: 1.41,
+          roll_rate: wx,
+          pitch_rate: wy,
+          yaw_rate: wz,
           qw: qw,
           qx: qx,
           qy: qy,
@@ -460,13 +622,13 @@
           imu_rate_hz: 200.0,
           covariance_trace: 1.42e-4,
           scale_drift: 0.018,
-          accel_bias: [0.012, -0.008, 0.024],
-          gyro_bias: [-0.0004, 0.0011, -0.0002]
+          accel_bias: [row.bax || 0.0, row.bay || 0.0, row.baz || 0.0],
+          gyro_bias: [row.bgx || 0.0, row.bgy || 0.0, row.bgz || 0.0]
         },
         controller: {
           status: '50 Hz CLOSED LOOP',
           rate_hz: 50.0,
-          flight_state: 'NAVIGATING',
+          flight_state: flightState,
           armed: true,
           failsafe: false,
           watchdog_status: 'OK',
@@ -475,15 +637,16 @@
           desired_position: target,
           position_error: { x: epx, y: epy, z: epz, norm: ep_norm },
 
-          desired_velocity: { x: 0.0, y: 0.0, z: 0.0 },
+          desired_velocity: target_v,
           velocity_error: { x: evx, y: evy, z: evz, norm: ev_norm },
+          command_velocity: { vx: v_cmd_x, vy: v_cmd_y, vz: v_cmd_z, speed: Math.sqrt(v_cmd_x*v_cmd_x + v_cmd_y*v_cmd_y + v_cmd_z*v_cmd_z) },
 
           desired_force: { x: Fdx, y: Fdy, z: Fdz, norm: Fd_norm },
 
           attitude_generator: {
             b3d: { x: b3dx, y: b3dy, z: b3dz },
             collective_thrust: collectiveThrust,
-            desired_attitude: { qw: 0.998, qx: 0.012, qy: -0.018, qz: 0.045 }
+            desired_attitude: { qw: q_d.qw, qx: q_d.qx, qy: q_d.qy, qz: q_d.qz }
           },
 
           so3_controller: {
@@ -503,28 +666,36 @@
     }
 
     /**
-     * Compute Camera Optical Pose T_WC from Body Pose T_WB using extrinsic transform T_BC
+     * Compute Camera Optical Pose T_WC from Body Pose T_WB using extrinsic transform T_BC:
+     * T_WC = T_WB * T_BC => p_WC = p_WB + R_WB * p_BC, R_WC = R_WB * R_BC
      */
-    computeCameraPose(bx, by, bz, bRoll, bPitch, bYaw) {
-      const rRad = (bRoll || 0) * Math.PI / 180;
-      const pRad = (bPitch || 0) * Math.PI / 180;
-      const yRad = (bYaw || 0) * Math.PI / 180;
-
+    computeCameraPose(bx, by, bz, qw, qx, qy, qz) {
+      const R_wb = quatToMatrix(qx || 0.0, qy || 0.0, qz || 0.0, qw !== undefined ? qw : 1.0);
       const ox = EXTRINSIC_T_BC.translation.x;
       const oy = EXTRINSIC_T_BC.translation.y;
       const oz = EXTRINSIC_T_BC.translation.z;
 
-      const cx = bx + (Math.cos(yRad)*Math.cos(pRad)*ox + (Math.cos(yRad)*Math.sin(pRad)*Math.sin(rRad) - Math.sin(yRad)*Math.cos(rRad))*oy);
-      const cy = by + (Math.sin(yRad)*Math.cos(pRad)*ox + (Math.sin(yRad)*Math.sin(pRad)*Math.sin(rRad) + Math.cos(yRad)*Math.cos(rRad))*oy);
-      const cz = bz + (-Math.sin(pRad)*ox + Math.cos(pRad)*Math.sin(rRad)*oy + oz);
+      // Translation: p_WC = p_WB + R_WB * p_BC
+      const cx = bx + (R_wb[0][0]*ox + R_wb[0][1]*oy + R_wb[0][2]*oz);
+      const cy = by + (R_wb[1][0]*ox + R_wb[1][1]*oy + R_wb[1][2]*oz);
+      const cz = bz + (R_wb[2][0]*ox + R_wb[2][1]*oy + R_wb[2][2]*oz);
+
+      // Rotation: R_WC = R_WB * R_BC
+      const R_wc = matrixMultiply(R_wb, EXTRINSIC_T_BC.rotation);
+      const q_wc = matrixToQuat(R_wc);
+      const euler_wc = this.quaternionToEuler(q_wc.qw, q_wc.qx, q_wc.qy, q_wc.qz);
 
       return {
         x: cx,
         y: cy,
         z: cz,
-        roll: bRoll,
-        pitch: bPitch - 15, // 15-degree down-tilt
-        yaw: bYaw
+        roll: euler_wc.roll,
+        pitch: euler_wc.pitch,
+        yaw: euler_wc.yaw,
+        qw: q_wc.qw,
+        qx: q_wc.qx,
+        qy: q_wc.qy,
+        qz: q_wc.qz
       };
     }
 

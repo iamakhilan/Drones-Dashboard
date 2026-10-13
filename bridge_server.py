@@ -5,12 +5,28 @@ AeroVIO Ground Station - Telemetry Bridge & WebSocket Server
 ===============================================================================
 Serves the web dashboard and streams normalized telemetry JSON over WebSocket (/ws).
 
-Architecture:
-- In DEMO Mode: Replays calibrated trajectory datasets and calculates cascaded
-  SO(3) controller telemetry and T_WB / T_WC frames, broadcasting at ~50 Hz.
-- In LIVE Mode: Receives ROS 2 / external telemetry and forwards to connected clients.
-- Truthful Status: Explicitly distinguishes WebSocket bridge connection from
-  ROS 2 node integration.
+Integration Contract:
+- Built strictly against the drones-controller repository:
+  https://github.com/Ravish2807/Drones_S5_CD2_3D_Mapping_using_normal_monocular_camera_controlling_Visual-Inertial-Odometry-VIO/tree/drones-controller
+- Controller: 50 Hz Cascaded Position & Geometric SO(3) Attitude Controller.
+  Outer loop: Position error e_p = p_d - p, velocity error e_v = v_d - v,
+              desired force F_d = m*(Kp*e_p + Kv*e_v + a_d + g*e3),
+              command velocity v_cmd = sat(Kp*e_p + Kv*e_v, v_max=0.5 m/s).
+  Attitude generator: b3d = F_d / ||F_d||, b2 = (b3d x heading) / ||b3d x heading||,
+                      b1 = b2 x b3d, R_d = [b1, b2, b3d], T_d = ||F_d||.
+  Inner loop: SO(3) error e_R = 1/2*(R_d^T*R - R^T*R_d)^vee,
+              angular velocity error e_omega = omega - R^T*R_d*omega_d,
+              control moment M_d = -KR*e_R - KOmega*e_omega + omega x (J*omega).
+- Vehicle parameters: mass = 1.5 kg, g = 9.81 m/s^2, J = diag([0.02, 0.02, 0.04]) kg*m^2.
+- Controller gains: Kp = diag([0.5, 0.5, 0.5]), Kv = diag([0.2, 0.2, 0.2]),
+                    KR = diag([4.0, 4.0, 2.0]), KOmega = diag([0.8, 0.8, 0.5]).
+- Extrinsic Calibration: T_BC: p_BC = [0.10, 0.0, 0.0] m,
+  R_BC = [[0, 0, 1], [-1, 0, 0], [0, -1, 0]] (OpenCV camera optical to body ENU).
+  Composition: T_WC = T_WB * T_BC => p_WC = p_WB + R_WB * p_BC, R_WC = R_WB * R_BC.
+- Operating Modes:
+  - DEMO mode: Exact analytical replay executing full SO(3) mathematics at 50 Hz.
+  - LIVE mode: Truthful ROS 2 bridge. If rclpy / live nodes are unavailable,
+               reports ROS 2 as disconnected without substituting synthetic data.
 ===============================================================================
 """
 
@@ -28,29 +44,60 @@ import math
 import argparse
 import pathlib
 import ipaddress
+import numpy as np
 
 DIRECTORY = pathlib.Path(__file__).parent.resolve()
+
+# Physical vehicle & controller parameters from reference repository config files
+# config/vehicle.yaml
+VEHICLE_MASS = 1.5          # kg
+GRAVITY = 9.81              # m/s^2
+INERTIA_J = np.array([0.02, 0.02, 0.04], dtype=float)   # [Jxx, Jyy, Jzz] kg*m^2
+INERTIA_MATRIX = np.diag(INERTIA_J)
+
+# config/controller.yaml
+KP_POS = np.array([0.5, 0.5, 0.5], dtype=float)
+KV_POS = np.array([0.2, 0.2, 0.2], dtype=float)
+KP_MATRIX = np.diag(KP_POS)
+KV_MATRIX = np.diag(KV_POS)
+
+KR_ATT = np.array([4.0, 4.0, 2.0], dtype=float)
+KOMEGA_RATE = np.array([0.8, 0.8, 0.5], dtype=float)
+KR_MATRIX = np.diag(KR_ATT)
+KOMEGA_MATRIX = np.diag(KOMEGA_RATE)
+
+MAX_VELOCITY = 0.5          # m/s
+POSITION_TOLERANCE = 0.10   # m
+VELOCITY_TOLERANCE = 0.05   # m/s
+STATE_TIMEOUT = 0.2         # s
+
+# Static Camera Extrinsics T_BC (camera_optical_frame to body base_link ENU)
+# Forward-facing monocular camera: +Z optical is +X body, +X optical is -Y body, +Y optical is -Z body
+P_BC = np.array([0.10, 0.0, 0.0], dtype=float)
+R_BC = np.array([
+    [ 0.0,  0.0,  1.0],
+    [-1.0,  0.0,  0.0],
+    [ 0.0, -1.0,  0.0]
+], dtype=float)
 
 # Global Server Configuration & State
 SERVER_STATE = {
     "mode": "DEMO",             # "DEMO" or "LIVE"
     "ros2_connected": False,    # Truthful ROS 2 connection flag
+    "ros2_status_detail": "ROS 2 daemon inactive (running in standalone bridge mode)",
     "active_dataset": "orbit",
     "clients_count": 0,
     "frames_broadcast": 0,
     "start_time": time.time(),
     "target_p": [20.0, 5.0, 20.0],
     "target_v": [0.0, 0.0, 0.0],
+    "target_yaw": 2.0,
     "bridge_latency_ms": 0.0,
-    "allow_origins": [],  # populated from --allow-origin
+    "allow_origins": [],
 }
 
 WS_CLIENTS = set()
 WS_LOCK = threading.Lock()
-
-# Extrinsic transform Body to Camera: T_BC
-# Camera mounted +10cm forward, -4cm downward on airframe
-T_BC_OFFSET = {"x": 0.10, "y": 0.00, "z": -0.04}
 
 # Load Trajectory Datasets
 DATASETS = {}
@@ -62,14 +109,255 @@ DATASET_FILES = {
     "stress": "synthetic_stress_estimated_trajectory.csv"
 }
 
+
+# ==============================================================================
+# Mathematical Core — Exact SO(3) Cascaded Equations from drones_controller
+# ==============================================================================
+
+def quaternion_to_rotation_matrix(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
+    """ROS quaternion [qx, qy, qz, qw] -> Rotation Matrix R in SO(3)."""
+    q = np.array([qx, qy, qz, qw], dtype=float)
+    norm = np.linalg.norm(q)
+    if not np.isfinite(norm) or norm < 1e-9:
+        return np.eye(3, dtype=float)
+    q /= norm
+    x, y, z, w = q
+    return np.array([
+        [1.0 - 2.0 * (y*y + z*z), 2.0 * (x*y - z*w),       2.0 * (x*z + y*w)],
+        [2.0 * (x*y + z*w),       1.0 - 2.0 * (x*x + z*z), 2.0 * (y*z - x*w)],
+        [2.0 * (x*z - y*w),       2.0 * (y*z + x*w),       1.0 - 2.0 * (x*x + y*y)]
+    ], dtype=float)
+
+
+def rotation_matrix_to_quaternion(R: np.ndarray) -> np.ndarray:
+    """Convert SO(3) rotation matrix to ROS quaternion [qx, qy, qz, qw]."""
+    trace = np.trace(R)
+    if trace > 0.0:
+        s = 0.5 / np.sqrt(trace + 1.0)
+        qw = 0.25 / s
+        qx = (R[2, 1] - R[1, 2]) * s
+        qy = (R[0, 2] - R[2, 0]) * s
+        qz = (R[1, 0] - R[0, 1]) * s
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        s = 2.0 * np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
+        qw = (R[2, 1] - R[1, 2]) / s
+        qx = 0.25 * s
+        qy = (R[0, 1] + R[1, 0]) / s
+        qz = (R[0, 2] + R[2, 0]) / s
+    elif R[1, 1] > R[2, 2]:
+        s = 2.0 * np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
+        qw = (R[0, 2] - R[2, 0]) / s
+        qx = (R[0, 1] + R[1, 0]) / s
+        qy = 0.25 * s
+        qz = (R[1, 2] + R[2, 1]) / s
+    else:
+        s = 2.0 * np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
+        qw = (R[1, 0] - R[0, 1]) / s
+        qx = (R[0, 2] + R[2, 0]) / s
+        qy = (R[1, 2] + R[2, 1]) / s
+        qz = 0.25 * s
+    q = np.array([qx, qy, qz, qw], dtype=float)
+    norm = np.linalg.norm(q)
+    if norm > 1e-9:
+        q /= norm
+    return q
+
+
+def vee(S: np.ndarray) -> np.ndarray:
+    """Inverse skew-symmetric operator: so(3) -> R^3."""
+    return np.array([S[2, 1], S[0, 2], S[1, 0]], dtype=float)
+
+
+def hat(v: np.ndarray) -> np.ndarray:
+    """Skew-symmetric operator: R^3 -> so(3)."""
+    x, y, z = v
+    return np.array([
+        [0.0, -z,   y],
+        [z,    0.0, -x],
+        [-y,   x,   0.0]
+    ], dtype=float)
+
+
+def compute_cascaded_controller(p, v, q_xyzw, omega=None, p_d=None, v_d=None, yaw_d=None):
+    """
+    Executes the exact cascaded position + SO(3) attitude controller logic from
+    drones_controller/position_controller.py, attitude_generator.py, and so3_controller.py.
+    """
+    p = np.asarray(p, dtype=float)
+    v = np.asarray(v, dtype=float)
+    if omega is None:
+        omega = np.zeros(3, dtype=float)
+    else:
+        omega = np.asarray(omega, dtype=float)
+
+    if p_d is None:
+        p_d = np.array(SERVER_STATE.get("target_p", [20.0, 5.0, 20.0]), dtype=float)
+    else:
+        p_d = np.asarray(p_d, dtype=float)
+
+    if v_d is None:
+        v_d = np.array(SERVER_STATE.get("target_v", [0.0, 0.0, 0.0]), dtype=float)
+    else:
+        v_d = np.asarray(v_d, dtype=float)
+
+    if yaw_d is None:
+        yaw_d = float(SERVER_STATE.get("target_yaw", 2.0))
+
+    a_d = np.zeros(3, dtype=float)
+    omega_d = np.zeros(3, dtype=float)
+    omega_dot_d = np.zeros(3, dtype=float)
+    e3 = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    # 1. Outer Loop: Position Controller (position_controller.py lines 55-80)
+    e_p = p_d - p
+    e_v = v_d - v
+    pos_error_norm = float(np.linalg.norm(e_p))
+    vel_norm = float(np.linalg.norm(v))
+
+    target_reached = bool(pos_error_norm < POSITION_TOLERANCE and vel_norm < VELOCITY_TOLERANCE)
+
+    v_cmd_raw = KP_MATRIX @ e_p + KV_MATRIX @ e_v
+    speed = float(np.linalg.norm(v_cmd_raw))
+    if target_reached:
+        v_cmd = np.zeros(3, dtype=float)
+    elif speed > MAX_VELOCITY and speed > 1e-6:
+        v_cmd = v_cmd_raw * (MAX_VELOCITY / speed)
+    else:
+        v_cmd = v_cmd_raw
+
+    a_cmd = KP_MATRIX @ e_p + KV_MATRIX @ e_v + a_d
+    F_d = VEHICLE_MASS * (a_cmd + GRAVITY * e3)
+    norm_F = float(np.linalg.norm(F_d))
+
+    # 2. Attitude Generator (attitude_generator.py lines 14-52)
+    if norm_F < 1e-6:
+        b3_d = np.array([0.0, 0.0, 1.0], dtype=float)
+        R_d = np.eye(3, dtype=float)
+        thrust_d = 0.0
+    else:
+        b3_d = F_d / norm_F
+        thrust_d = norm_F
+
+        yaw_heading = np.array([np.cos(yaw_d), np.sin(yaw_d), 0.0], dtype=float)
+        b2 = np.cross(b3_d, yaw_heading)
+        norm_b2 = float(np.linalg.norm(b2))
+        if norm_b2 < 1e-6:
+            yaw_d_mod = yaw_d + 1e-3
+            yaw_heading = np.array([np.cos(yaw_d_mod), np.sin(yaw_d_mod), 0.0], dtype=float)
+            b2 = np.cross(b3_d, yaw_heading)
+            norm_b2 = float(np.linalg.norm(b2))
+        b2 /= norm_b2
+        b1 = np.cross(b2, b3_d)
+        b1 /= np.linalg.norm(b1)
+        R_d = np.column_stack([b1, b2, b3_d])
+
+    q_d = rotation_matrix_to_quaternion(R_d)
+
+    # 3. Inner Loop: SO(3) Geometric Attitude Controller (so3_controller.py lines 25-64)
+    R = quaternion_to_rotation_matrix(q_xyzw[0], q_xyzw[1], q_xyzw[2], q_xyzw[3])
+    E = R_d.T @ R - R.T @ R_d
+    e_R = 0.5 * vee(E)
+    e_omega = omega - R.T @ R_d @ omega_d
+
+    relative_R = R.T @ R_d
+    coriolis = np.cross(omega, INERTIA_MATRIX @ omega)
+    omega_hat = hat(omega)
+    feedforward = INERTIA_MATRIX @ (omega_hat @ relative_R @ omega_d - relative_R @ omega_dot_d)
+    M_d = -KR_MATRIX @ e_R - KOMEGA_MATRIX @ e_omega + coriolis - feedforward
+
+    # 4. Flight State Evaluation (flight_manager.py)
+    if target_reached:
+        flight_state = "TARGET_REACHED"
+    elif np.linalg.norm(v) > 0.05:
+        flight_state = "FLYING"
+    else:
+        flight_state = "POSITION_CONTROL"
+
+    return {
+        "position_error": {
+            "x": round(float(e_p[0]), 4),
+            "y": round(float(e_p[1]), 4),
+            "z": round(float(e_p[2]), 4),
+            "norm": round(pos_error_norm, 4)
+        },
+        "velocity_error": {
+            "x": round(float(e_v[0]), 4),
+            "y": round(float(e_v[1]), 4),
+            "z": round(float(e_v[2]), 4),
+            "norm": round(float(np.linalg.norm(e_v)), 4)
+        },
+        "command_velocity": {
+            "vx": round(float(v_cmd[0]), 4),
+            "vy": round(float(v_cmd[1]), 4),
+            "vz": round(float(v_cmd[2]), 4),
+            "speed": round(float(np.linalg.norm(v_cmd)), 4)
+        },
+        "desired_force": {
+            "x": round(float(F_d[0]), 4),
+            "y": round(float(F_d[1]), 4),
+            "z": round(float(F_d[2]), 4),
+            "norm": round(norm_F, 4)
+        },
+        "attitude_generator": {
+            "b3d": {"x": round(float(b3_d[0]), 4), "y": round(float(b3_d[1]), 4), "z": round(float(b3_d[2]), 4)},
+            "collective_thrust": round(thrust_d, 3),
+            "desired_attitude": {
+                "qx": round(float(q_d[0]), 4),
+                "qy": round(float(q_d[1]), 4),
+                "qz": round(float(q_d[2]), 4),
+                "qw": round(float(q_d[3]), 4)
+            }
+        },
+        "so3_controller": {
+            "attitude_error": {
+                "x": round(float(e_R[0]), 5),
+                "y": round(float(e_R[1]), 5),
+                "z": round(float(e_R[2]), 5),
+                "norm": round(float(np.linalg.norm(e_R)), 5)
+            },
+            "angular_velocity_error": {
+                "x": round(float(e_omega[0]), 5),
+                "y": round(float(e_omega[1]), 5),
+                "z": round(float(e_omega[2]), 5),
+                "norm": round(float(np.linalg.norm(e_omega)), 5)
+            },
+            "desired_moment": {
+                "x": round(float(M_d[0]), 5),
+                "y": round(float(M_d[1]), 5),
+                "z": round(float(M_d[2]), 5),
+                "norm": round(float(np.linalg.norm(M_d)), 5)
+            }
+        },
+        "target_reached": target_reached,
+        "flight_state": flight_state,
+        "watchdog_status": "OK",
+        "command_output": "ENABLED"
+    }
+
+
+def compute_camera_optical_pose(p_wb: np.ndarray, q_wb_xyzw: np.ndarray):
+    """
+    Computes camera optical pose T_WC = T_WB * T_BC:
+    p_WC = p_WB + R_WB * p_BC
+    R_WC = R_WB * R_BC
+    """
+    p_wb = np.asarray(p_wb, dtype=float)
+    R_wb = quaternion_to_rotation_matrix(q_wb_xyzw[0], q_wb_xyzw[1], q_wb_xyzw[2], q_wb_xyzw[3])
+    p_wc = p_wb + R_wb @ P_BC
+    R_wc = R_wb @ R_BC
+    q_wc = rotation_matrix_to_quaternion(R_wc)
+    return p_wc, q_wc
+
+
+# ==============================================================================
+# Origin Check & Dataset Loading
+# ==============================================================================
+
 def _is_allowed_origin(origin, allow_list):
-    """Check if Origin header is allowed. Empty allow_list means permissive for localhost/LAN."""
     if not origin:
-        return True  # non-browser clients (curl, python) have no Origin
+        return True
     if not allow_list:
-        # Default policy: allow localhost, 127.0.0.1, 192.168.*, 10.*, and no Origin
         try:
-            # Extract host from origin like http://192.168.1.42:8000
             from urllib.parse import urlparse
             parsed = urlparse(origin)
             host = parsed.hostname or ""
@@ -81,15 +369,14 @@ def _is_allowed_origin(origin, allow_list):
                     return True
             except ValueError:
                 pass
-            # Allow any private host if no explicit allow list
             return True
         except Exception:
             return True
-    # Explicit allow list given via --allow-origin
     for pattern in allow_list:
         if pattern == "*" or pattern == origin or pattern in origin:
             return True
     return False
+
 
 def load_datasets():
     global DATASETS
@@ -129,8 +416,11 @@ if not DATASETS:
 print(f"[Bridge] Loaded {len(DATASETS)} trajectory datasets: {list(DATASETS.keys())}")
 
 
+# ==============================================================================
+# WebSocket Framing (RFC 6455)
+# ==============================================================================
+
 def encode_ws_frame(message: str) -> bytes:
-    """Encodes a UTF-8 string into an RFC 6455 unmasked WebSocket text frame."""
     payload = message.encode('utf-8')
     length = len(payload)
     if length <= 125:
@@ -143,7 +433,6 @@ def encode_ws_frame(message: str) -> bytes:
 
 
 def decode_ws_frame(sock) -> str:
-    """Reads and unmasks a client WebSocket frame."""
     try:
         head = sock.recv(2)
         if not head or len(head) < 2:
@@ -153,7 +442,7 @@ def decode_ws_frame(sock) -> str:
         is_masked = bool(b2 & 0x80)
         payload_len = b2 & 0x7F
 
-        if opcode == 0x8:  # Close frame
+        if opcode == 0x8:
             return None
 
         if payload_len == 126:
@@ -179,77 +468,187 @@ def decode_ws_frame(sock) -> str:
         return None
 
 
-def calculate_controller_telemetry(p, v, q, mass=1.5, g=9.81, p_d=None, v_d=None):
+# ==============================================================================
+# Live ROS 2 Node Ingestion Adapter (Conditional on rclpy)
+# ==============================================================================
+
+LIVE_ROS2_STATE = {
+    "node": None,
+    "thread": None,
+    "last_msg_time": 0.0,
+    "latest_data": None
+}
+
+def try_init_ros2_live_bridge():
     """
-    Computes cascaded closed-loop SO(3) controller telemetry from current state:
-    e_p = p - p_d
-    e_v = v - v_d
-    F_d = -K_p e_p - K_v e_v + m*g*e3
-    b_3d = F_d / ||F_d||
-    e_R = 1/2 (R_d^T R - R^T R_d)^vee  [DEMO synthetic approximation]
-    M_d = -k_R e_R - k_w e_w + w x J w
-
-    NOTE: e_R / e_w are DEMO synthetic (sinusoid + constant) for visualization.
-    Live ROS 2 adapter computes geometrically from R/quaternion. Field
-    `synthetic: true` flags this so UI can label it honestly.
+    Attempts to initialize a real ROS 2 node and DDS subscriptions.
+    If rclpy is not installed or the ROS 2 daemon is unreachable,
+    reports ros2_connected = False honestly.
     """
-    # Desired target setpoint (configurable via --target / SERVER_STATE)
-    if p_d is None:
-        p_d = SERVER_STATE.get("target_p", [20.0, 5.0, 20.0])
-    if v_d is None:
-        v_d = SERVER_STATE.get("target_v", [0.0, 0.0, 0.0])
+    try:
+        import rclpy
+        from rclpy.node import Node
+        from geometry_msgs.msg import PoseStamped, TwistStamped, Vector3Stamped
+        from sensor_msgs.msg import Imu, Image
+        from nav_msgs.msg import Odometry
+        try:
+            from ardupilot_msgs.msg import Status
+            has_ap_msg = True
+        except ImportError:
+            has_ap_msg = False
 
-    # Position & Velocity errors
-    e_p = [p[0] - p_d[0], p[1] - p_d[1], p[2] - p_d[2]]
-    e_v = [v[0] - v_d[0], v[1] - v_d[1], v[2] - v_d[2]]
+        if not rclpy.ok():
+            rclpy.init()
 
-    # Desired Force F_d
-    kp = 0.5
-    kv = 0.2
-    F_dx = -kp * e_p[0] - kv * e_v[0]
-    F_dy = -kp * e_p[1] - kv * e_v[1]
-    F_dz = -kp * e_p[2] - kv * e_v[2] + mass * g
-    F_norm = math.sqrt(F_dx**2 + F_dy**2 + F_dz**2)
+        class DashboardBridgeNode(Node):
+            def __init__(self):
+                super().__init__('aerovio_dashboard_bridge')
+                self.pose_sub = self.create_subscription(
+                    PoseStamped, '/ap/v1/pose/filtered', self._on_pose, 10)
+                self.twist_sub = self.create_subscription(
+                    TwistStamped, '/ap/v1/twist/filtered', self._on_twist, 10)
+                self.cmd_sub = self.create_subscription(
+                    TwistStamped, '/ap/v1/cmd_vel', self._on_cmd, 10)
+                self.pos_err_sub = self.create_subscription(
+                    Vector3Stamped, '/drones_controller/position_error', self._on_pos_err, 10)
+                self.vel_err_sub = self.create_subscription(
+                    Vector3Stamped, '/drones_controller/velocity_error', self._on_vel_err, 10)
+                self.force_sub = self.create_subscription(
+                    Vector3Stamped, '/drones_controller/desired_force', self._on_force, 10)
+                self.moment_sub = self.create_subscription(
+                    Vector3Stamped, '/drones_controller/desired_moment', self._on_moment, 10)
+                self.att_err_sub = self.create_subscription(
+                    Vector3Stamped, '/drones_controller/attitude_error', self._on_att_err, 10)
+                self.ang_vel_err_sub = self.create_subscription(
+                    Vector3Stamped, '/drones_controller/angular_velocity_error', self._on_ang_vel_err, 10)
+                self.att_sub = self.create_subscription(
+                    PoseStamped, '/drones_controller/desired_attitude', self._on_att, 10)
+                self.odom_sub = self.create_subscription(
+                    Odometry, '/drone/vio/odometry', self._on_odom, 10)
+                self.imu_sub = self.create_subscription(
+                    Imu, '/imu/data', self._on_imu, 10)
 
-    # Attitude generator direction b_3d
-    b3d = [F_dx / max(1e-5, F_norm), F_dy / max(1e-5, F_norm), F_dz / max(1e-5, F_norm)]
+                self.current_state = {
+                    "pose_wb": None,
+                    "twist": None,
+                    "controller": {},
+                    "imu": None,
+                    "vio": None
+                }
 
-    # SO(3) Attitude error e_R — DEMO synthetic approximation
-    # Real: e_R = 0.5*(R_d^T R - R^T R_d)^vee  (requires R from q)
-    # Synthetic for demo visualization only
-    e_R = [0.02 * math.sin(p[0]), 0.015 * math.cos(p[1]), 0.01 * math.sin(p[2])]
-    e_R_norm = math.sqrt(sum(x**2 for x in e_R))
+            def _on_pose(self, msg):
+                LIVE_ROS2_STATE["last_msg_time"] = time.time()
+                SERVER_STATE["ros2_connected"] = True
+                p = msg.pose.position
+                q = msg.pose.orientation
+                self.current_state["pose_wb"] = {
+                    "position": {"x": p.x, "y": p.y, "z": p.z},
+                    "orientation": {"qx": q.x, "qy": q.y, "qz": q.z, "qw": q.w}
+                }
 
-    # Angular velocity error e_omega — DEMO synthetic constant
-    e_w = [0.01, -0.02, 0.005]
-    e_w_norm = math.sqrt(sum(x**2 for x in e_w))
+            def _on_twist(self, msg):
+                LIVE_ROS2_STATE["last_msg_time"] = time.time()
+                SERVER_STATE["ros2_connected"] = True
+                l = msg.twist.linear
+                a = msg.twist.angular
+                self.current_state["twist"] = {
+                    "linear": {"vx": l.x, "vy": l.y, "vz": l.z},
+                    "angular": {"p": a.x, "q": a.y, "r": a.z}
+                }
 
-    # Desired Moment M_d
-    k_R = 4.85
-    k_w = 0.35
-    M_d = [-k_R * e_R[0] - k_w * e_w[0], -k_R * e_R[1] - k_w * e_w[1], -2.5 * e_R[2] - 0.2 * e_w[2]]
-    M_norm = math.sqrt(sum(x**2 for x in M_d))
+            def _on_cmd(self, msg):
+                self.current_state["controller"]["command_velocity"] = {
+                    "vx": msg.twist.linear.x,
+                    "vy": msg.twist.linear.y,
+                    "vz": msg.twist.linear.z,
+                    "yaw_rate": msg.twist.angular.z
+                }
 
-    return {
-        "synthetic": True,
-        "synthetic_note": "e_R/e_w are DEMO synthetic approximations; live ROS 2 computes geometrically from R",
-        "position_error": {"x": round(e_p[0], 3), "y": round(e_p[1], 3), "z": round(e_p[2], 3), "norm": round(math.sqrt(sum(x**2 for x in e_p)), 3)},
-        "velocity_error": {"x": round(e_v[0], 3), "y": round(e_v[1], 3), "z": round(e_v[2], 3), "norm": round(math.sqrt(sum(x**2 for x in e_v)), 3)},
-        "desired_force": {"x": round(F_dx, 3), "y": round(F_dy, 3), "z": round(F_dz, 3), "norm": round(F_norm, 3)},
-        "attitude_generator": {
-            "b3d": {"x": round(b3d[0], 4), "y": round(b3d[1], 4), "z": round(b3d[2], 4)},
-            "collective_thrust": round(F_norm, 2),
-            "desired_attitude": {"qw": 1.0, "qx": 0.0, "qy": 0.0, "qz": 0.0}
-        },
-        "so3_controller": {
-            "attitude_error": {"x": round(e_R[0], 4), "y": round(e_R[1], 4), "z": round(e_R[2], 4), "norm": round(e_R_norm, 4)},
-            "angular_velocity_error": {"x": round(e_w[0], 4), "y": round(e_w[1], 4), "z": round(e_w[2], 4), "norm": round(e_w_norm, 4)},
-            "desired_moment": {"x": round(M_d[0], 4), "y": round(M_d[1], 4), "z": round(M_d[2], 4), "norm": round(M_norm, 4)}
-        },
-        "flight_state": "NAVIGATING",
-        "watchdog_status": "OK"
-    }
+            def _on_pos_err(self, msg):
+                v = msg.vector
+                self.current_state["controller"]["position_error"] = {
+                    "x": v.x, "y": v.y, "z": v.z,
+                    "norm": math.sqrt(v.x**2 + v.y**2 + v.z**2)
+                }
 
+            def _on_vel_err(self, msg):
+                v = msg.vector
+                self.current_state["controller"]["velocity_error"] = {
+                    "x": v.x, "y": v.y, "z": v.z,
+                    "norm": math.sqrt(v.x**2 + v.y**2 + v.z**2)
+                }
+
+            def _on_force(self, msg):
+                v = msg.vector
+                norm = math.sqrt(v.x**2 + v.y**2 + v.z**2)
+                self.current_state["controller"]["desired_force"] = {
+                    "x": v.x, "y": v.y, "z": v.z, "norm": norm
+                }
+
+            def _on_moment(self, msg):
+                v = msg.vector
+                norm = math.sqrt(v.x**2 + v.y**2 + v.z**2)
+                self.current_state["controller"].setdefault("so3_controller", {})["desired_moment"] = {
+                    "x": v.x, "y": v.y, "z": v.z, "norm": norm
+                }
+
+            def _on_att_err(self, msg):
+                v = msg.vector
+                norm = math.sqrt(v.x**2 + v.y**2 + v.z**2)
+                self.current_state["controller"].setdefault("so3_controller", {})["attitude_error"] = {
+                    "x": v.x, "y": v.y, "z": v.z, "norm": norm
+                }
+
+            def _on_ang_vel_err(self, msg):
+                v = msg.vector
+                norm = math.sqrt(v.x**2 + v.y**2 + v.z**2)
+                self.current_state["controller"].setdefault("so3_controller", {})["angular_velocity_error"] = {
+                    "x": v.x, "y": v.y, "z": v.z, "norm": norm
+                }
+
+            def _on_att(self, msg):
+                q = msg.pose.orientation
+                self.current_state["controller"].setdefault("attitude_generator", {})["desired_attitude"] = {
+                    "qx": q.x, "qy": q.y, "qz": q.z, "qw": q.w
+                }
+
+            def _on_odom(self, msg):
+                LIVE_ROS2_STATE["last_msg_time"] = time.time()
+                SERVER_STATE["ros2_connected"] = True
+
+            def _on_imu(self, msg):
+                a = msg.linear_acceleration
+                w = msg.angular_velocity
+                self.current_state["imu"] = {
+                    "accel": {"ax": a.x, "ay": a.y, "az": a.z},
+                    "gyro": {"gx": w.x, "gy": w.y, "gz": w.z}
+                }
+
+        node = DashboardBridgeNode()
+        LIVE_ROS2_STATE["node"] = node
+
+        def spin_ros():
+            try:
+                rclpy.spin(node)
+            except Exception as e:
+                print(f"[Bridge] ROS 2 spin stopped: {e}")
+
+        t = threading.Thread(target=spin_ros, daemon=True)
+        t.start()
+        LIVE_ROS2_STATE["thread"] = t
+        SERVER_STATE["ros2_status_detail"] = "ROS 2 rclpy node active (listening for DDS topics)"
+        print("[Bridge] ROS 2 rclpy node aerovio_dashboard_bridge started successfully.")
+        return True
+    except Exception as e:
+        SERVER_STATE["ros2_connected"] = False
+        SERVER_STATE["ros2_status_detail"] = f"ROS 2 environment unavailable on host ({type(e).__name__}: {e})"
+        print(f"[Bridge] ROS 2 live connection unavailable: {e}")
+        return False
+
+
+# ==============================================================================
+# HTTP Request Handler & REST Endpoints
+# ==============================================================================
 
 class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -262,9 +661,7 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         elif not origin:
-            # Non-browser or same-origin: allow
             self.send_header('Access-Control-Allow-Origin', '*')
-        # If not allowed, omit header (browser will block)
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Sec-WebSocket-Key, Sec-WebSocket-Version, Upgrade, Connection')
         self.send_header('Access-Control-Allow-Credentials', 'false')
@@ -284,11 +681,9 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             return
-        self.send_response(200)
-        self.end_headers()
+        super().do_HEAD()
 
     def do_GET(self):
-        # Handle WebSocket Upgrade on /ws
         if self.path == "/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
             origin = self.headers.get("Origin", "")
             if not _is_allowed_origin(origin, SERVER_STATE.get("allow_origins", [])):
@@ -300,7 +695,6 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_websocket()
             return
 
-        # Status endpoint
         if self.path == "/api/status":
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -309,6 +703,7 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                 "server": "AeroVIO Ground Station Bridge",
                 "mode": SERVER_STATE["mode"],
                 "ros2_connected": SERVER_STATE["ros2_connected"],
+                "ros2_detail": SERVER_STATE["ros2_status_detail"],
                 "active_dataset": SERVER_STATE["active_dataset"],
                 "clients": len(WS_CLIENTS),
                 "uptime_s": round(time.time() - SERVER_STATE["start_time"], 1)
@@ -316,16 +711,16 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(status_data).encode('utf-8'))
             return
 
-        # Health endpoint — stable contract for friend ROS2 node / monitoring
         if self.path == "/api/health":
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             health_data = {
-                "status": "ok" if SERVER_STATE["mode"] in ("DEMO", "LIVE") else "degraded",
+                "status": "ok" if SERVER_STATE["mode"] == "DEMO" or SERVER_STATE["ros2_connected"] else "awaiting_ros2",
                 "server": "AeroVIO Ground Station Bridge",
                 "mode": SERVER_STATE["mode"],
                 "ros2_connected": SERVER_STATE["ros2_connected"],
+                "ros2_detail": SERVER_STATE["ros2_status_detail"],
                 "active_dataset": SERVER_STATE["active_dataset"],
                 "clients": len(WS_CLIENTS),
                 "uptime_s": round(time.time() - SERVER_STATE["start_time"], 1),
@@ -333,12 +728,21 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                 "bridge_latency_ms": round(SERVER_STATE.get("bridge_latency_ms", 0.0), 2),
                 "target_p": SERVER_STATE.get("target_p", [20.0, 5.0, 20.0]),
                 "target_v": SERVER_STATE.get("target_v", [0.0, 0.0, 0.0]),
-                "version": "1.0.0"
+                "target_yaw": SERVER_STATE.get("target_yaw", 2.0),
+                "vehicle_parameters": {
+                    "mass_kg": VEHICLE_MASS,
+                    "gravity": GRAVITY,
+                    "inertia_diag": INERTIA_J.tolist(),
+                    "kp": KP_POS.tolist(),
+                    "kv": KV_POS.tolist(),
+                    "kr": KR_ATT.tolist(),
+                    "komega": KOMEGA_RATE.tolist()
+                },
+                "version": "2.0.0"
             }
             self.wfile.write(json.dumps(health_data).encode('utf-8'))
             return
 
-        # Serve static frontend files
         super().do_GET()
 
     def handle_websocket(self):
@@ -369,7 +773,8 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                     break
                 try:
                     data = json.loads(msg)
-                    if data.get("type") == "ping":
+                    msg_type = data.get("type")
+                    if msg_type == "ping":
                         pong_msg = json.dumps({
                             "type": "pong",
                             "t": data.get("t"),
@@ -377,22 +782,30 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                             "ros2_connected": SERVER_STATE["ros2_connected"]
                         })
                         sock.sendall(encode_ws_frame(pong_msg))
-                    elif data.get("type") == "switch_dataset":
+                    elif msg_type == "switch_dataset":
                         ds_key = data.get("dataset", "orbit")
                         if ds_key in DATASETS:
                             SERVER_STATE["active_dataset"] = ds_key
                             print(f"[Bridge] Switched active dataset to: {ds_key}")
-                    elif data.get("type") == "set_target":
-                        # Allow UI to update target setpoint
+                    elif msg_type == "set_target":
                         tp = data.get("target_p")
                         tv = data.get("target_v")
+                        tyaw = data.get("target_yaw")
                         if tp and len(tp) == 3:
                             SERVER_STATE["target_p"] = [float(tp[0]), float(tp[1]), float(tp[2])]
-                            print(f"[Bridge] Target p updated to {SERVER_STATE['target_p']}")
                         if tv and len(tv) == 3:
                             SERVER_STATE["target_v"] = [float(tv[0]), float(tv[1]), float(tv[2])]
-                    elif data.get("type") == "command":
-                        print(f"[Bridge] Parameter update received via WS: {data.get('data')}")
+                        if tyaw is not None:
+                            SERVER_STATE["target_yaw"] = float(tyaw)
+                        print(f"[Bridge] Updated setpoint: p_d={SERVER_STATE['target_p']}, yaw_d={SERVER_STATE['target_yaw']}")
+                    elif msg_type == "command":
+                        cmd_data = data.get("data", {})
+                        if isinstance(cmd_data, dict) and "setpoint" in cmd_data:
+                            sp = cmd_data["setpoint"]
+                            SERVER_STATE["target_p"] = [float(sp.get("x", 20.0)), float(sp.get("y", 5.0)), float(sp.get("z", 20.0))]
+                            if "yaw" in sp:
+                                SERVER_STATE["target_yaw"] = float(sp["yaw"])
+                            print(f"[Bridge] Command target updated to: {SERVER_STATE['target_p']}")
                 except Exception:
                     pass
         except Exception:
@@ -404,24 +817,37 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             print(f"[Bridge] Client disconnected (Remaining: {len(WS_CLIENTS)})")
 
     def do_POST(self):
-        # Configuration / Parameter adjustment endpoint
         if self.path == "/api/command":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')
             try:
                 cmd = json.loads(body)
-                # Support target_p / target_v updates via POST as well
                 if "target_p" in cmd and isinstance(cmd["target_p"], list) and len(cmd["target_p"]) == 3:
                     SERVER_STATE["target_p"] = [float(cmd["target_p"][0]), float(cmd["target_p"][1]), float(cmd["target_p"][2])]
                 if "target_v" in cmd and isinstance(cmd["target_v"], list) and len(cmd["target_v"]) == 3:
                     SERVER_STATE["target_v"] = [float(cmd["target_v"][0]), float(cmd["target_v"][1]), float(cmd["target_v"][2])]
+                if "target_yaw" in cmd:
+                    SERVER_STATE["target_yaw"] = float(cmd["target_yaw"])
+                if "setpoint" in cmd and isinstance(cmd["setpoint"], dict):
+                    sp = cmd["setpoint"]
+                    SERVER_STATE["target_p"] = [float(sp.get("x", 20.0)), float(sp.get("y", 5.0)), float(sp.get("z", 20.0))]
+                    if "yaw" in sp:
+                        SERVER_STATE["target_yaw"] = float(sp["yaw"])
                 print(f"[Bridge] Parameter Configuration Request: {cmd}")
                 response = {
                     "status": "success",
                     "applied_parameters": cmd,
                     "target_p": SERVER_STATE["target_p"],
                     "target_v": SERVER_STATE["target_v"],
-                    "note": "Simulator parameters updated. Aircraft flight execution requires active ROS 2 / AP bridge."
+                    "target_yaw": SERVER_STATE["target_yaw"],
+                    "vehicle_parameters": {
+                        "mass_kg": VEHICLE_MASS,
+                        "kp": KP_POS.tolist(),
+                        "kv": KV_POS.tolist(),
+                        "kr": KR_ATT.tolist(),
+                        "komega": KOMEGA_RATE.tolist()
+                    },
+                    "note": "Simulator parameters updated. Physical aircraft execution requires confirmed ArduPilot safety interlocks."
                 }
             except Exception as e:
                 response = {"status": "error", "message": str(e)}
@@ -435,25 +861,77 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
 
 
+# ==============================================================================
+# 50 Hz Telemetry Broadcast Thread
+# ==============================================================================
+
 def telemetry_broadcaster():
     """
     Broadcasts normalized telemetry frames matching the 50 Hz ROS 2 architecture.
+    In DEMO mode: Replays calibrated trajectory datasets and calculates cascaded
+                  SO(3) controller telemetry and T_WB / T_WC frames.
+    In LIVE mode: Only broadcasts when genuine ROS 2 telemetry is arriving.
+                  Does NOT fabricate synthetic values under a live label.
     """
     idx = 0
     last_t = time.time()
-    last_p = [0, 0, 0]
+    last_p = None
 
     while True:
-        time.sleep(0.02)  # 50 Hz stream rate
+        time.sleep(0.02)  # 50 Hz loop
         now = time.time()
         dt = max(0.001, now - last_t)
         last_t = now
 
-        # Snapshot clients under lock to avoid race with handle_websocket add/remove
         with WS_LOCK:
             if not WS_CLIENTS:
                 continue
             snapshot = list(WS_CLIENTS)
+
+        # ----------------------------------------------------------------------
+        # Case A: LIVE Mode with Genuine ROS 2 Data
+        # ----------------------------------------------------------------------
+        if SERVER_STATE["mode"] == "LIVE":
+            now_t = time.time()
+            is_fresh = (now_t - LIVE_ROS2_STATE["last_msg_time"]) <= STATE_TIMEOUT
+            SERVER_STATE["ros2_connected"] = is_fresh
+
+            if not is_fresh or LIVE_ROS2_STATE["node"] is None:
+                # Do not emit synthetic data in LIVE mode
+                continue
+
+            node_state = LIVE_ROS2_STATE["node"].current_state
+            if node_state["pose_wb"] is None:
+                continue
+
+            p_wb_dict = node_state["pose_wb"]["position"]
+            q_wb_dict = node_state["pose_wb"]["orientation"]
+            p_wb = [p_wb_dict["x"], p_wb_dict["y"], p_wb_dict["z"]]
+            q_wb = [q_wb_dict["qx"], q_wb_dict["qy"], q_wb_dict["qz"], q_wb_dict["qw"]]
+            p_wc, q_wc = compute_camera_optical_pose(p_wb, q_wb)
+
+            payload = {
+                "type": "telemetry",
+                "source": "ros2_live",
+                "bridge_connected": True,
+                "ros2_connected": True,
+                "timestamp": now,
+                "data": {
+                    "pose_wb": node_state["pose_wb"],
+                    "pose_wc": {
+                        "position": {"x": round(float(p_wc[0]), 4), "y": round(float(p_wc[1]), 4), "z": round(float(p_wc[2]), 4)},
+                        "orientation": {"qx": round(float(q_wc[0]), 4), "qy": round(float(q_wc[1]), 4), "qz": round(float(q_wc[2]), 4), "qw": round(float(q_wc[3]), 4)}
+                    },
+                    "twist": node_state["twist"] or {"linear": {"vx": 0, "vy": 0, "vz": 0}, "angular": {"p": 0, "q": 0, "r": 0}},
+                    "imu": node_state["imu"] or {"accel": {"ax": 0, "ay": 0, "az": 9.81}},
+                    "controller": node_state["controller"]
+                }
+            }
+
+        # ----------------------------------------------------------------------
+        # Case B: DEMO Mode (Full Analytical Replay with Real Mathematics)
+        # ----------------------------------------------------------------------
+        else:
             dataset_key = SERVER_STATE["active_dataset"]
             points = DATASETS.get(dataset_key, DATASETS.get("orbit", []))
             if not points:
@@ -461,65 +939,70 @@ def telemetry_broadcaster():
             frame = points[idx % len(points)]
             idx = (idx + 1) % len(points)
 
-        # Body Pose T_WB
-        p_wb = [frame["x"], frame["y"], frame["z"]]
-        q_wb = [frame["qw"], frame["qx"], frame["qy"], frame["qz"]]
+            p_wb = [frame["x"], frame["y"], frame["z"]]
+            # CSV quaternions are [qw, qx, qy, qz] -> convert to ROS standard [qx, qy, qz, qw]
+            q_wb = [frame["qx"], frame["qy"], frame["qz"], frame["qw"]]
 
-        # Velocity derived from consecutive frames
-        vx = (p_wb[0] - last_p[0]) / dt
-        vy = (p_wb[1] - last_p[1]) / dt
-        vz = (p_wb[2] - last_p[2]) / dt
-        last_p = list(p_wb)
+            # Linear velocity derived from frame displacement or consecutive diff
+            if last_p is None:
+                vx, vy, vz = 0.0, 0.0, 0.0
+            else:
+                vx = (p_wb[0] - last_p[0]) / dt
+                vy = (p_wb[1] - last_p[1]) / dt
+                vz = (p_wb[2] - last_p[2]) / dt
+            last_p = list(p_wb)
 
-        # Camera Optical Pose T_WC = T_WB * T_BC
-        p_wc = [
-            p_wb[0] + T_BC_OFFSET["x"],
-            p_wb[1] + T_BC_OFFSET["y"],
-            p_wb[2] + T_BC_OFFSET["z"]
-        ]
+            omega = [frame.get("bgx", 0.0), frame.get("bgy", 0.0), frame.get("bgz", 0.0)]
 
-        # Compute Cascaded SO(3) Controller Telemetry
-        ctrl_data = calculate_controller_telemetry(p_wb, [vx, vy, vz], q_wb)
+            # Compute true camera optical pose: T_WC = T_WB * T_BC
+            p_wc, q_wc = compute_camera_optical_pose(p_wb, q_wb)
 
-        payload = {
-            "type": "telemetry",
-            "source": "bridge_demo_playback" if SERVER_STATE["mode"] == "DEMO" else "ros2_live",
-            "bridge_connected": True,
-            "ros2_connected": SERVER_STATE["ros2_connected"],
-            "timestamp": now,
-            "data": {
-                "pose_wb": {
-                    "position": {"x": round(p_wb[0], 4), "y": round(p_wb[1], 4), "z": round(p_wb[2], 4)},
-                    "orientation": {"qw": round(q_wb[0], 4), "qx": round(q_wb[1], 4), "qy": round(q_wb[2], 4), "qz": round(q_wb[3], 4)}
-                },
-                "pose_wc": {
-                    "position": {"x": round(p_wc[0], 4), "y": round(p_wc[1], 4), "z": round(p_wc[2], 4)},
-                    "orientation": {"qw": round(q_wb[0], 4), "qx": round(q_wb[1], 4), "qy": round(q_wb[2], 4), "qz": round(q_wb[3], 4)}
-                },
-                "twist": {
-                    "linear": {"vx": round(vx, 3), "vy": round(vy, 3), "vz": round(vz, 3)},
-                    "angular": {"p": round(frame.get("bgx", 0.0), 4), "q": round(frame.get("bgy", 0.0), 4), "r": round(frame.get("bgz", 0.0), 4)}
-                },
-                "imu": {
-                    "accel": {"ax": round(frame.get("bax", 0.0) * 10, 3), "ay": round(frame.get("bay", 0.0) * 10, 3), "az": 9.81},
-                    "bias_accel": [frame.get("bax", 0.0), frame.get("bay", 0.0), frame.get("baz", 0.0)],
-                    "bias_gyro": [frame.get("bgx", 0.0), frame.get("bgy", 0.0), frame.get("bgz", 0.0)]
-                },
-                "vio": {
-                    "status": "ACTIVE",
-                    "active_features": 248,
-                    "tracked_features": 216,
-                    "tracking_quality": 87.5,
-                    "clones": 11,
-                    "covariance_trace": 1.42e-4,
-                    "scale_drift": 0.018
-                },
-                "controller": ctrl_data
+            # Compute cascaded controller telemetry using real equations & gains
+            ctrl_telemetry = compute_cascaded_controller(
+                p=p_wb,
+                v=[vx, vy, vz],
+                q_xyzw=q_wb,
+                omega=omega
+            )
+
+            payload = {
+                "type": "telemetry",
+                "source": "bridge_demo_playback",
+                "bridge_connected": True,
+                "ros2_connected": False,
+                "timestamp": now,
+                "data": {
+                    "pose_wb": {
+                        "position": {"x": round(p_wb[0], 4), "y": round(p_wb[1], 4), "z": round(p_wb[2], 4)},
+                        "orientation": {"qx": round(q_wb[0], 4), "qy": round(q_wb[1], 4), "qz": round(q_wb[2], 4), "qw": round(q_wb[3], 4)}
+                    },
+                    "pose_wc": {
+                        "position": {"x": round(float(p_wc[0]), 4), "y": round(float(p_wc[1]), 4), "z": round(float(p_wc[2]), 4)},
+                        "orientation": {"qx": round(float(q_wc[0]), 4), "qy": round(float(q_wc[1]), 4), "qz": round(float(q_wc[2]), 4), "qw": round(float(q_wc[3]), 4)}
+                    },
+                    "twist": {
+                        "linear": {"vx": round(vx, 3), "vy": round(vy, 3), "vz": round(vz, 3)},
+                        "angular": {"p": round(omega[0], 4), "q": round(omega[1], 4), "r": round(omega[2], 4)}
+                    },
+                    "imu": {
+                        "accel": {"ax": round(frame.get("bax", 0.0) * 10, 3), "ay": round(frame.get("bay", 0.0) * 10, 3), "az": 9.81},
+                        "bias_accel": [frame.get("bax", 0.0), frame.get("bay", 0.0), frame.get("baz", 0.0)],
+                        "bias_gyro": [frame.get("bgx", 0.0), frame.get("bgy", 0.0), frame.get("bgz", 0.0)]
+                    },
+                    "vio": {
+                        "status": "ACTIVE",
+                        "active_features": 248,
+                        "tracked_features": 216,
+                        "tracking_quality": 87.5,
+                        "clones": 11,
+                        "covariance_trace": 1.42e-4,
+                        "scale_drift": 0.018
+                    },
+                    "controller": ctrl_telemetry
+                }
             }
-        }
 
         frame_bytes = encode_ws_frame(json.dumps(payload))
-        # Send to snapshot, collect dead sockets under lock
         dead_socks = set()
         for sock in snapshot:
             try:
@@ -531,13 +1014,23 @@ def telemetry_broadcaster():
             with WS_LOCK:
                 for dead in dead_socks:
                     WS_CLIENTS.discard(dead)
+
         SERVER_STATE["frames_broadcast"] += 1
         SERVER_STATE["bridge_latency_ms"] = dt * 1000.0
 
 
 def run_server(port=8000, mode="DEMO"):
     SERVER_STATE["mode"] = mode.upper()
-    SERVER_STATE["ros2_connected"] = (mode.upper() == "LIVE")
+
+    if SERVER_STATE["mode"] == "LIVE":
+        print("[Bridge] LIVE mode requested. Checking for ROS 2 DDS environment...")
+        has_ros2 = try_init_ros2_live_bridge()
+        if not has_ros2:
+            print("[Bridge] WARNING: Genuine ROS 2 connection not available on this host.")
+            print("[Bridge] LIVE mode will report ros2_connected: False without fabricating telemetry.")
+    else:
+        SERVER_STATE["ros2_connected"] = False
+        SERVER_STATE["ros2_status_detail"] = "Operating in verified DEMO replay mode (50 Hz analytical closed loop)"
 
     socketserver.TCPServer.allow_reuse_address = True
     broadcaster_thread = threading.Thread(target=telemetry_broadcaster, daemon=True)
@@ -548,8 +1041,10 @@ def run_server(port=8000, mode="DEMO"):
         print("AeroVIO Ground Station Bridge Running")
         print(f"Web Dashboard:    http://localhost:{port}")
         print(f"WebSocket Bridge: ws://localhost:{port}/ws")
-        print(f"Operating Mode:   {SERVER_STATE['mode']} (ROS 2 Connected: {SERVER_STATE['ros2_connected']})")
-        print(f"Target:           p_d={SERVER_STATE['target_p']}  v_d={SERVER_STATE['target_v']}")
+        print(f"Operating Mode:   {SERVER_STATE['mode']}")
+        print(f"ROS 2 Connected:  {SERVER_STATE['ros2_connected']} ({SERVER_STATE['ros2_status_detail']})")
+        print(f"Target Setpoint:  p_d={SERVER_STATE['target_p']}  v_d={SERVER_STATE['target_v']}  yaw_d={SERVER_STATE['target_yaw']}")
+        print(f"Gains Active:     Kp={KP_POS.tolist()} Kv={KV_POS.tolist()} KR={KR_ATT.tolist()} KOmega={KOMEGA_RATE.tolist()}")
         if SERVER_STATE.get("allow_origins"):
             print(f"Allowed Origins:  {SERVER_STATE['allow_origins']}")
         print("================================================================")
@@ -563,10 +1058,12 @@ def run_server(port=8000, mode="DEMO"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AeroVIO Ground Station Bridge & Web Server")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)), help="Port to listen on (default: 8000)")
-    parser.add_argument("--mode", choices=["demo", "live"], default="demo", help="Telemetry mode: demo (synthetic replay) or live (ROS 2 integration)")
+    parser.add_argument("--mode", choices=["demo", "live"], default="demo", help="Telemetry mode: demo (analytical replay) or live (genuine ROS 2 integration)")
     parser.add_argument("--target", type=str, default=None, help="Target position p_d as x,y,z (e.g. 20,5,20)")
-    parser.add_argument("--allow-origin", type=str, action="append", dest="allow_origin", default=None, help="Allowed Origin header (repeatable, e.g. --allow-origin https://example.com). If omitted, localhost+private LAN allowed.")
+    parser.add_argument("--target-yaw", type=float, default=2.0, help="Target yaw heading in radians (default: 2.0)")
+    parser.add_argument("--allow-origin", type=str, action="append", dest="allow_origin", default=None, help="Allowed Origin header (repeatable)")
     args = parser.parse_args()
+
     if args.target:
         try:
             parts = [float(x.strip()) for x in args.target.split(",")]
@@ -575,6 +1072,9 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"[Bridge] Invalid --target '{args.target}': {e}", file=sys.stderr)
             sys.exit(2)
+    SERVER_STATE["target_yaw"] = args.target_yaw
+
     if args.allow_origin:
         SERVER_STATE["allow_origins"] = args.allow_origin
+
     run_server(port=args.port, mode=args.mode)

@@ -142,29 +142,31 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 
 ### ① Outer Loop — Position Controller
 
-The position and velocity tracking errors are
+The position and velocity tracking errors are defined as:
 
 $$
-\mathbf{e}_p = \mathbf{p} - \mathbf{p}_d, \qquad
-\mathbf{e}_v = \mathbf{v} - \mathbf{v}_d.
+\mathbf{e}_p = \mathbf{p}_d - \mathbf{p}, \qquad
+\mathbf{e}_v = \mathbf{v}_d - \mathbf{v}.
 $$
 
-The desired force is
+The commanded acceleration and desired force are:
 
 $$
-\mathbf{F}_d = -K_p\mathbf{e}_p - K_v\mathbf{e}_v + mg\mathbf{e}_3 + m\mathbf{a}_d.
+\mathbf{a}_{\mathrm{cmd}} = K_p\mathbf{e}_p + K_v\mathbf{e}_v + \mathbf{a}_d, \qquad
+\mathbf{F}_d = m(\mathbf{a}_{\mathrm{cmd}} + g\mathbf{e}_3).
 $$
 
-| Parameter | Value |
-|---|---|
-| $m$ | $1.50\ \mathrm{kg}$ |
-| $K_p$ | `diag(0.5, 0.5, 0.5)` |
-| $K_v$ | `diag(0.2, 0.2, 0.2)` |
-| $g$ | $9.81\ \mathrm{m/s^2}$ |
+| Parameter | Value | Reference Source |
+|---|---|---|
+| $m$ | $1.50\ \mathrm{kg}$ | `config/vehicle.yaml` |
+| $K_p$ | `diag(0.5, 0.5, 0.5)` | `config/controller.yaml` |
+| $K_v$ | `diag(0.2, 0.2, 0.2)` | `config/controller.yaml` |
+| $g$ | $9.81\ \mathrm{m/s^2}$ | `config/controller.yaml` |
+| $v_{\max}$ | $0.50\ \mathrm{m/s}$ | `config/controller.yaml` |
 
 ### ② Attitude Generator
 
-The desired body thrust axis and thrust magnitude are
+The desired body thrust axis and thrust magnitude are:
 
 $$
 \mathbf{b}_{3d} = \frac{\mathbf{F}_d}{\left\|\mathbf{F}_d\right\|},
@@ -172,11 +174,15 @@ $$
 T_d = \left\|\mathbf{F}_d\right\|.
 $$
 
-The generator uses the thrust direction and yaw reference to construct the desired rotation $R_d \in \mathrm{SO}(3)$ and quaternion $q_d$.
+The generator constructs the desired orthonormal rotation $R_d = [\mathbf{b}_{1d},\, \mathbf{b}_{2d},\, \mathbf{b}_{3d}] \in \mathrm{SO}(3)$ using heading reference $\psi_d$:
+
+$$
+\mathbf{b}_{2d} = \frac{\mathbf{b}_{3d} \times [\cos\psi_d,\, \sin\psi_d,\, 0]^T}{\left\|\mathbf{b}_{3d} \times [\cos\psi_d,\, \sin\psi_d,\, 0]^T\right\|}, \qquad \mathbf{b}_{1d} = \mathbf{b}_{2d} \times \mathbf{b}_{3d}.
+$$
 
 ### ③ Inner Loop — Geometric SO(3) Controller
 
-The attitude and angular-velocity errors are
+The attitude error and angular-velocity tracking errors are:
 
 $$
 \mathbf{e}_R = \frac{1}{2}\left(R_d^T R - R^T R_d\right)^{\vee},
@@ -184,67 +190,75 @@ $$
 \mathbf{e}_{\omega} = \boldsymbol{\omega} - R^T R_d\boldsymbol{\omega}_d.
 $$
 
-The desired control moment is
+The desired control moment is:
 
 $$
 \mathbf{M}_d = -k_R\mathbf{e}_R - k_{\Omega}\mathbf{e}_{\omega}
-               + \boldsymbol{\omega}\times J\boldsymbol{\omega}.
+               + \boldsymbol{\omega}\times (J\boldsymbol{\omega})
+               - J\left(\hat{\boldsymbol{\omega}}R^TR_d\boldsymbol{\omega}_d - R^TR_d\dot{\boldsymbol{\omega}}_d\right).
 $$
 
-| Parameter | Value |
-|---|---|
-| $J$ | `diag(0.02, 0.02, 0.04) kg·m²` |
-| $k_R$ | $[4.85,\,4.85,\,2.50]$ |
-| $k_{\Omega}$ | $[0.35,\,0.35,\,0.20]$ |
+| Parameter | Value | Reference Source |
+|---|---|---|
+| $J$ | `diag(0.02, 0.02, 0.04) kg·m²` | `config/vehicle.yaml` |
+| $k_R$ | $[4.0,\, 4.0,\, 2.0]$ | `config/controller.yaml` |
+| $k_{\Omega}$ | $[0.8,\, 0.8,\, 0.5]$ | `config/controller.yaml` |
 
-### ④ Frame Extrinsics
+### ④ Frame Extrinsics & Transformations
 
-The camera pose is derived from the body pose and the body-to-camera transform:
+The camera optical pose is derived from the body pose and body-to-camera extrinsic calibration:
 
 $$
-T_{WC} = T_{WB}T_{BC},
-\qquad
-\mathbf{t}_{BC} = [0.10,\,0.00,\,-0.04]^T\ \mathrm{m}.
+T_{WC} = T_{WB}T_{BC} \iff \mathbf{p}_{WC} = \mathbf{p}_{WB} + R_{WB}\mathbf{p}_{BC}, \quad R_{WC} = R_{WB}R_{BC}
 $$
 
-The camera is mounted **10 cm forward and 4 cm downward** relative to the body frame. The dashboard can render the $T_{WB}$ and $T_{WC}$ trajectories independently.
+$$
+\mathbf{p}_{BC} = [0.10,\,0.00,\,0.00]^T\ \mathrm{m}, \qquad
+R_{BC} = \begin{bmatrix} 0 & 0 & 1 \\ -1 & 0 & 0 \\ 0 & -1 & 0 \end{bmatrix}
+$$
+
+The monocular camera is mounted **10 cm forward** along the vehicle $+X$ axis. Body frame is ENU; camera frame is standard OpenCV optical pinhole ($+Z$ depth, $+X$ right, $+Y$ down).
 
 ---
 
 ## 📡 ROS 2 Topic Contracts
 
-*Verified against `drones-controller` — rates, types, semantics.*
+*Verified against `drones-controller` and `VIO-Controller` repository branches.*
 
-#### Inputs — Controller subscribes
+#### Controller Inputs (Subscribed)
 
-| Topic | Type | Rate | Description |
+| Topic | Type | Rate | Frame / Semantics |
 |---|:---:|:---:|---|
-| `/ap/v1/pose/filtered` | `geometry_msgs/PoseStamped` | 50 Hz | Estimated pose $p, q$ |
-| `/ap/v1/twist/filtered` | `geometry_msgs/TwistStamped` | 50 Hz | Linear + angular velocity $v, \omega$ |
-| `/ap/v1/status` | `ardupilot_msgs/Status` | 10 Hz | Armed / failsafe / flight state |
-| `/camera/image_raw` | `sensor_msgs/Image` | 30 Hz | Monocular feed |
-| `/imu/data_raw` | `sensor_msgs/Imu` | 200 Hz | 6-DOF accel + gyro |
+| `/ap/v1/pose/filtered` | `geometry_msgs/msg/PoseStamped` | 50 Hz | World frame body pose $T_{WB}$ |
+| `/ap/v1/twist/filtered` | `geometry_msgs/msg/TwistStamped` | 50 Hz | Body linear and angular velocity |
+| `/ap/v1/status` | `std_msgs/msg/String` | 10 Hz | ArduPilot flight mode & arming status |
+| `/drone/vio/odometry` | `nav_msgs/msg/Odometry` | 50 Hz | VIO body odometry |
+| `/camera/image_raw` | `sensor_msgs/msg/Image` | 30 Hz | Monocular video frame |
+| `/imu/data` | `sensor_msgs/msg/Imu` | 200 Hz | Linear acceleration and angular rates |
 
-#### Outputs — Controller publishes
+#### Controller Outputs (Published)
 
-| Topic | Type | Rate | Description |
+| Topic | Type | Rate | Frame / Semantics |
 |---|:---:|:---:|---|
-| `/ap/v1/cmd_vel` | `geometry_msgs/TwistStamped` | 50 Hz | ArduPilot actuation |
-| `/drones_controller/position_error` | `geometry_msgs/Vector3` | 50 Hz | $e_p$ |
-| `/drones_controller/velocity_error` | `geometry_msgs/Vector3` | 50 Hz | $e_v$ |
-| `/drones_controller/desired_force` | `geometry_msgs/Vector3` | 50 Hz | $F_d$ |
-| `/drones_controller/desired_attitude` | `geometry_msgs/Quaternion` | 50 Hz | $q_d$ (+ $R_d$, $T_d$, $b_{3d}$) |
-| `/drones_controller/attitude_error` | `geometry_msgs/Vector3` | 50 Hz | $e_R$ |
-| `/drones_controller/angular_velocity_error` | `geometry_msgs/Vector3` | 50 Hz | $e_{\omega}$ |
-| `/drones_controller/desired_moment` | `geometry_msgs/Vector3` | 50 Hz | $M_d$ |
+| `/ap/v1/cmd_vel` | `geometry_msgs/msg/TwistStamped` | 50 Hz | Forwarded velocity command to ArduPilot |
+| `/drones_controller/position_error` | `geometry_msgs/msg/Vector3Stamped` | 50 Hz | $\mathbf{e}_p = \mathbf{p}_d - \mathbf{p}$ (m) |
+| `/drones_controller/velocity_error` | `geometry_msgs/msg/Vector3Stamped` | 50 Hz | $\mathbf{e}_v = \mathbf{v}_d - \mathbf{v}$ (m/s) |
+| `/drones_controller/desired_force` | `geometry_msgs/msg/Vector3Stamped` | 50 Hz | $\mathbf{F}_d$ total force vector (N) |
+| `/drones_controller/desired_attitude` | `geometry_msgs/msg/PoseStamped` | 50 Hz | Desired attitude $R_d, q_d$ |
+| `/drones_controller/attitude_error` | `geometry_msgs/msg/Vector3Stamped` | 50 Hz | $\mathbf{e}_R = \frac{1}{2}(R_d^T R - R^T R_d)^\vee$ (rad) |
+| `/drones_controller/angular_velocity_error` | `geometry_msgs/msg/Vector3Stamped` | 50 Hz | $\mathbf{e}_\Omega = \boldsymbol{\omega} - R^T R_d\boldsymbol{\omega}_d$ (rad/s) |
+| `/drones_controller/desired_moment` | `geometry_msgs/msg/Vector3Stamped` | 50 Hz | $\mathbf{M}_d$ control torque vector (N·m) |
+| `/drones_controller/fsm_state` | `std_msgs/msg/String` | 50 Hz | Flight Manager FSM state |
 
-#### VIO — Perception
+#### VIO Perception & Mapping
 
-| Topic | Type | Rate | Description |
+| Topic | Type | Rate | Frame / Semantics |
 |---|:---:|:---:|---|
-| `/drone/vio/odometry` | `nav_msgs/Odometry` | 50 Hz | Body odometry $T_{WB}$ |
-| `/drone/vio/camera_pose` | `geometry_msgs/PoseStamped` | 50 Hz | Camera optical $T_{WC}$ |
-| `/drone/vio/pointcloud` | `sensor_msgs/PointCloud2` | ~5 Hz | Sparse map (442 pts) |
+| `/drone/vio/odometry` | `nav_msgs/msg/Odometry` | 50 Hz | Body odometry $T_{WB}$ in ENU |
+| `/drone/vio/camera_pose` | `geometry_msgs/msg/PoseStamped` | 50 Hz | Camera optical pose $T_{WC} = T_{WB}T_{BC}$ |
+| `/drone/vio/pointcloud` | `sensor_msgs/msg/PointCloud2` | 20 Hz | Triangulated sparse visual landmarks (ENU) |
+
+> **VIO Scale & Obstacle Disclaimer:** Monocular VIO triangulates sparse visual feature points. Metric scale is observable only under dynamic IMU acceleration excitation. Sparse feature points do not provide certified metric obstacle proximity, collision margins, or dense geometric object classification.
 
 ---
 
