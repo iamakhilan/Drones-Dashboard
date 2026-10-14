@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Compile-check Python sources
+        run: |
+          python -m py_compile bridge_server.py ros2_adapter/adapter.py test_bridge_and_math.py
+
+      - name: Syntax-check first-party JS (vendored libs excluded)
+        run: |
+          # three.min.js and OrbitControls.js are vendored/minified Three.js
+          # bundles, not first-party code — excluded from node --check.
+          for f in js/*.js; do
+            case "$f" in
+              js/three.min.js|js/OrbitControls.js) echo "SKIP vendor: $f"; continue ;;
+            esac
+            echo "CHECK $f"
+            node --check "$f"
+          done
+
+      - name: Install JS dev dependencies
+        run: npm ci
+
+      - name: Tailwind CSS build
+        run: npm run build:css
+
+      - name: Assert Tailwind build output is non-trivial
+        run: |
+          test -s css/output.css
+          test "$(wc -c < css/output.css)" -gt 1000
+          tail -c 100 css/output.css | grep -q "tailwindcss" || echo "note: CDN comment absent, size assert passed"
+
+      - name: Install Python test dependencies
+        run: pip install numpy
+
+      - name: Bridge math + integration test suite
+        run: python test_bridge_and_math.py
+
+      - name: WebSocket smoke test (boot bridge, handshake /ws, assert telemetry)
+        env:
+          PORT: 18000
+        run: |
+          python - <<'PYEOF'
+          import json, subprocess, socket, base64, os, sys, time, urllib.request
+
+          port = int(os.environ.get("PORT", "18000"))
+          proc = subprocess.Popen(
+              [sys.executable, "bridge_server.py", "--port", str(port)],
+              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+          try:
+              # Wait for HTTP
+              deadline = time.time() + 15
+              while time.time() < deadline:
+                  try:
+                      urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2)
+                      break
+                  except Exception:
+                      time.sleep(0.3)
+              else:
+                  raise RuntimeError("bridge did not come up on /api/status")
+
+              # Raw RFC 6455 handshake on /ws
+              sock = socket.create_connection(("127.0.0.1", port), timeout=10)
+              key = base64.b64encode(os.urandom(16)).decode()
+              req = (
+                  f"GET /ws HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                  "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                  f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+              sock.sendall(req.encode())
+              resp = b""
+              while b"\r\n\r\n" not in resp:
+                  resp += sock.recv(4096)
+              assert b"101" in resp, f"WS handshake failed: {resp[:200]}"
+
+              # Assert a telemetry frame within 10 s (bridge broadcasts at 50 Hz)
+              sock.settimeout(10)
+              head = sock.recv(2)
+              plen = head[1] & 0x7F
+              if plen == 126:
+                  plen = int.from_bytes(sock.recv(2), "big")
+              elif plen == 127:
+                  plen = int.from_bytes(sock.recv(8), "big")
+              payload = b""
+              while len(payload) < plen:
+                  payload += sock.recv(plen - len(payload))
+              frame = json.loads(payload.decode())
+              assert frame.get("type") == "telemetry", f"unexpected frame: {frame.get('type')}"
+              assert "pose_wb" in frame["data"], "missing pose_wb in telemetry frame"
+              print("WS smoke OK: telemetry frame received, source =", frame.get("source"))
+          finally:
+              proc.terminate()
+              proc.wait(timeout=10)
+          PYEOF

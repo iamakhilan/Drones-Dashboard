@@ -12,6 +12,7 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 
 <p>
   <a href="https://github.com/iamakhilan/Drones-Dashboard"><img src="https://img.shields.io/github/stars/iamakhilan/Drones-Dashboard?style=for-the-badge&logo=github&color=7C3AED&label=STARS" alt="GitHub stars" /></a>
+  <a href="https://github.com/iamakhilan/Drones-Dashboard/actions/workflows/ci.yml"><img src="https://github.com/iamakhilan/Drones-Dashboard/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/CONTROL-50%20Hz-10B981?style=for-the-badge" alt="50 Hz controller" />
   <img src="https://img.shields.io/badge/VIO-MSCKF-8B5CF6?style=for-the-badge" alt="MSCKF VIO" />
   <img src="https://img.shields.io/badge/PYTHON-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.8+" />
@@ -271,7 +272,7 @@ The monocular camera is mounted **10 cm forward** along the vehicle $+X$ axis. B
 | **3D / Map** | Canvas 2D projection · PCD ASCII parser | Isometric / Top XY / Side XZ switcher |
 | **Graphs** | Pure SVG · rolling 20 s window · 250-pt buffer | Spline + gradient fills · hover crosshair |
 | **Data** | CSV trajectories · PCD v.7 ASCII · `real_data.js` | 5 datasets × 500 rows · 442 landmarks |
-| **ROS 2** | Humble · `rclpy` adapter (planned live path) | `geometry_msgs` · `sensor_msgs` · `nav_msgs` |
+| **ROS 2** | Humble · `rclpy` adapter (`ros2_adapter/`) | `geometry_msgs` · `sensor_msgs` · `nav_msgs` |
 
 <div align="center">
 
@@ -343,9 +344,25 @@ python3 bridge_server.py --host 0.0.0.0 --port 8000
 ws://192.168.1.42:8000/ws
 ```
 
-### LIVE ROS 2 (upcoming)
+### LIVE ROS 2
 
-A thin `rclpy` adapter will subscribe to the topics above and push normalized JSON to `/ws` — dashboard stays identical. See [Roadmap](#-roadmap).
+The `ros2_adapter/` package is a real `rclpy` node: it subscribes to the topic contracts above,
+normalizes them into the bridge telemetry schema, and forwards frames to `POST /ingest` on
+`bridge_server.py` — the dashboard stays identical between DEMO and LIVE.
+
+```bash
+# Terminal 1 — bridge in LIVE mode (truthful ros2_connected status; no fabricated data)
+python3 bridge_server.py --mode live --port 8000
+
+# Terminal 2 — adapter inside a sourced ROS 2 Humble environment
+python3 ros2_adapter/adapter.py --endpoint http://127.0.0.1:8000/ingest --rate 25
+
+# Or as an ament_python package: ros2 run aerovio_adapter adapter --endpoint ...
+```
+
+Topic names, rate cap, and endpoint are all CLI-configurable — see [`ros2_adapter/README.md`](ros2_adapter/README.md).
+Without `rclpy` the adapter fails honestly (exit 2); the bridge likewise reports
+`ros2_connected: false` in LIVE mode when no real telemetry is arriving.
 
 ---
 
@@ -403,12 +420,39 @@ Drones-Dashboard/
 | ✅ | 3× 20 s SVG oscilloscopes with channel toggles + crosshair |
 | ✅ | DEMO replay — 5 datasets @ 50 Hz, synthetic KLT + controller synthesis |
 | ✅ | Zero-dep bridge — HTTP + `/ws` + LAN + truthful status |
-| ⏳ | `rclpy` live adapter — subscribe to ROS 2 topics → normalize → `/ws` |
+| ✅ | `rclpy` live adapter — ROS 2 topics → normalize → `POST /ingest` (`ros2_adapter/`) |
 | ⏳ | Live IMU + camera stream from hardware (ADIS16470 / BMI088) |
 | ⏳ | `/ap/v1/cmd_vel` forwarding to physical ArduPilot |
 | 🔜 | Bag replay + trajectory export (CSV / PCD) |
 | 🔜 | Dark mode + keyboard palette (`⌘ K`) |
 | 🔜 | Unit + integration tests (bridge + math) |
+
+---
+
+## 🛠️ Development
+
+```bash
+# Run the bridge (DEMO replay @ 50 Hz)
+npm run dev          # = python bridge_server.py
+
+# Full test suite (15 tests: controller math, transforms, REST endpoints)
+npm test             # = python test_bridge_and_math.py
+
+# Tailwind CSS
+npm run build        # one-shot minified build -> css/output.css
+npm run watch:css    # watch mode
+npm run build:css    # direct build step
+```
+
+- **Formatting:** `.editorconfig` enforces LF, 4-space Python, 2-space JS/HTML/CSS.
+  `.prettierrc` matches the existing frontend style (single quotes, semicolons,
+  100-col JS) — run `npx prettier --write js/ css/ index.html` when touching frontend files.
+- **CI:** `.github/workflows/ci.yml` runs on push/PR — Python compile checks, `node --check`
+  on first-party JS (vendored Three.js bundles excluded), Tailwind build assert, the full
+  15-test suite, and a live WebSocket smoke test (handshake `/ws`, assert telemetry ≤ 10 s).
+- **Large assets:** trajectory CSVs, the PCD map, and PNGs are Git LFS candidates.
+  `.gitattributes` ships with the patterns commented — see [`docs/lfs-migration.md`](docs/lfs-migration.md)
+  before enabling LFS on existing history.
 
 ---
 

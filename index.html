@@ -6,6 +6,7 @@
   <title>AeroVIO Ground Station — Monocular Visual-Inertial Odometry & 50 Hz Cascaded SO(3) Controller</title>
   <link rel="stylesheet" href="css/output.css" />
   <link rel="stylesheet" href="css/dashboard.css" />
+  <link rel="stylesheet" href="css/features.css" />
   <script src="js/three.min.js"></script>
   <script src="js/OrbitControls.js"></script>
   <script src="js/config.js"></script>
@@ -16,6 +17,10 @@
   <script src="js/graphs.js"></script>
   <script src="js/camera.js"></script>
   <script src="js/vio.js"></script>
+  <script src="js/alerts.js"></script>
+  <script src="js/vio_health.js"></script>
+  <script src="js/compare.js"></script>
+  <script src="js/snapshot.js"></script>
 </head>
 <body class="min-h-screen flex flex-col font-sans selection:bg-brand-100 selection:text-brand-700">
   <header class="bg-[#1A1A1A] text-white min-h-14 px-3 sm:px-4 flex flex-wrap items-center gap-2 sm:gap-3 justify-between border-b border-black/10 shrink-0 sticky top-0 z-50 py-2">
@@ -140,8 +145,15 @@
       <!-- Playback Scrubber -->
       <div id="scrubber-bar" class="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-stone-200 px-3 py-2 shadow-sm">
         <button id="scrubber-play-btn" onclick="togglePlaybackPause()" class="min-h-[36px] min-w-[36px] w-9 h-9 inline-flex items-center justify-center bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition" title="Play/Pause">⏸</button>
-        <input id="scrubber-range" type="range" min="0" max="100" value="0" step="0.1" class="flex-1 min-w-[120px] accent-brand-600 h-2" oninput="onScrubberInput(this.value)" />
+        <div id="scrubber-wrap">
+          <input id="scrubber-range" type="range" min="0" max="100" value="0" step="0.1" class="w-full min-w-[120px] accent-brand-600 h-2" oninput="onScrubberInput(this.value)" />
+          <div id="scrubber-marker-layer" aria-hidden="false"></div>
+        </div>
         <span id="scrubber-label" class="text-xs font-mono text-stone-600 tabular-nums whitespace-nowrap">0.0s / 0.0s</span>
+        <button id="snapshot-btn" class="min-h-[36px] px-3 py-1.5 bg-stone-900 text-white border border-stone-900 rounded-lg text-xs font-semibold hover:bg-stone-800 flex items-center gap-1.5" title="Capture dashboard snapshot as PNG (falls back to print view when offline)">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h1.19a2 2 0 001.664-.89l.814-1.22A2 2 0 0110.328 4h3.344a2 2 0 011.664.89l.814 1.22A2 2 0 0017.81 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Snapshot
+        </button>
         <div class="flex items-center gap-1 bg-stone-100 rounded-lg p-0.5 border border-stone-200">
           <button onclick="setPlaybackSpeed(0.5)" id="speed-05" class="speed-btn min-h-[28px] px-2.5 py-1 text-xs font-mono font-semibold rounded-md text-stone-600 hover:bg-white">0.5×</button>
           <button onclick="setPlaybackSpeed(1)" id="speed-10" class="speed-btn min-h-[28px] px-2.5 py-1 text-xs font-mono font-semibold rounded-md bg-white text-stone-900 shadow-sm border border-stone-200">1×</button>
@@ -335,6 +347,79 @@
             <div class="flex items-center justify-between gap-2 flex-wrap"><span class="font-bold text-xs text-stone-800 font-sans flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-teal-500"></span>World Position (m)</span><div class="flex items-center gap-1 font-mono text-[10px]"><button id="btn-chip-pos-x" onclick="toggleGraphChannel('pos','x')" class="min-h-[28px] px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">● X</button><button id="btn-chip-pos-y" onclick="toggleGraphChannel('pos','y')" class="min-h-[28px] px-2 py-1 rounded bg-sky-100 text-sky-800 font-bold border border-sky-300">● Y</button><button id="btn-chip-pos-z" onclick="toggleGraphChannel('pos','z')" class="min-h-[28px] px-2 py-1 rounded bg-teal-100 text-teal-800 font-bold border border-teal-300">● Z Alt</button></div></div>
             <div class="w-full h-44 relative bg-[#0B0F19] rounded-xl overflow-hidden border border-slate-800 shadow-inner"><svg id="svg-graph-pos" class="w-full h-full cursor-crosshair select-none" viewBox="0 0 400 160"><defs><linearGradient id="posGradX" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10B981" stop-opacity="0.25"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.0"/></linearGradient><linearGradient id="posGradY" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.25"/><stop offset="100%" stop-color="#0EA5E9" stop-opacity="0.0"/></linearGradient><linearGradient id="posGradZ" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#14B8A6" stop-opacity="0.25"/><stop offset="100%" stop-color="#14B8A6" stop-opacity="0.0"/></linearGradient></defs><line x1="45" x2="390" y1="10" y2="10" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="45" x2="390" y1="41" y2="41" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="72" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><line x1="45" x2="390" y1="99" y2="99" stroke="rgba(255,255,255,0.18)" stroke-dasharray="3 3" stroke-width="1"/><line x1="45" x2="390" y1="135" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="40" y="14" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+25</text><text x="40" y="45" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+15</text><text x="40" y="76" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">+5.0</text><text x="40" y="103" fill="#CBD5E1" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0.0</text><text x="40" y="138" fill="#94A3B8" font-family="monospace" font-size="8.5" text-anchor="end">-10</text><line x1="45" x2="45" y1="10" y2="135" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><line x1="131" x2="131" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="217" x2="217" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="303" x2="303" y1="10" y2="135" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 2" stroke-width="1"/><line x1="390" x2="390" y1="10" y2="135" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/><text x="45" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="start">-20s</text><text x="131" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-15s</text><text x="217" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-10s</text><text x="303" y="152" fill="#64748B" font-family="monospace" font-size="8.5" text-anchor="middle">-5s</text><text x="390" y="152" fill="#38BDF8" font-family="monospace" font-size="8.5" font-weight="bold" text-anchor="end">0s</text><path id="graph-pos-area-x" fill="url(#posGradX)" d=""/><path id="graph-pos-area-y" fill="url(#posGradY)" d=""/><path id="graph-pos-area-z" fill="url(#posGradZ)" d=""/><path id="graph-pos-x" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-pos-y" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" d=""/><path id="graph-pos-z" fill="none" stroke="#14B8A6" stroke-width="2" stroke-linecap="round" d=""/><circle id="graph-pos-dot-x" r="4" fill="#10B981" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-pos-dot-y" r="4" fill="#0EA5E9" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><circle id="graph-pos-dot-z" r="4" fill="#14B8A6" stroke="#FFFFFF" stroke-width="1.5" opacity="0"/><line id="graph-pos-crosshair" x1="0" x2="0" y1="10" y2="135" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="1" opacity="0"/><g id="graph-pos-tooltip" opacity="0" pointer-events="none"><rect width="125" height="20" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(255,255,255,0.2)"/><text id="graph-pos-tooltip-text" x="6" y="14" fill="#E2E8F0" font-family="monospace" font-size="9"/></g></svg></div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[11px] text-stone-700"><span id="graph-pos-val-x" class="bg-emerald-50 text-emerald-900 px-2 py-1.5 rounded-lg font-bold border border-emerald-200">X: +4.00</span><span id="graph-pos-val-y" class="bg-sky-50 text-sky-900 px-2 py-1.5 rounded-lg font-bold border border-sky-200">Y: +0.00</span><span id="graph-pos-val-z" class="bg-teal-50 text-teal-900 px-2 py-1.5 rounded-lg font-bold border border-teal-200">Z: -2.00</span><span id="graph-pos-val-norm" class="bg-stone-100 text-stone-800 px-2 py-1.5 rounded-lg font-bold border border-stone-200 text-right">‖P‖: 4.47</span></div>
+          </div>
+        </div>
+      </section>
+      <section class="space-y-6 scroll-mt-14" id="diagnostics">
+        <div class="flex items-center gap-2 border-b border-stone-200 pb-2">
+          <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+          <h2 class="text-sm font-bold text-stone-900 uppercase tracking-wider">Diagnostics</h2>
+          <span class="text-[11px] font-mono text-stone-500">alert log • VIO health • session comparison</span>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Alert Log Card -->
+          <div id="alert-log-card" class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+              <div class="flex items-center gap-2">
+                <button id="alert-collapse-btn" class="min-h-[28px] min-w-[28px] inline-flex items-center justify-center text-stone-500 hover:text-stone-800 rounded" title="Collapse/expand" aria-label="Toggle alert log">
+                  <svg class="aerovio-collapse-chevron w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                </button>
+                <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Alert Log</h3>
+                <span id="alert-badge" class="hidden inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold font-mono border border-red-200">0</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button id="alert-export-btn" class="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold font-mono text-stone-700 bg-white hover:bg-stone-50 rounded-lg border border-stone-200 transition">CSV</button>
+                <button id="alert-clear-btn" class="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold font-mono text-stone-700 bg-white hover:bg-stone-50 rounded-lg border border-stone-200 transition">Clear</button>
+              </div>
+            </div>
+            <div class="aerovio-collapsible-body space-y-2">
+              <p class="text-[11px] text-stone-500 font-mono">Rising-edge trips: <span class="font-semibold">‖e_p‖</span>, <span class="font-semibold">‖e_R‖</span>, <span class="font-semibold">cov tr</span> vs APP_CONFIG.thresholds (10s cooldown)</p>
+              <div id="alert-log-empty" class="py-6 text-center text-xs text-stone-400 font-mono">No threshold trips recorded.</div>
+              <div id="alert-log-list" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+            </div>
+          </div>
+          <!-- VIO Health Card -->
+          <div class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+              <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">VIO Health</h3>
+              <div class="flex items-center gap-2">
+                <span id="vio-h-status" class="font-mono font-bold text-stone-400 text-[11px]">N/A</span>
+                <button id="vio-h-reset-btn" class="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold font-mono text-stone-700 bg-white hover:bg-stone-50 rounded-lg border border-stone-200 transition" title="Reset history &amp; counters">Reset</button>
+              </div>
+            </div>
+            <div>
+              <span class="text-[10px] font-mono font-semibold text-stone-600 uppercase tracking-wider">Covariance Trace (log scale)</span>
+              <canvas id="vio-cov-canvas" class="mt-1"></canvas>
+              <div class="flex justify-between text-[10px] font-mono text-stone-500 mt-1"><span>tr(P): <strong id="vio-h-cov" class="text-stone-800">N/A</strong></span><span>threshold: <strong class="text-amber-700">1e-3</strong></span></div>
+            </div>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-[11px]">
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Features (trk/act)</span><strong id="vio-h-features" class="text-stone-800">N/A / N/A</strong></div>
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Tracking Quality</span><strong id="vio-h-quality" class="text-stone-800">N/A</strong></div>
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Update Rate</span><strong id="vio-h-rate" class="text-stone-800">N/A</strong></div>
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Tracking-Loss Events</span><strong id="vio-h-loss-count" class="text-red-600">0</strong></div>
+            </div>
+          </div>
+          <!-- Session Comparison Card -->
+          <div class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-2 gap-2 flex-wrap">
+              <h3 class="text-xs font-bold text-stone-900 uppercase tracking-wider">Session Comparison</h3>
+              <div class="flex items-center gap-1.5">
+                <label for="cmp-file-input" class="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold font-mono text-white bg-stone-900 hover:bg-stone-800 rounded-lg border border-stone-900 transition cursor-pointer inline-flex items-center">Load CSV</label>
+                <input id="cmp-file-input" type="file" accept=".csv,text/csv" class="hidden" />
+                <button id="cmp-clear-btn" class="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold font-mono text-stone-700 bg-white hover:bg-stone-50 rounded-lg border border-stone-200 transition">Clear</button>
+              </div>
+            </div>
+            <p id="cmp-status" class="text-[11px] font-mono text-stone-500">No reference loaded. (record-export CSV: t,px,py,pz,…)</p>
+            <div class="space-y-3">
+              <svg id="cmp-traj-plot" class="aerovio-plot-box" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
+              <svg id="cmp-ep-plot" class="aerovio-plot-box" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
+            </div>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-[11px]">
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Current samples</span><strong id="cmp-samples" class="text-stone-800">0</strong></div>
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Matched pts</span><strong id="cmp-matched" class="text-stone-800">0</strong></div>
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Max Δ position</span><strong id="cmp-max-delta" class="text-brand-700">N/A</strong></div>
+              <div class="flex justify-between border-b border-stone-50 py-1"><span class="text-stone-600">Mean Δ position</span><strong id="cmp-mean-delta" class="text-brand-700">N/A</strong></div>
+            </div>
           </div>
         </div>
       </section>
@@ -692,6 +777,14 @@
         const ax = frame.vx * 0.2; const ay = frame.vy * 0.2; const az = 9.81 + (frame.vz * 0.1);
         window.graphs.pushTelemetry({ timestamp: Date.now(), acceleration: { ax, ay, az }, velocity: { vx: frame.vx, vy: frame.vy, vz: frame.vz }, position: { x: frame.px, y: frame.py, z: frame.pz } });
       }
+      // Diagnostics feature modules: dispatch DEMO playback frame (guarded, no-throw)
+      const _diagLen = (allPoints && allPoints.length) || 0;
+      ['AeroVIOAlerts', 'AeroVIOVioHealth', 'AeroVIOCompare'].forEach(function(k){
+        const m = window[k];
+        if (m && typeof m.ingestDemoFrame === 'function') {
+          try { m.ingestDemoFrame(frame, currentFrameIndex, _diagLen); } catch(e) {}
+        }
+      });
     }
     function toggleGraphChannel(chartKey, axis) { if (window.graphs && typeof window.graphs.toggleChannel === 'function') window.graphs.toggleChannel(chartKey, axis); }
     function toggleGraphsPause() {

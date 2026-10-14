@@ -329,3 +329,314 @@ aside {
   .sidebar-backdrop { transition: none; }
   .stale-warning { animation: none; }
 }
+
+/* ==========================================================================
+   === Responsive: tablet & mobile ===
+   Light-theme pass. Breakpoints: <=1200px (tablet), <=768px (phone),
+   <=480px (small phone). Pure CSS — no markup changes required.
+   ========================================================================== */
+
+/* ---- Global overflow guard ------------------------------------------- */
+html,
+body {
+  overflow-x: clip;            /* never let page scroll sideways */
+}
+/* Inner scroll containers (#nodes table wrapper, training bars, etc.)
+   keep their own horizontal scrolling. */
+main,
+aside,
+.overflow-x-auto {
+  min-width: 0;                /* let flex/grid children shrink */
+}
+
+/* ---- Fluid headline scale -------------------------------------------- */
+h1,
+#overview h1 {
+  font-size: clamp(1.25rem, 0.9rem + 1.6vw, 1.5rem);  /* 20px -> 24px */
+  line-height: 1.25;
+}
+main h2 {
+  font-size: clamp(0.8125rem, 0.7rem + 0.5vw, 0.875rem); /* 13px -> 14px */
+}
+
+/* =====================================================================
+   Tablet — <=1200px
+   ===================================================================== */
+@media (max-width: 1200px) {
+  /* workspaces-section: override lg:grid-cols-12 side-by-side -> single column */
+  [data-purpose="workspaces-section"] {
+    display: grid;
+    grid-template-columns: 1fr !important;
+    gap: var(--space-3);
+  }
+  [data-purpose="workspaces-section"] > * {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Kinematics matrix (md:grid-cols-3): step down to 2 columns */
+  #imu[data-purpose="kinematics-matrix"],
+  [data-purpose="kinematics-matrix"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Controller loop cards (sm:2 lg:4): stay 2-up on tablet */
+  #controller-section .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Metrics summary: KPI row 3-up (overrides md:grid-cols-5) */
+  [data-purpose="metrics-summary"] .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  /* Graphs (lg:grid-cols-3): 2-up, third card wraps full width */
+  #graphs-section .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Dataset selector: allow horizontal scroll instead of wrapping */
+  #dataset-selector-bar {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* =====================================================================
+   Mobile — <=768px
+   ===================================================================== */
+@media (max-width: 768px) {
+  /* Compact sticky header */
+  header {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    row-gap: 6px;
+  }
+  #health-bar {
+    font-size: 10px;
+    gap: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Single-column stacking everywhere */
+  [data-purpose="workspaces-section"],
+  #imu[data-purpose="kinematics-matrix"],
+  [data-purpose="kinematics-matrix"],
+  #controller-section .grid,
+  #graphs-section .grid {
+    grid-template-columns: 1fr !important;
+  }
+  [data-purpose="workspaces-section"] > * {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Metrics summary: KPI 3-up stays (grid-cols-2 base overridden) */
+  [data-purpose="metrics-summary"] .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px;
+  }
+  [data-purpose="metrics-summary"] .grid [id^="kpi-"] {
+    font-size: 0.95rem;   /* tighter KPI digits */
+  }
+
+  /* Section padding */
+  main {
+    padding: 12px;
+  }
+  main section,
+  #camera,
+  #pointcloud {
+    padding: 14px;
+  }
+
+  /* Scrubber bar: horizontal scroll, controls don't shrink */
+  #scrubber-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 10px;
+  }
+  #scrubber-bar > * {
+    flex-shrink: 0;
+  }
+  #scrubber-bar #scrubber-range {
+    flex: 1 0 160px;        /* slider keeps usable width */
+    min-width: 160px;
+  }
+
+  /* All toolbar/tab rows: scroll horizontally, buttons don't squash */
+  #dataset-selector-bar,
+  #perspective-controls,
+  #camera .flex.items-center.gap-2,
+  #pointcloud .flex.items-center.gap-2,
+  .traj-sel-btn {
+    flex-shrink: 0;
+  }
+  #perspective-controls {
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 44px touch targets: buttons, links, range inputs, chips */
+  #scrubber-bar button,
+  #scrubber-bar .speed-btn,
+  .speed-btn,
+  .traj-sel-btn,
+  .persp-btn,
+  #graphs-section button,
+  #camera button,
+  #pointcloud button,
+  #controller-section button,
+  [data-purpose="metrics-summary"] [onclick] {
+    min-height: 44px !important;
+  }
+  input[type="range"] {
+    min-height: 44px;       /* taller thumb track hit area */
+  }
+
+  /* Prevent iOS auto-zoom: all text inputs >= 16px */
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Chart / canvas containers: flexible with sane floor */
+  #graphs-section .h-44,
+  #graphs-section [class*="h-44"] {
+    height: auto;
+    min-height: 220px;
+  }
+  #spatial-3d-viewport,
+  #camera .aspect-video,
+  .aspect-video {
+    aspect-ratio: auto;
+    min-height: 240px;
+    height: auto;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  /* Three.js canvas: fill its container, never push width */
+  #spatial-3d-viewport {
+    min-width: 0;
+  }
+  #three-spatial-canvas,
+  #camera-overlay-canvas,
+  #camera-feed-img {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100%;
+    object-fit: contain;
+  }
+  /* 3D HUD overlays: compact on small screens */
+  #spatial-3d-viewport .absolute {
+    font-size: 9px;
+  }
+
+  /* Nodes table stays scrollable in its wrapper */
+  #nodes .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+  #nodes table {
+    min-width: 640px;       /* keep tabular structure, scroll instead */
+  }
+
+  /* Modals become full-width sheets */
+  #tuning-modal,
+  #search-modal {
+    padding: 8px;
+    align-items: flex-end;  /* bottom-sheet feel */
+  }
+  #tuning-modal > div,
+  #search-modal > div {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    max-height: 92vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+  #search-modal {
+    padding-top: 12px;
+    align-items: flex-start;
+  }
+  #search-modal > div {
+    border-radius: var(--radius-xl);
+  }
+  /* Tuning modal waypoint grid: 2-up */
+  #tuning-modal .grid,
+  #tuning-modal [class*="grid-cols-4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Toasts clamped to viewport */
+  #toast-box {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    padding: 0;
+    align-items: stretch;
+  }
+  #toast-box > div {
+    max-width: 100%;
+    font-size: 12px;
+    word-break: break-word;
+  }
+}
+
+/* =====================================================================
+   Small phones — <=480px
+   ===================================================================== */
+@media (max-width: 480px) {
+  /* Hide decorative chrome */
+  header kbd,
+  #global-search-input + div kbd,
+  #search-modal kbd,
+  kbd {
+    display: none !important;
+  }
+  main > footer,
+  [data-purpose="metrics-summary"] #kpi-features-delta,
+  [data-purpose="metrics-summary"] .border-t [class*="font-mono"]:last-child {
+    display: none;
+  }
+
+  /* Tighter padding */
+  main {
+    padding: 10px;
+  }
+  main section,
+  #camera,
+  #pointcloud {
+    padding: 12px;
+  }
+  #health-bar {
+    display: none;  /* status already lives in header pill */
+  }
+
+  /* KPIs 2-up */
+  [data-purpose="metrics-summary"] .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Chart floors slightly lower */
+  #graphs-section .h-44,
+  #graphs-section [class*="h-44"] {
+    min-height: 200px;
+  }
+  #spatial-3d-viewport,
+  #camera .aspect-video,
+  .aspect-video {
+    min-height: 220px;
+  }
+
+  /* Search bar spans full width in header */
+  header .flex-1.min-w-\[200px\],
+  header > div.flex-1 {
+    min-width: 100%;
+    order: 3;
+  }
+}
