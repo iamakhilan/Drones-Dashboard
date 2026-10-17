@@ -8,13 +8,19 @@
 (function(window){
   'use strict';
   var STORAGE_KEY = 'aerovio.wsUrl';
+  var DEFAULT_WS_URL = 'ws://10.105.86.215:8000/ws';
   var storedUrl = null;
   try { storedUrl = localStorage.getItem(STORAGE_KEY); } catch(e) {}
+  if (storedUrl && (storedUrl.indexOf('localhost') !== -1 || storedUrl.indexOf('127.0.0.1') !== -1)) {
+    storedUrl = DEFAULT_WS_URL;
+    try { localStorage.setItem(STORAGE_KEY, DEFAULT_WS_URL); } catch(e) {}
+  }
 
   if (!window.APP_CONFIG) window.APP_CONFIG = {};
 
   var C = window.APP_CONFIG;
-  C.websocketUrl = storedUrl || C.websocketUrl || 'ws://localhost:8000/ws';
+  C.mode = 'LIVE';
+  C.websocketUrl = storedUrl || C.websocketUrl || DEFAULT_WS_URL;
   C.rateHz = 50.0;
   C.massKg = 1.5;
   C.gravity = 9.81;

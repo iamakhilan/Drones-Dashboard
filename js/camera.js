@@ -36,7 +36,7 @@
       this.objectFit = 'contain';
 
       // Stream state
-      this.mode = 'DEMO'; // 'DEMO' or 'LIVE'
+      this.mode = 'LIVE'; // LIVE streaming from remote ROS 2 bridge
       this.hasLiveFrame = false;
       this.lastFrameArrivalTime = 0;
       this.lastFrameRosTimestamp = null;

@@ -82,7 +82,7 @@ R_BC = np.array([
 
 # Global Server Configuration & State
 SERVER_STATE = {
-    "mode": "DEMO",             # "DEMO" or "LIVE"
+    "mode": "LIVE",             # "DEMO" or "LIVE"
     "ros2_connected": False,    # Truthful ROS 2 connection flag
     "ros2_status_detail": "ROS 2 daemon inactive (running in standalone bridge mode)",
     "active_dataset": "orbit",
@@ -1150,7 +1150,7 @@ def telemetry_broadcaster():
         SERVER_STATE["bridge_latency_ms"] = dt * 1000.0
 
 
-def run_server(port=8000, mode="DEMO"):
+def run_server(port=8000, mode="LIVE"):
     SERVER_STATE["mode"] = mode.upper()
 
     if SERVER_STATE["mode"] == "LIVE":
@@ -1189,7 +1189,7 @@ def run_server(port=8000, mode="DEMO"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AeroVIO Ground Station Bridge & Web Server")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)), help="Port to listen on (default: 8000)")
-    parser.add_argument("--mode", choices=["demo", "live"], default="demo", help="Telemetry mode: demo (analytical replay) or live (genuine ROS 2 integration)")
+    parser.add_argument("--mode", choices=["demo", "live"], default="live", help="Telemetry mode: demo (analytical replay) or live (genuine ROS 2 integration)")
     parser.add_argument("--target", type=str, default=None, help="Target position p_d as x,y,z (e.g. 20,5,20)")
     parser.add_argument("--target-yaw", type=float, default=2.0, help="Target yaw heading in radians (default: 2.0)")
     parser.add_argument("--allow-origin", type=str, action="append", dest="allow_origin", default=None, help="Allowed Origin header (repeatable)")

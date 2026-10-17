@@ -52,12 +52,18 @@
 
   class WebSocketBridge {
     constructor() {
-      // Configurable endpoint (can point to friend's machine IP on LAN)
-      this.defaultUrl = (window.APP_CONFIG && window.APP_CONFIG.websocketUrl) || 'ws://localhost:8000/ws';
+      // Configurable endpoint (pointing to friend's machine IP)
+      this.defaultUrl = (window.APP_CONFIG && window.APP_CONFIG.websocketUrl) || 'ws://10.105.86.215:8000/ws';
       // hydrate from localStorage again in case class instantiated late
       try {
         var ls = localStorage.getItem(STORAGE_KEY);
-        if (ls && isValidWsUrl(ls)) this.defaultUrl = ls;
+        if (ls && isValidWsUrl(ls)) {
+          if (ls.indexOf('localhost') !== -1 || ls.indexOf('127.0.0.1') !== -1) {
+            ls = this.defaultUrl;
+            localStorage.setItem(STORAGE_KEY, ls);
+          }
+          this.defaultUrl = ls;
+        }
       } catch(e) {}
       this.url = this.defaultUrl;
       this.socket = null;
@@ -81,20 +87,23 @@
         cameraFrame: [],
         pointCloud: []
       };
-      // hydrate wsUrl badge on load
+      // hydrate wsUrl badge on load and auto-connect
+      var initBridgeConn = () => {
+        persistWsUrl(this.url);
+        if (this.status === 'DISCONNECTED') {
+          this.connect();
+        }
+      };
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function(){ persistWsUrl(this.url); }.bind(this));
+        document.addEventListener('DOMContentLoaded', initBridgeConn);
       } else {
-        // defer to ensure DOM parsed
-        setTimeout(function(){ persistWsUrl(this.url); }.bind(this), 0);
+        setTimeout(initBridgeConn, 50);
       }
       // Watch telemetry mode
       if (window.telemetry) {
         window.telemetry.onStateChange((state) => {
           if (state.connection.mode === 'LIVE' && this.status === 'DISCONNECTED') {
             this.connect();
-          } else if (state.connection.mode === 'DEMO' && (this.status === 'CONNECTED' || this.status === 'CONNECTING' || this.status === 'DEGRADED')) {
-            this.disconnect();
           }
         });
       }
@@ -446,6 +455,9 @@
           if (window.telemetry) {
             window.telemetry.state.landmarks = msg.data;
           }
+          if (window.vio && typeof window.vio.updateLandmarks === 'function') {
+            window.vio.updateLandmarks(msg.data);
+          }
           return;
         }
 
@@ -613,6 +625,46 @@
 
       // Direct full telemetry payload format from bridge_server
       if (msg.type === 'telemetry' && msg.data) {
+        const d = msg.data;
+        if (d.pose_wb) {
+          const p = d.pose_wb.position;
+          const q = d.pose_wb.orientation;
+          if (p) update.position = { x: p.x, y: p.y, z: p.z };
+          if (q) {
+            const qw = q.qw !== undefined ? q.qw : (q.w !== undefined ? q.w : 1.0);
+            const qx = q.qx !== undefined ? q.qx : (q.x !== undefined ? q.x : 0.0);
+            const qy = q.qy !== undefined ? q.qy : (q.y !== undefined ? q.y : 0.0);
+            const qz = q.qz !== undefined ? q.qz : (q.z !== undefined ? q.z : 0.0);
+            const euler = window.telemetry.quaternionToEuler(qw, qx, qy, qz);
+            update.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw, qw, qx, qy, qz };
+          }
+        }
+        if (d.pose_wc && d.pose_wc.position) {
+          const cp = d.pose_wc.position;
+          const cq = d.pose_wc.orientation || {};
+          const ceuler = window.telemetry.quaternionToEuler(cq.qw || 1, cq.qx || 0, cq.qy || 0, cq.qz || 0);
+          update.camera_pose = { x: cp.x, y: cp.y, z: cp.z, roll: ceuler.roll, pitch: ceuler.pitch, yaw: ceuler.yaw, qw: cq.qw, qx: cq.qx, qy: cq.qy, qz: cq.qz };
+        }
+        if (d.twist) {
+          const l = d.twist.linear || {};
+          const a = d.twist.angular || {};
+          update.velocity = { vx: l.vx || 0, vy: l.vy || 0, vz: l.vz || 0, norm: Math.sqrt((l.vx||0)**2 + (l.vy||0)**2 + (l.vz||0)**2) };
+          if (update.orientation) {
+            update.orientation.roll_rate = a.p || 0;
+            update.orientation.pitch_rate = a.q || 0;
+            update.orientation.yaw_rate = a.r || 0;
+          }
+        }
+        if (d.imu) {
+          const acc = d.imu.accel || {};
+          update.acceleration = { ax: acc.ax || 0, ay: acc.ay || 0, az: acc.az !== undefined ? acc.az : 9.81, norm: Math.sqrt((acc.ax||0)**2 + (acc.ay||0)**2 + (acc.az||9.81)**2) };
+        }
+        if (d.controller) {
+          update.controller = Object.assign(update.controller || {}, d.controller);
+        }
+        if (d.vio) {
+          update.vio = Object.assign(update.vio || {}, d.vio);
+        }
         Object.assign(update, msg.data);
       }
 

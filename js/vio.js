@@ -336,25 +336,17 @@
     }
 
     _loadLandmarks() {
-      // 1. Check if real data is available in window.REAL_DRONE_DATA
-      if (window.REAL_DRONE_DATA && Array.isArray(window.REAL_DRONE_DATA.pcd_points)) {
-        this.landmarks = window.REAL_DRONE_DATA.pcd_points;
-      }
+      // In live mode, landmarks come dynamically from remote ROS 2 bridge (/drone/vio/pointcloud)
+      this.landmarks = [];
+      const sideCount = document.getElementById('sidebar-pointcount');
+      if (sideCount) sideCount.textContent = '0 pts';
+      const hudPts = document.getElementById('hud-map-pts');
+      if (hudPts) hudPts.textContent = '0';
+    }
 
-      if (this.landmarks.length === 0) {
-        // Fallback: fetch from /api/pointcloud
-        fetch('/api/pointcloud')
-          .then((res) => res.json())
-          .then((pts) => {
-            if (Array.isArray(pts) && pts.length > 0) {
-              this.landmarks = pts;
-              this._buildLandmarksMesh();
-            }
-          })
-          .catch(() => {});
-        return;
-      }
-
+    updateLandmarks(points) {
+      if (!Array.isArray(points)) return;
+      this.landmarks = points;
       this._buildLandmarksMesh();
     }
 

@@ -15,7 +15,7 @@
   function _syncHeaderBadges(stateOrMode){
     try {
       var ep = document.getElementById('top-endpoint-badge');
-      if (ep && window.APP_CONFIG) ep.textContent = window.APP_CONFIG.websocketUrl || 'ws://localhost:8000/ws';
+      if (ep && window.APP_CONFIG) ep.textContent = window.APP_CONFIG.websocketUrl || 'ws://10.105.86.215:8000/ws';
       var inp = document.getElementById('tune-ws-url');
       if (inp && window.APP_CONFIG && inp.value !== window.APP_CONFIG.websocketUrl) inp.value = window.APP_CONFIG.websocketUrl;
     } catch(e) {}
@@ -92,8 +92,8 @@
 
   class TelemetryEngine {
     constructor() {
-      // Current mode: 'LIVE' or 'DEMO'
-      this.mode = 'DEMO'; // Default to DEMO mode for immediate inspection
+      // Current mode: 'LIVE' only (Strict Live Telemetry from Remote Bridge)
+      this.mode = 'LIVE';
       
       // Normalized telemetry state matching drones-controller specifications
       this.state = {
@@ -107,7 +107,7 @@
           websocket: false,
           latency_ms: 0,
           state: 'DISCONNECTED', // 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'DEGRADED'
-          mode: 'DEMO',
+          mode: 'LIVE',
           uptime_s: 0,
           packet_rate_hz: 0
         },
@@ -268,11 +268,10 @@
       } else {
         setTimeout(function(){ _syncHeaderBadges(this.state.connection); }.bind(this), 0);
       }
-      // Start internal watchdog and demo runner if initial mode is DEMO
+      // Initialize internal watchdog and set clean awaiting/disconnected state
       this._initWatchdog();
-      if (this.mode === 'DEMO') {
-        this.startDemoMode();
-      }
+      this.stopDemoMode();
+      this.setDisconnectedState();
     }
 
     /**
@@ -304,68 +303,38 @@
     }
 
     /**
-     * Switch telemetry mode: 'LIVE' vs 'DEMO'
+     * Telemetry mode is strictly LIVE (Remote bridge connection to friend's machine)
      */
     setMode(mode) {
-      if (mode === this.mode) return;
-      this.mode = mode;
-      this.state.connection.mode = mode;
-      _syncHeaderBadges(mode);
-
-      if (mode === 'DEMO') {
-        this.startDemoMode();
-      } else {
-        this.stopDemoMode();
-        if (!this.state.connection.websocket) {
-          this.setDisconnectedState();
-        }
+      this.mode = 'LIVE';
+      this.state.connection.mode = 'LIVE';
+      _syncHeaderBadges('LIVE');
+      this.stopDemoMode();
+      if (!this.state.connection.websocket) {
+        this.setDisconnectedState();
       }
-
       this._emit('modeChange', this.mode);
       this._emit('stateChange', this.state);
     }
 
     /**
-     * Change active DEMO dataset
+     * Demo dataset selection is disabled (Strict live data only)
      */
     setDemoDataset(datasetKey) {
-      this.demoDatasetName = datasetKey;
-      this.demoIndex = 0;
+      this.demoDatasetName = 'live';
       this.state.trajectories.body = [];
       this.state.trajectories.camera = [];
       this.totalTraveledDist = 0;
       this.lastPos = null;
-
-      if (window.AERO_DATASETS && window.AERO_DATASETS.pointcloud) {
-        this.state.landmarks = window.AERO_DATASETS.pointcloud;
-      }
     }
 
     /**
-     * Start playback of real repository datasets with computed SO(3) closed loop
+     * Demo mode disabled - no synthetic data permitted
      */
     startDemoMode() {
       this.stopDemoMode();
-      this.demoIndex = 0;
-      this.state.connection.mode = 'DEMO';
-      this.state.connection.state = 'DEMO MODE';
-      
-      this.state.health = {
-        camera: 'ONLINE',
-        imu: 'ONLINE',
-        vio: 'ACTIVE',
-        controller: 'ACTIVE',
-        websocket: 'DEMO'
-      };
-
-      if (window.AERO_DATASETS && window.AERO_DATASETS.pointcloud) {
-        this.state.landmarks = window.AERO_DATASETS.pointcloud;
-      }
-
-      const stepIntervalMs = 20; // 50 Hz controller playback rate
-      this.demoInterval = setInterval(() => {
-        this._stepDemoPlayback();
-      }, stepIntervalMs);
+      this.mode = 'LIVE';
+      this.state.connection.mode = 'LIVE';
     }
 
     stopDemoMode() {
@@ -380,7 +349,7 @@
      * Aligned with position_controller.py, attitude_generator.py, and so3_controller.py
      */
     _stepDemoPlayback() {
-      const datasets = window.AERO_DATASETS || {};
+      return; // Synthetic playback permanently disabled - only live remote bridge data allowed
       const dataset = datasets[this.demoDatasetName] || datasets['synthetic_orbit'];
       if (!dataset || !dataset.length) return;
 

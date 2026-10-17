@@ -106,6 +106,7 @@
       this._startClock();
       this._syncEndpointBadge();
       this._renderEmptyStates();
+      this.setMode('LIVE');
 
       // Hook Telemetry Engine
       if (window.telemetry) {
@@ -449,32 +450,21 @@
      */
     setMode(mode) {
       if (!window.telemetry) return;
-      window.telemetry.setMode(mode);
+      window.telemetry.setMode('LIVE');
 
       const liveBtn = document.getElementById('btn-mode-live');
       const demoBtn = document.getElementById('btn-mode-demo');
-      // FIX: use dataset-selector-bar
       const datasetContainer = document.getElementById('dataset-selector-bar') || document.getElementById('dataset-selector-container') || document.getElementById('dataset-selector');
 
-      if (mode === 'LIVE') {
-        if (liveBtn) {
-          liveBtn.className = 'px-3 py-1 bg-emerald-500 text-black font-bold uppercase tracking-wider text-xs shadow-[0_0_12px_rgba(16,185,129,0.4)] transition';
-        }
-        if (demoBtn) {
-          demoBtn.className = 'px-3 py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface uppercase tracking-wider text-xs transition';
-        }
-        if (datasetContainer) datasetContainer.classList.add('hidden');
-        this.showToast('Switched to LIVE ROS 2 Mode — Searching bridge at ' + (window.APP_CONFIG ? window.APP_CONFIG.websocketUrl : 'ws://localhost:8000/ws'), 'info');
-      } else {
-        if (liveBtn) {
-          liveBtn.className = 'px-3 py-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface uppercase tracking-wider text-xs transition';
-        }
-        if (demoBtn) {
-          demoBtn.className = 'px-3 py-1 bg-secondary text-on-secondary font-bold uppercase tracking-wider text-xs shadow-[0_0_12px_rgba(125,244,255,0.4)] transition';
-        }
-        if (datasetContainer) datasetContainer.classList.remove('hidden');
-        this.showToast('Switched to DEMO Mode — Streaming real trajectory datasets', 'success');
+      if (liveBtn) {
+        liveBtn.className = 'px-3 py-1 bg-emerald-500 text-black font-bold uppercase tracking-wider text-xs shadow-[0_0_12px_rgba(16,185,129,0.4)] transition';
       }
+      if (demoBtn) {
+        demoBtn.className = 'px-3 py-1 bg-surface-container-high text-stone-500 uppercase tracking-wider text-xs transition cursor-not-allowed opacity-50';
+        demoBtn.title = 'Synthetic data disabled - strictly live remote bridge data';
+      }
+      if (datasetContainer) datasetContainer.classList.add('hidden');
+      this.showToast('Operating in strictly LIVE ROS 2 Mode — Friend\'s bridge: ' + (window.APP_CONFIG ? window.APP_CONFIG.websocketUrl : 'ws://10.105.86.215:8000/ws'), 'info');
     }
 
     /**
