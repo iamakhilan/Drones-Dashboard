@@ -613,7 +613,44 @@
 
       // Direct full telemetry payload format from bridge_server
       if (msg.type === 'telemetry' && msg.data) {
-        Object.assign(update, msg.data);
+        const d = msg.data;
+        if (d.pose_wb && d.pose_wb.position) {
+          const pos = d.pose_wb.position;
+          const ori = d.pose_wb.orientation || {};
+          update.position = { x: pos.x, y: pos.y, z: pos.z };
+          const qx = ori.qx !== undefined ? ori.qx : 0.0;
+          const qy = ori.qy !== undefined ? ori.qy : 0.0;
+          const qz = ori.qz !== undefined ? ori.qz : 0.0;
+          const qw = ori.qw !== undefined ? ori.qw : 1.0;
+          const euler = window.telemetry.quaternionToEuler(qw, qx, qy, qz);
+          update.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw, qw: qw, qx: qx, qy: qy, qz: qz };
+          update.camera_pose = window.telemetry.computeCameraPose(pos.x, pos.y, pos.z, qw, qx, qy, qz);
+        } else if (d.pose_wb === null) {
+          update.position = { x: null, y: null, z: null };
+          update.velocity = { vx: null, vy: null, vz: null, norm: null };
+          update.acceleration = { ax: null, ay: null, az: null, norm: null };
+          update.orientation = { roll: null, pitch: null, yaw: null, qw: null, qx: null, qy: null, qz: null };
+        }
+        if (d.twist && d.twist.linear) {
+          const l = d.twist.linear;
+          const w = d.twist.angular || {};
+          update.velocity = { vx: l.vx, vy: l.vy, vz: l.vz, norm: Math.sqrt(l.vx*l.vx + l.vy*l.vy + l.vz*l.vz) };
+          if (update.orientation) {
+            update.orientation.roll_rate = w.p !== undefined ? w.p : 0.0;
+            update.orientation.pitch_rate = w.q !== undefined ? w.q : 0.0;
+            update.orientation.yaw_rate = w.r !== undefined ? w.r : 0.0;
+          }
+        }
+        if (d.imu && d.imu.accel) {
+          const a = d.imu.accel;
+          update.acceleration = { ax: a.ax, ay: a.ay, az: a.az, norm: Math.sqrt(a.ax*a.ax + a.ay*a.ay + a.az*a.az) };
+        }
+        if (d.controller) {
+          update.controller = Object.assign(update.controller || {}, d.controller);
+        }
+        if (d.vio) {
+          update.vio = Object.assign(update.vio || {}, d.vio);
+        }
       }
 
       window.telemetry.updateFromNormalizedData(update);

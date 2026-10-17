@@ -234,6 +234,21 @@
         this.elements.armedBadge.textContent = c.armed ? 'ARMED' : 'DISARMED';
         this.elements.armedBadge.className = `px-2 py-0.5 rounded font-mono font-bold text-xs ${c.armed ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-stone-700 text-stone-300'}`;
       }
+      // Flight Control Panel badges
+      const ctrlModeInd = document.getElementById('ctrl-mode-indicator');
+      if (ctrlModeInd) {
+        ctrlModeInd.textContent = `MODE: ${fsm}`;
+        ctrlModeInd.className = `px-2 py-0.5 rounded text-[11px] font-mono font-bold ${fsm === 'GUIDED' ? 'bg-brand-100 text-brand-800 border border-brand-300' : 'bg-stone-100 text-stone-700 border border-stone-200'}`;
+      }
+      const ctrlArmInd = document.getElementById('ctrl-arm-indicator');
+      if (ctrlArmInd) {
+        ctrlArmInd.textContent = c.armed ? 'ARMED' : 'DISARMED';
+        ctrlArmInd.className = `px-2 py-0.5 rounded text-[11px] font-mono font-bold ${c.armed ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-stone-100 text-stone-500 border border-stone-200'}`;
+      }
+      const ctrlDot = document.getElementById('ctrl-live-status-dot');
+      if (ctrlDot) {
+        ctrlDot.className = `w-2.5 h-2.5 rounded-full ${c.armed ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`;
+      }
     }
 
     _updateFsmProgression(activeState) {
@@ -270,32 +285,96 @@
       });
     }
 
+    async triggerFlightAction(action, extra) {
+      const payload = Object.assign({ action: action }, extra || {});
+      const feedbackEl = document.getElementById('ctrl-feedback-msg');
+      if (feedbackEl) feedbackEl.textContent = `Transmitting ${action.toUpperCase()} command...`;
+
+      // 1. Send via WebSocket if open
+      if (window.wsBridge && window.wsBridge.socket && window.wsBridge.socket.readyState === WebSocket.OPEN) {
+        try {
+          window.wsBridge.socket.send(JSON.stringify(Object.assign({ type: 'action' }, payload)));
+        } catch(e) {}
+      }
+
+      // 2. Also send via REST POST endpoint
+      try {
+        const resp = await fetch('/api/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const res = await resp.json();
+        const msg = res.message || `${action.toUpperCase()} processed`;
+        if (feedbackEl) feedbackEl.textContent = msg;
+        if (window.ui && typeof window.ui.showToast === 'function') {
+          window.ui.showToast(msg, res.status === 'success' ? 'success' : 'warning');
+        }
+      } catch (err) {
+        const errMsg = `Action ${action} network error: ${err.message}`;
+        if (feedbackEl) feedbackEl.textContent = errMsg;
+        if (window.ui && typeof window.ui.showToast === 'function') {
+          window.ui.showToast(errMsg, 'error');
+        }
+      }
+    }
+
+    async dispatchTargetSetpoint() {
+      const x = parseFloat(document.getElementById('input-target-x')?.value) || 0.0;
+      const y = parseFloat(document.getElementById('input-target-y')?.value) || 0.0;
+      const z = parseFloat(document.getElementById('input-target-z')?.value) || 2.0;
+      const yaw = parseFloat(document.getElementById('input-target-yaw')?.value) || 0.0;
+      const target = { x, y, z, yaw };
+      const feedbackEl = document.getElementById('ctrl-feedback-msg');
+      if (feedbackEl) feedbackEl.textContent = `Transmitting target [${x}, ${y}, ${z}] m, yaw: ${yaw}°...`;
+
+      // 1. Send via WebSocket if open
+      if (window.wsBridge && window.wsBridge.socket && window.wsBridge.socket.readyState === WebSocket.OPEN) {
+        try {
+          window.wsBridge.socket.send(JSON.stringify({
+            type: 'set_target',
+            target_p: [x, y, z],
+            target_yaw: yaw
+          }));
+        } catch(e) {}
+      }
+
+      // 2. Send via REST POST endpoint
+      try {
+        const resp = await fetch('/api/target', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(target)
+        });
+        const res = await resp.json();
+        const msg = res.message || `Target [${x}, ${y}, ${z}] sent`;
+        if (feedbackEl) feedbackEl.textContent = msg;
+        if (window.ui && typeof window.ui.showToast === 'function') {
+          window.ui.showToast(msg, 'success');
+        }
+      } catch (err) {
+        const errMsg = `Setpoint error: ${err.message}`;
+        if (feedbackEl) feedbackEl.textContent = errMsg;
+        if (window.ui && typeof window.ui.showToast === 'function') {
+          window.ui.showToast(errMsg, 'error');
+        }
+      }
+    }
+
     /**
-     * Dispatch target setpoint to ROS 2 controller node
+     * Dispatch target setpoint to ROS 2 controller node (modal fallback)
      */
     applySetpoint() {
-      const x = parseFloat(this.elements.setpointX?.value) || 20.0;
-      const y = parseFloat(this.elements.setpointY?.value) || 5.0;
-      const z = parseFloat(this.elements.setpointZ?.value) || 20.0;
-      const yaw = parseFloat(this.elements.setpointYaw?.value) || 2.0;
-
+      const x = parseFloat(this.elements.setpointX?.value) || 1.0;
+      const y = parseFloat(this.elements.setpointY?.value) || 0.0;
+      const z = parseFloat(this.elements.setpointZ?.value) || 2.0;
+      const yaw = parseFloat(this.elements.setpointYaw?.value) || 0.0;
       const target = { x, y, z, yaw };
-      console.log('[drones-controller] Dispatching setpoint:', target);
 
       if (window.telemetry) {
         window.telemetry.state.controller.desired_position = target;
       }
-
-      if (window.wsBridge) {
-        window.wsBridge.sendCommand({
-          action: 'set_target_setpoint',
-          setpoint: target
-        });
-      }
-
-      if (window.ui) {
-        window.ui.showToast(`Target Setpoint Dispatched: [${x}, ${y}, ${z}]m, Yaw: ${yaw} rad`, 'success');
-      }
+      this.dispatchTargetSetpoint();
     }
 
     /**
@@ -321,5 +400,29 @@
 
   // Expose singleton on window
   window.controller = new FlightController();
+
+  // Global helper bindings for buttons
+  window.triggerFlightAction = function(action, extra) {
+    if (window.controller) window.controller.triggerFlightAction(action, extra);
+  };
+  window.triggerTakeoff = function() {
+    const alt = parseFloat(document.getElementById('input-takeoff-alt')?.value) || 2.5;
+    if (window.controller) window.controller.triggerFlightAction('takeoff', { alt: alt });
+  };
+  window.dispatchTargetSetpoint = function() {
+    if (window.controller) window.controller.dispatchTargetSetpoint();
+  };
+  window.setTargetInputs = function(x, y, z, yaw) {
+    const ix = document.getElementById('input-target-x');
+    const iy = document.getElementById('input-target-y');
+    const iz = document.getElementById('input-target-z');
+    const iyaw = document.getElementById('input-target-yaw');
+    if (ix) ix.value = x;
+    if (iy) iy.value = y;
+    if (iz) iz.value = z;
+    if (iyaw) iyaw.value = yaw;
+    const msg = document.getElementById('ctrl-feedback-msg');
+    if (msg) msg.textContent = `Preset coordinates selected: [${x}, ${y}, ${z}] m, yaw: ${yaw}°`;
+  };
 
 })(window);
