@@ -113,6 +113,12 @@
       this.hasLiveFrame = true;
       this.lastFrameArrivalTime = now;
 
+      // Automatically switch UI to LIVE mode as soon as genuine drone frames arrive
+      if (this.mode !== 'LIVE') {
+        this.mode = 'LIVE';
+        this._syncModeUI();
+      }
+
       // Unpack frame data
       let imageUrl = null;
       if (typeof frameData === 'string') {
@@ -134,7 +140,7 @@
         }
       }
 
-      if (this.imgElement && imageUrl) {
+      if (this.imgElement && imageUrl && !this.useMjpeg) {
         this.imgElement.src = imageUrl;
         this.imgElement.classList.remove('hidden');
       }
@@ -432,9 +438,38 @@
         window.showToast(`Display Aspect: ${this.objectFit.toUpperCase()}`);
       }
     }
+
+    toggleMjpegStream() {
+      this.useMjpeg = !this.useMjpeg;
+      const btn = document.getElementById('btn-toggle-mjpeg');
+      if (this.useMjpeg) {
+        if (this.imgElement) {
+          this.imgElement.src = '/api/camera_stream?t=' + Date.now();
+          this.imgElement.classList.remove('hidden');
+        }
+        if (this.placeholder) this.placeholder.classList.add('hidden');
+        if (btn) {
+          btn.className = 'min-h-[38px] px-3 py-1.5 bg-brand-600 text-white font-medium rounded-lg border border-brand-500 transition shadow-sm';
+          btn.textContent = 'MJPEG: Active';
+        }
+        if (window.showToast) window.showToast('Switched to Direct MJPEG Video Stream');
+      } else {
+        if (this.imgElement) {
+          this.imgElement.src = 'monocular_tracking_feed.png';
+        }
+        if (btn) {
+          btn.className = 'min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition';
+          btn.textContent = 'MJPEG Stream';
+        }
+        if (window.showToast) window.showToast('Switched to WebSocket Frame Stream');
+      }
+    }
   }
 
   // Expose singleton on window
   window.cameraView = new CameraViewController();
+  window.toggleMjpegStream = function() {
+    if (window.cameraView) window.cameraView.toggleMjpegStream();
+  };
 
 })(window);
