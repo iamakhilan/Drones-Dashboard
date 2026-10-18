@@ -640,3 +640,27 @@ main h2 {
     order: 3;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Flight Control & Target Setpoint Navigation Panel
+   -------------------------------------------------------------------------- */
+#flight-control-panel {
+  background-color: #FFFFFF !important;
+  border: 1px solid var(--border-default, #E7E5E4) !important;
+  border-radius: var(--radius-xl, 16px) !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+#flight-control-panel input[type="number"] {
+  background-color: #FFFFFF !important;
+  color: #1C1917 !important;
+  border: 1px solid #D6D3D1 !important;
+  border-radius: 6px !important;
+}
+
+#flight-control-panel input[type="number"]:focus {
+  border-color: #0284C7 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
+}
+

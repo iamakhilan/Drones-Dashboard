@@ -54,10 +54,11 @@ import urllib.request
 try:
     import rclpy
     from rclpy.node import Node
-    from geometry_msgs.msg import PoseStamped, Vector3Stamped
+    from geometry_msgs.msg import PoseStamped, Vector3Stamped, TwistStamped
     from nav_msgs.msg import Odometry
     from sensor_msgs.msg import Imu
     from std_msgs.msg import String
+    from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
     HAS_RCLPY = True
 except ImportError:
     HAS_RCLPY = False
@@ -83,9 +84,22 @@ if HAS_RCLPY:
             }
             self._last_pose_time = 0.0
 
+            ap_qos = QoSProfile(
+                history=HistoryPolicy.KEEP_LAST,
+                depth=10,
+                reliability=ReliabilityPolicy.BEST_EFFORT,
+                durability=DurabilityPolicy.VOLATILE,
+            )
+
+            # Odometry & direct PoseStamped subscriptions
             self.create_subscription(Odometry, topics["odom"], self._on_odom, 10)
+            self.create_subscription(PoseStamped, topics.get("pose", "/ap/v1/pose/filtered"), self._on_pose, ap_qos)
+            self.create_subscription(TwistStamped, topics.get("twist", "/ap/v1/twist/filtered"), self._on_twist, ap_qos)
             self.create_subscription(PoseStamped, topics["camera_pose"], self._on_camera_pose, 10)
+
+            # IMU subscriptions
             self.create_subscription(Imu, topics["imu"], self._on_imu, 10)
+            self.create_subscription(Imu, "/ap/v1/imu/experimental/data", self._on_imu, ap_qos)
             self.create_subscription(Vector3Stamped, topics["pos_err"],
                                      lambda m: self._set_ctrl("position_error", _vec(m.vector)), 10)
             self.create_subscription(Vector3Stamped, topics["vel_err"],
@@ -125,6 +139,24 @@ if HAS_RCLPY:
                 "angular": {"p": round(av.x, 4), "q": round(av.y, 4), "r": round(av.z, 4)},
             }
             self._last_pose_time = time.time()
+
+        def _on_pose(self, msg: PoseStamped):
+            p = msg.pose.position
+            q = msg.pose.orientation
+            self.latest["pose_wb"] = {
+                "position": {"x": round(p.x, 4), "y": round(p.y, 4), "z": round(p.z, 4)},
+                "orientation": {"qx": round(q.x, 4), "qy": round(q.y, 4),
+                                "qz": round(q.z, 4), "qw": round(q.w, 4)},
+            }
+            self._last_pose_time = time.time()
+
+        def _on_twist(self, msg: TwistStamped):
+            lv = msg.twist.linear
+            av = msg.twist.angular
+            self.latest["twist"] = {
+                "linear": {"vx": round(lv.x, 4), "vy": round(lv.y, 4), "vz": round(lv.z, 4)},
+                "angular": {"p": round(av.x, 4), "q": round(av.y, 4), "r": round(av.z, 4)},
+            }
 
         def _on_camera_pose(self, msg):
             p = msg.pose.position
@@ -190,6 +222,10 @@ def main(argv=None):
                         help="Forward rate cap in Hz (default: 25)")
     parser.add_argument("--topic-odom", default="/drone/vio/odometry",
                         help="nav_msgs/Odometry body odometry topic (T_WB)")
+    parser.add_argument("--topic-pose", default="/ap/v1/pose/filtered",
+                        help="geometry_msgs/PoseStamped body pose topic")
+    parser.add_argument("--topic-twist", default="/ap/v1/twist/filtered",
+                        help="geometry_msgs/TwistStamped body twist topic")
     parser.add_argument("--topic-camera-pose", default="/drone/vio/camera_pose",
                         help="geometry_msgs/PoseStamped camera optical pose topic (T_WC)")
     parser.add_argument("--topic-imu", default="/imu/data",
@@ -211,6 +247,8 @@ def main(argv=None):
 
     topics = {
         "odom": args.topic_odom,
+        "pose": args.topic_pose,
+        "twist": args.topic_twist,
         "camera_pose": args.topic_camera_pose,
         "imu": args.topic_imu,
         "pos_err": args.topic_pos_err,

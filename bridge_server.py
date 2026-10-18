@@ -33,7 +33,12 @@ Integration Contract:
 import http.server
 import socketserver
 import os
+os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
 import sys
+# Ensure pymavlink from ardupilot submodule is discoverable
+for p in ["/home/ravish/ardu_ws/src/ardupilot/modules/mavlink", "/home/ravish/ardu_ws/src/ardupilot/modules/mavlink/pymavlink"]:
+    if os.path.isdir(p) and p not in sys.path:
+        sys.path.insert(0, p)
 import json
 import threading
 import time
@@ -69,7 +74,7 @@ KOMEGA_MATRIX = np.diag(KOMEGA_RATE)
 MAX_VELOCITY = 0.5          # m/s
 POSITION_TOLERANCE = 0.10   # m
 VELOCITY_TOLERANCE = 0.05   # m/s
-STATE_TIMEOUT = 0.2         # s
+STATE_TIMEOUT = 1.5         # s
 
 # Static Camera Extrinsics T_BC (camera_optical_frame to body base_link ENU)
 # Forward-facing monocular camera: +Z optical is +X body, +X optical is -Y body, +Y optical is -Z body
@@ -82,22 +87,140 @@ R_BC = np.array([
 
 # Global Server Configuration & State
 SERVER_STATE = {
-    "mode": "DEMO",             # "DEMO" or "LIVE"
+    "mode": "LIVE",             # "LIVE" by default (truthful telemetry without fake synthetic playback)
     "ros2_connected": False,    # Truthful ROS 2 connection flag
-    "ros2_status_detail": "ROS 2 daemon inactive (running in standalone bridge mode)",
+    "ros2_status_detail": "Awaiting active ROS 2 telemetry from ArduPilot DDS",
     "active_dataset": "orbit",
     "clients_count": 0,
     "frames_broadcast": 0,
     "start_time": time.time(),
-    "target_p": [20.0, 5.0, 20.0],
+    "target_p": [1.0, 0.0, 2.0],
     "target_v": [0.0, 0.0, 0.0],
-    "target_yaw": 2.0,
+    "target_yaw": 0.0,
     "bridge_latency_ms": 0.0,
     "allow_origins": [],
 }
 
 WS_CLIENTS = set()
 WS_LOCK = threading.Lock()
+
+# ==============================================================================
+# MAVLink Vehicle Control Bridge (ArduPilot SITL / Telemetry / Actions)
+# ==============================================================================
+
+class MAVLinkController:
+    """Manages direct vehicle command & control (GUIDED, ARM, DISARM, TAKEOFF, HOLD)."""
+    def __init__(self, target_endpoint="udp:127.0.0.1:14550"):
+        self.endpoint = target_endpoint
+        self.conn = None
+        self.lock = threading.Lock()
+        self.current_mode = "UNKNOWN"
+        self.is_armed = False
+        self._running = True
+        self._hb_thread = None
+
+    def start(self):
+        self._connect()
+        self._hb_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._hb_thread.start()
+
+    def _connect(self):
+        try:
+            from pymavlink import mavutil
+            self.conn = mavutil.mavlink_connection(self.endpoint, timeout=1.0)
+            print(f"[MAVLink] Connected to ArduPilot via {self.endpoint}")
+            self._warned_connect = False
+            return True
+        except Exception as e:
+            if not getattr(self, "_warned_connect", False):
+                print(f"[MAVLink] Waiting for connection at {self.endpoint}: {e}")
+                self._warned_connect = True
+            return False
+
+    def _heartbeat_loop(self):
+        while self._running:
+            time.sleep(1.0)
+            if self.conn is None:
+                self._connect()
+                continue
+            try:
+                msg = self.conn.recv_match(type='HEARTBEAT', blocking=False)
+                if msg is not None:
+                    from pymavlink import mavutil
+                    self.current_mode = getattr(self.conn, 'flightmode', 'UNKNOWN')
+                    self.is_armed = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
+            except Exception:
+                pass
+
+    def set_mode(self, mode_name="GUIDED"):
+        with self.lock:
+            if not self.conn and not self._connect():
+                return False, "MAVLink connection not available"
+            try:
+                from pymavlink import mavutil
+                mode_map = self.conn.mode_mapping()
+                mode_id = mode_map.get(mode_name, 4 if mode_name == "GUIDED" else 0) if mode_map else (4 if mode_name == "GUIDED" else 0)
+                self.conn.mav.set_mode_send(
+                    self.conn.target_system or 1,
+                    mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                    mode_id
+                )
+                self.current_mode = mode_name
+                print(f"[MAVLink] Mode set to {mode_name} (ID: {mode_id})")
+                return True, f"Mode switched to {mode_name}"
+            except Exception as e:
+                print(f"[MAVLink] Error setting mode: {e}")
+                return False, f"Failed to set mode {mode_name}: {e}"
+
+    def arm(self, arm_motors=True):
+        with self.lock:
+            if not self.conn and not self._connect():
+                return False, "MAVLink connection not available"
+            try:
+                from pymavlink import mavutil
+                param1 = 1 if arm_motors else 0
+                self.conn.mav.command_long_send(
+                    self.conn.target_system or 1,
+                    self.conn.target_component or 1,
+                    mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+                    0,
+                    param1, 0, 0, 0, 0, 0, 0
+                )
+                self.is_armed = arm_motors
+                action_str = "ARM" if arm_motors else "DISARM"
+                print(f"[MAVLink] Sent {action_str} motors command")
+                return True, f"{action_str} command sent successfully"
+            except Exception as e:
+                print(f"[MAVLink] Arming command error: {e}")
+                return False, f"Arming error: {e}"
+
+    def takeoff(self, altitude=2.5):
+        with self.lock:
+            if not self.conn and not self._connect():
+                return False, "MAVLink connection not available"
+            try:
+                from pymavlink import mavutil
+                self.conn.mav.command_long_send(
+                    self.conn.target_system or 1,
+                    self.conn.target_component or 1,
+                    mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
+                    0,
+                    0, 0, 0, 0, 0, 0, float(altitude)
+                )
+                print(f"[MAVLink] Sent TAKEOFF command to {altitude}m")
+                return True, f"Takeoff command sent (Alt: {altitude}m)"
+            except Exception as e:
+                print(f"[MAVLink] Takeoff error: {e}")
+                return False, f"Takeoff error: {e}"
+
+    def hold(self):
+        res, msg = self.set_mode("LOITER")
+        if not res:
+            res, msg = self.set_mode("BRAKE")
+        return res, msg
+
+MAVLINK = MAVLinkController("udp:127.0.0.1:14550")
+MAVLINK.start()
 
 # Load Trajectory Datasets
 DATASETS = {}
@@ -519,6 +642,7 @@ def try_init_ros2_live_bridge():
         from geometry_msgs.msg import PoseStamped, TwistStamped, Vector3Stamped
         from sensor_msgs.msg import Imu, Image
         from nav_msgs.msg import Odometry
+        from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
         try:
             from ardupilot_msgs.msg import Status
             has_ap_msg = True
@@ -528,15 +652,22 @@ def try_init_ros2_live_bridge():
         if not rclpy.ok():
             rclpy.init()
 
+        ap_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+
         class DashboardBridgeNode(Node):
             def __init__(self):
                 super().__init__('aerovio_dashboard_bridge')
                 self.pose_sub = self.create_subscription(
-                    PoseStamped, '/ap/v1/pose/filtered', self._on_pose, 10)
+                    PoseStamped, '/ap/v1/pose/filtered', self._on_pose, ap_qos)
                 self.twist_sub = self.create_subscription(
-                    TwistStamped, '/ap/v1/twist/filtered', self._on_twist, 10)
+                    TwistStamped, '/ap/v1/twist/filtered', self._on_twist, ap_qos)
                 self.cmd_sub = self.create_subscription(
-                    TwistStamped, '/ap/v1/cmd_vel', self._on_cmd, 10)
+                    TwistStamped, '/ap/v1/cmd_vel', self._on_cmd, ap_qos)
                 self.pos_err_sub = self.create_subscription(
                     Vector3Stamped, '/drones_controller/position_error', self._on_pos_err, 10)
                 self.vel_err_sub = self.create_subscription(
@@ -555,6 +686,8 @@ def try_init_ros2_live_bridge():
                     Odometry, '/drone/vio/odometry', self._on_odom, 10)
                 self.imu_sub = self.create_subscription(
                     Imu, '/imu/data', self._on_imu, 10)
+                self.ap_imu_sub = self.create_subscription(
+                    Imu, '/ap/v1/imu/experimental/data', self._on_imu, ap_qos)
 
                 self.current_state = {
                     "pose_wb": None,
@@ -652,7 +785,38 @@ def try_init_ros2_live_bridge():
                     "gyro": {"gx": w.x, "gy": w.y, "gz": w.z}
                 }
 
+            def publish_target_pose(self, x, y, z, yaw_deg=0.0):
+                try:
+                    msg = PoseStamped()
+                    msg.header.stamp = self.get_clock().now().to_msg()
+                    msg.header.frame_id = "map"
+                    msg.pose.position.x = float(x)
+                    msg.pose.position.y = float(y)
+                    msg.pose.position.z = float(z)
+                    yaw_rad = math.radians(float(yaw_deg))
+                    msg.pose.orientation.x = 0.0
+                    msg.pose.orientation.y = 0.0
+                    msg.pose.orientation.z = math.sin(yaw_rad / 2.0)
+                    msg.pose.orientation.w = math.cos(yaw_rad / 2.0)
+                    self.target_pub.publish(msg)
+                    print(f"[Bridge] Dispatched /drones_controller/target_pose: [{x}, {y}, {z}] m, yaw: {yaw_deg}°")
+                    return True
+                except Exception as e:
+                    print(f"[Bridge] Error publishing target pose: {e}")
+                    return False
+
+            def publish_zero_cmd_vel(self):
+                try:
+                    msg = TwistStamped()
+                    msg.header.stamp = self.get_clock().now().to_msg()
+                    self.cmd_pub.publish(msg)
+                    return True
+                except Exception as e:
+                    return False
+
         node = DashboardBridgeNode()
+        node.target_pub = node.create_publisher(PoseStamped, '/drones_controller/target_pose', 10)
+        node.cmd_pub = node.create_publisher(TwistStamped, '/ap/v1/cmd_vel', ap_qos)
         LIVE_ROS2_STATE["node"] = node
 
         def spin_ros():
@@ -692,6 +856,13 @@ def _build_live_payload(now):
             "orientation": {"qx": round(float(q_wc[0]), 4), "qy": round(float(q_wc[1]), 4), "qz": round(float(q_wc[2]), 4), "qw": round(float(q_wc[3]), 4)}
         }
 
+    ctrl = dict(node_state.get("controller", {}))
+    if MAVLINK.current_mode != "UNKNOWN":
+        ctrl["flight_state"] = MAVLINK.current_mode
+    else:
+        ctrl.setdefault("flight_state", "LIVE")
+    ctrl["armed"] = MAVLINK.is_armed
+
     return {
         "type": "telemetry",
         "source": "ros2_live",
@@ -702,8 +873,8 @@ def _build_live_payload(now):
             "pose_wb": node_state["pose_wb"],
             "pose_wc": pose_wc,
             "twist": node_state.get("twist") or {"linear": {"vx": 0, "vy": 0, "vz": 0}, "angular": {"p": 0, "q": 0, "r": 0}},
-            "imu": node_state.get("imu") or {"accel": {"ax": 0, "ay": 0, "az": 9.81}},
-            "controller": node_state.get("controller", {})
+            "imu": node_state.get("imu") or {"accel": {"ax": 0, "ay": 0, "az": 9.81}, "gyro": {"gx": 0, "gy": 0, "gz": 0}},
+            "controller": ctrl
         }
     }
 
@@ -877,6 +1048,22 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                         if ds_key in DATASETS:
                             SERVER_STATE["active_dataset"] = ds_key
                             print(f"[Bridge] Switched active dataset to: {ds_key}")
+                    elif msg_type == "action":
+                        action = data.get("action", "").lower()
+                        alt = float(data.get("alt", 2.5))
+                        if action == "guided":
+                            MAVLINK.set_mode("GUIDED")
+                        elif action == "arm":
+                            MAVLINK.arm(True)
+                        elif action == "disarm":
+                            MAVLINK.arm(False)
+                        elif action == "takeoff":
+                            MAVLINK.takeoff(alt)
+                        elif action == "hold":
+                            MAVLINK.hold()
+                            node = LIVE_ROS2_STATE.get("node")
+                            if node:
+                                node.publish_zero_cmd_vel()
                     elif msg_type == "set_target":
                         tp = data.get("target_p")
                         tv = data.get("target_v")
@@ -887,6 +1074,9 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                             SERVER_STATE["target_v"] = [float(tv[0]), float(tv[1]), float(tv[2])]
                         if tyaw is not None:
                             SERVER_STATE["target_yaw"] = float(tyaw)
+                        node = LIVE_ROS2_STATE.get("node")
+                        if node:
+                            node.publish_target_pose(SERVER_STATE["target_p"][0], SERVER_STATE["target_p"][1], SERVER_STATE["target_p"][2], SERVER_STATE["target_yaw"])
                         print(f"[Bridge] Updated setpoint: p_d={SERVER_STATE['target_p']}, yaw_d={SERVER_STATE['target_yaw']}")
                     elif msg_type == "command":
                         cmd_data = data.get("data", {})
@@ -895,6 +1085,9 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                             SERVER_STATE["target_p"] = [float(sp.get("x", 20.0)), float(sp.get("y", 5.0)), float(sp.get("z", 20.0))]
                             if "yaw" in sp:
                                 SERVER_STATE["target_yaw"] = float(sp["yaw"])
+                            node = LIVE_ROS2_STATE.get("node")
+                            if node:
+                                node.publish_target_pose(SERVER_STATE["target_p"][0], SERVER_STATE["target_p"][1], SERVER_STATE["target_p"][2], SERVER_STATE["target_yaw"])
                             print(f"[Bridge] Command target updated to: {SERVER_STATE['target_p']}")
                 except Exception:
                     pass
@@ -907,6 +1100,78 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             print(f"[Bridge] Client disconnected (Remaining: {len(WS_CLIENTS)})")
 
     def do_POST(self):
+        if self.path == "/api/action":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                req = json.loads(body)
+                action = req.get("action", "").lower()
+                alt = float(req.get("alt", 2.5))
+                success = False
+                msg = ""
+                if action == "guided":
+                    success, msg = MAVLINK.set_mode("GUIDED")
+                elif action == "arm":
+                    success, msg = MAVLINK.arm(True)
+                elif action == "disarm":
+                    success, msg = MAVLINK.arm(False)
+                elif action == "takeoff":
+                    success, msg = MAVLINK.takeoff(alt)
+                elif action == "hold":
+                    success, msg = MAVLINK.hold()
+                    node = LIVE_ROS2_STATE.get("node")
+                    if node:
+                        node.publish_zero_cmd_vel()
+                else:
+                    success = False
+                    msg = f"Unknown action: {action}"
+                resp = {
+                    "status": "success" if success else "error",
+                    "action": action,
+                    "message": msg,
+                    "flight_mode": MAVLINK.current_mode,
+                    "armed": MAVLINK.is_armed
+                }
+                self.send_response(200)
+            except Exception as e:
+                resp = {"status": "error", "message": str(e)}
+                self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+            return
+
+        if self.path == "/api/target":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                req = json.loads(body)
+                x = float(req.get("x", 0.0))
+                y = float(req.get("y", 0.0))
+                z = float(req.get("z", 2.0))
+                yaw = float(req.get("yaw", 0.0))
+                SERVER_STATE["target_p"] = [x, y, z]
+                SERVER_STATE["target_yaw"] = yaw
+                ros_pub_ok = False
+                node = LIVE_ROS2_STATE.get("node")
+                if node:
+                    ros_pub_ok = node.publish_target_pose(x, y, z, yaw)
+                resp = {
+                    "status": "success",
+                    "target_p": [x, y, z],
+                    "target_yaw": yaw,
+                    "ros2_published": ros_pub_ok,
+                    "message": f"Target setpoint [{x}, {y}, {z}] m, yaw: {yaw}° dispatched to /drones_controller/target_pose"
+                }
+                self.send_response(200)
+            except Exception as e:
+                resp = {"status": "error", "message": str(e)}
+                self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+            return
+
         if self.path == "/ingest":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')
@@ -953,6 +1218,8 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                         for dead in dead_socks:
                             WS_CLIENTS.discard(dead)
                 SERVER_STATE["frames_broadcast"] += 1
+                LIVE_ROS2_STATE["last_msg_time"] = time.time()
+                SERVER_STATE["ros2_connected"] = True
 
                 # If the ingester is the live bridge adapter, also feed the LIVE path
                 node = LIVE_ROS2_STATE.get("node")
@@ -1052,7 +1319,32 @@ def telemetry_broadcaster():
             SERVER_STATE["ros2_connected"] = is_fresh
 
             if not is_fresh or LIVE_ROS2_STATE["node"] is None:
-                # Do not emit synthetic data in LIVE mode
+                # Do not emit synthetic data in LIVE mode; emit periodic waiting status instead
+                if now - getattr(telemetry_broadcaster, "_last_waiting", 0) > 1.0:
+                    telemetry_broadcaster._last_waiting = now
+                    waiting_payload = {
+                        "type": "telemetry",
+                        "source": "ros2_live",
+                        "bridge_connected": True,
+                        "ros2_connected": False,
+                        "timestamp": now,
+                        "data": {
+                            "pose_wb": None,
+                            "pose_wc": None,
+                            "twist": None,
+                            "imu": None,
+                            "controller": {
+                                "flight_state": MAVLINK.current_mode if MAVLINK.current_mode != "UNKNOWN" else "AWAITING TELEMETRY",
+                                "armed": MAVLINK.is_armed
+                            }
+                        }
+                    }
+                    frame_bytes = encode_ws_frame(json.dumps(waiting_payload))
+                    for sock in snapshot:
+                        try:
+                            sock.sendall(frame_bytes)
+                        except Exception:
+                            pass
                 continue
 
             payload = _build_live_payload(now)
@@ -1150,7 +1442,7 @@ def telemetry_broadcaster():
         SERVER_STATE["bridge_latency_ms"] = dt * 1000.0
 
 
-def run_server(port=8000, mode="DEMO"):
+def run_server(host="0.0.0.0", port=8000, mode="LIVE"):
     SERVER_STATE["mode"] = mode.upper()
 
     if SERVER_STATE["mode"] == "LIVE":
@@ -1167,11 +1459,11 @@ def run_server(port=8000, mode="DEMO"):
     broadcaster_thread = threading.Thread(target=telemetry_broadcaster, daemon=True)
     broadcaster_thread.start()
 
-    with socketserver.ThreadingTCPServer(("", port), AeroVIOHandler) as httpd:
+    with socketserver.ThreadingTCPServer((host, port), AeroVIOHandler) as httpd:
         print("================================================================")
         print("AeroVIO Ground Station Bridge Running")
-        print(f"Web Dashboard:    http://localhost:{port}")
-        print(f"WebSocket Bridge: ws://localhost:{port}/ws")
+        print(f"Web Dashboard:    http://{host if host != '0.0.0.0' else 'localhost'}:{port}")
+        print(f"WebSocket Bridge: ws://{host if host != '0.0.0.0' else 'localhost'}:{port}/ws")
         print(f"Operating Mode:   {SERVER_STATE['mode']}")
         print(f"ROS 2 Connected:  {SERVER_STATE['ros2_connected']} ({SERVER_STATE['ros2_status_detail']})")
         print(f"Target Setpoint:  p_d={SERVER_STATE['target_p']}  v_d={SERVER_STATE['target_v']}  yaw_d={SERVER_STATE['target_yaw']}")
@@ -1188,8 +1480,9 @@ def run_server(port=8000, mode="DEMO"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AeroVIO Ground Station Bridge & Web Server")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address to bind to (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)), help="Port to listen on (default: 8000)")
-    parser.add_argument("--mode", choices=["demo", "live"], default="demo", help="Telemetry mode: demo (analytical replay) or live (genuine ROS 2 integration)")
+    parser.add_argument("--mode", choices=["demo", "live"], default="live", help="Telemetry mode: live (genuine ROS 2 integration) or demo (analytical replay)")
     parser.add_argument("--target", type=str, default=None, help="Target position p_d as x,y,z (e.g. 20,5,20)")
     parser.add_argument("--target-yaw", type=float, default=2.0, help="Target yaw heading in radians (default: 2.0)")
     parser.add_argument("--allow-origin", type=str, action="append", dest="allow_origin", default=None, help="Allowed Origin header (repeatable)")
@@ -1208,4 +1501,4 @@ if __name__ == "__main__":
     if args.allow_origin:
         SERVER_STATE["allow_origins"] = args.allow_origin
 
-    run_server(port=args.port, mode=args.mode)
+    run_server(host=args.host, port=args.port, mode=args.mode)

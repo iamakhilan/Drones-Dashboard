@@ -91,6 +91,32 @@
         this._loadLandmarks();
         this._startRenderLoop();
 
+        // Subscribe to real-time telemetry updates
+        if (window.telemetry && typeof window.telemetry.onTelemetry === 'function') {
+          window.telemetry.onTelemetry((state) => {
+            if (!state || !state.position || state.position.x === null) {
+              if (this.droneGroup) this.droneGroup.visible = false;
+              if (this.trajectoryLine) this.trajectoryLine.visible = false;
+              return;
+            }
+            if (this.droneGroup) this.droneGroup.visible = true;
+            if (this.trajectoryLine) this.trajectoryLine.visible = this.showTrajectory;
+            const p = state.position;
+            const o = state.orientation;
+            const v = state.velocity;
+            this.updatePose(
+              p.x, p.y, p.z,
+              o.qw !== null ? o.qw : 1.0,
+              o.qx !== null ? o.qx : 0.0,
+              o.qy !== null ? o.qy : 0.0,
+              o.qz !== null ? o.qz : 0.0,
+              v.vx !== null ? v.vx : 0.0,
+              v.vy !== null ? v.vy : 0.0,
+              v.vz !== null ? v.vz : 0.0
+            );
+          });
+        }
+
         // Listen for container resize
         window.addEventListener('resize', () => this._onResize());
         if (window.ResizeObserver) {
@@ -336,13 +362,22 @@
     }
 
     _loadLandmarks() {
-      // 1. Check if real data is available in window.REAL_DRONE_DATA
+      // In LIVE mode, start with empty landmarks (awaiting live pointcloud)
+      if (window.APP_CONFIG && window.APP_CONFIG.mode === 'LIVE') {
+        this.landmarks = [];
+        const sideCount = document.getElementById('sidebar-pointcount');
+        if (sideCount) sideCount.textContent = '0 pts';
+        const hudPts = document.getElementById('hud-map-pts');
+        if (hudPts) hudPts.textContent = '0';
+        return;
+      }
+
+      // In DEMO mode, load dataset PCD
       if (window.REAL_DRONE_DATA && Array.isArray(window.REAL_DRONE_DATA.pcd_points)) {
         this.landmarks = window.REAL_DRONE_DATA.pcd_points;
       }
 
       if (this.landmarks.length === 0) {
-        // Fallback: fetch from /api/pointcloud
         fetch('/api/pointcloud')
           .then((res) => res.json())
           .then((pts) => {

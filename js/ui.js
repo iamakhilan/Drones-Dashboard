@@ -114,6 +114,14 @@
         window.telemetry.onHealth((health) => this.onHealthUpdate(health));
         window.telemetry.onStateChange((state) => this.onStateChange(state));
       }
+
+      // In LIVE mode, hide playback controls (scrubber and dataset selector)
+      if (window.APP_CONFIG && window.APP_CONFIG.mode === 'LIVE') {
+        const scrub = document.getElementById('scrubber-bar');
+        if (scrub) scrub.classList.add('hidden');
+        const dsBar = document.getElementById('dataset-selector-bar');
+        if (dsBar) dsBar.classList.add('hidden');
+      }
     }
 
     _bindElements() {
@@ -571,13 +579,10 @@
         this.elements.gaugePosZ.textContent = p.z !== null ? p.z.toFixed(2) : '--';
       }
       if (this.elements.gaugePosTotal) {
-        this.elements.gaugePosTotal.textContent = `TOTAL: ${p.total_dist ? p.total_dist.toFixed(1) : '42.8'} m`;
-        // also support kpi-displacement raw number
-        var kpiDisp = document.getElementById('kpi-displacement');
-        if (kpiDisp && p.total_dist) kpiDisp.textContent = p.total_dist.toFixed(1);
+        this.elements.gaugePosTotal.textContent = `TOTAL: ${p.total_dist ? p.total_dist.toFixed(1) : (p.x !== null ? '0.0' : '--')} m`;
       }
-      if (this.elements.gaugeAltBar && p.z !== null) {
-        this.elements.gaugeAltBar.style.width = `${Math.min(100, Math.max(5, (p.z / 25.0) * 100))}%`;
+      if (this.elements.gaugeAltBar) {
+        this.elements.gaugeAltBar.style.width = p.z !== null ? `${Math.min(100, Math.max(5, (p.z / 25.0) * 100))}%` : '0%';
       }
 
       // Velocity
@@ -591,10 +596,10 @@
         this.elements.gaugeVelVz.textContent = v.vz !== null ? v.vz.toFixed(2) : '--';
       }
       if (this.elements.gaugeVelTotal) {
-        this.elements.gaugeVelTotal.textContent = v.norm !== null ? `${v.norm.toFixed(2)} m/s` : '0.46 m/s';
+        this.elements.gaugeVelTotal.textContent = v.norm !== null ? `${v.norm.toFixed(2)} m/s` : '-- m/s';
       }
-      if (this.elements.gaugeVelBar && v.norm !== null) {
-        this.elements.gaugeVelBar.style.width = `${Math.min(100, (v.norm / 5.0) * 100)}%`;
+      if (this.elements.gaugeVelBar) {
+        this.elements.gaugeVelBar.style.width = v.norm !== null ? `${Math.min(100, (v.norm / 5.0) * 100)}%` : '0%';
       }
 
       // Attitude
@@ -607,8 +612,48 @@
       if (this.elements.gaugeAttYaw) {
         this.elements.gaugeAttYaw.textContent = o.yaw !== null ? `${(o.yaw >= 0 ? '+' : '') + o.yaw.toFixed(1)}°` : '--';
       }
-      if (this.elements.gaugeAttQuat && o.qw !== null) {
-        this.elements.gaugeAttQuat.textContent = `QUAT: [${o.qw.toFixed(3)}, ${o.qx.toFixed(3)}, ${o.qy.toFixed(3)}, ${o.qz.toFixed(3)}]`;
+      if (this.elements.gaugeAttQuat) {
+        this.elements.gaugeAttQuat.textContent = o.qw !== null ? `QUAT: [${o.qw.toFixed(3)}, ${o.qx.toFixed(3)}, ${o.qy.toFixed(3)}, ${o.qz.toFixed(3)}]` : 'QUAT: [--, --, --, --]';
+      }
+
+      // Matrix Cards Spans
+      const elPosWb = document.getElementById('tel-pos-wb');
+      if (elPosWb) {
+        elPosWb.textContent = p.x !== null ? `[${p.x >= 0 ? '+' : ''}${p.x.toFixed(2)}, ${p.y >= 0 ? '+' : ''}${p.y.toFixed(2)}, ${p.z >= 0 ? '+' : ''}${p.z.toFixed(2)}] m` : '[--, --, --] m';
+      }
+      const elPosWc = document.getElementById('tel-pos-wc');
+      if (elPosWc) {
+        const c = state.camera_pose;
+        elPosWc.textContent = (c && c.x !== null) ? `[${c.x >= 0 ? '+' : ''}${c.x.toFixed(2)}, ${c.y >= 0 ? '+' : ''}${c.y.toFixed(2)}, ${c.z >= 0 ? '+' : ''}${c.z.toFixed(2)}] m` : '[--, --, --] m';
+      }
+      const elVel = document.getElementById('tel-vel');
+      if (elVel) {
+        elVel.textContent = v.vx !== null ? `[${v.vx >= 0 ? '+' : ''}${v.vx.toFixed(2)}, ${v.vy >= 0 ? '+' : ''}${v.vy.toFixed(2)}, ${v.vz >= 0 ? '+' : ''}${v.vz.toFixed(2)}] m/s` : '[--, --, --] m/s';
+      }
+      const elSpeed = document.getElementById('tel-speed');
+      if (elSpeed) {
+        elSpeed.textContent = v.norm !== null ? `${v.norm.toFixed(2)} m/s (${(v.norm * 3.6).toFixed(1)} km/h)` : '-- m/s';
+      }
+      const elAccel = document.getElementById('tel-accel');
+      if (elAccel) {
+        const a = state.acceleration;
+        elAccel.textContent = (a && a.ax !== null) ? `[${a.ax >= 0 ? '+' : ''}${a.ax.toFixed(2)}, ${a.ay >= 0 ? '+' : ''}${a.ay.toFixed(2)}, ${a.az >= 0 ? '+' : ''}${a.az.toFixed(2)}] m/s²` : '[--, --, --] m/s²';
+      }
+      const elEuler = document.getElementById('tel-euler');
+      if (elEuler) {
+        elEuler.textContent = o.roll !== null ? `R: ${o.roll >= 0 ? '+' : ''}${o.roll.toFixed(1)}° | P: ${o.pitch >= 0 ? '+' : ''}${o.pitch.toFixed(1)}° | Y: ${o.yaw >= 0 ? '+' : ''}${o.yaw.toFixed(1)}°` : 'R: --° | P: --° | Y: --°';
+      }
+      const elRates = document.getElementById('tel-rates');
+      if (elRates) {
+        elRates.textContent = o.roll_rate !== null ? `[${o.roll_rate.toFixed(2)}, ${o.pitch_rate.toFixed(2)}, ${o.yaw_rate.toFixed(2)}] rad/s` : '[--, --, --] rad/s';
+      }
+      const elQuat = document.getElementById('tel-quat');
+      if (elQuat) {
+        elQuat.textContent = o.qw !== null ? `[${o.qw.toFixed(3)}, ${o.qx.toFixed(3)}, ${o.qy.toFixed(3)}, ${o.qz.toFixed(3)}]` : '[--, --, --, --]';
+      }
+      const elDisp = document.getElementById('kpi-displacement');
+      if (elDisp) {
+        elDisp.textContent = p.total_dist ? p.total_dist.toFixed(1) : (p.x !== null ? '0.0' : '--');
       }
 
       // Top bar ROS badge + endpoint badge
@@ -623,19 +668,25 @@
           this.elements.rosConnText.textContent = 'ROS 2 DEGRADED';
           if (this.elements.rosConnDot) this.elements.rosConnDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
         } else {
-          this.elements.rosConnText.textContent = 'ROS 2 DISCONNECTED';
-          if (this.elements.rosConnDot) this.elements.rosConnDot.className = 'w-2 h-2 rounded-full bg-red-500';
+          this.elements.rosConnText.textContent = 'AWAITING LIVE TELEMETRY';
+          if (this.elements.rosConnDot) this.elements.rosConnDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
         }
       }
       // sync top-endpoint-badge
       var epBadge = document.getElementById('top-endpoint-badge');
       if (epBadge && window.APP_CONFIG) epBadge.textContent = window.APP_CONFIG.websocketUrl || '';
 
-      // 3D Map drone text
-      if (this.elements.mapDronePosText && p.x !== null) {
-        this.elements.mapDronePosText.textContent = `XYZ: [${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]`;
-        var hudPw = document.getElementById('hud-pw');
-        if (hudPw) hudPw.innerHTML = `P_WB: [ <span class="text-white">x: ${p.x.toFixed(2)}</span>, <span class="text-white">y: ${p.y.toFixed(2)}</span>, <span class="text-emerald-400">z: ${p.z.toFixed(2)}</span> ] m`;
+      // 3D Map drone text & HUD
+      if (this.elements.mapDronePosText) {
+        this.elements.mapDronePosText.textContent = p.x !== null ? `XYZ: [${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]` : 'XYZ: [--, --, --]';
+      }
+      var hudPw = document.getElementById('hud-pw');
+      if (hudPw) {
+        hudPw.innerHTML = p.x !== null ? `P_WB: [ <span class="text-white">x: ${p.x.toFixed(2)}</span>, <span class="text-white">y: ${p.y.toFixed(2)}</span>, <span class="text-emerald-400">z: ${p.z.toFixed(2)}</span> ] m` : `P_WB: [ <span class="text-white">x: --</span>, <span class="text-white">y: --</span>, <span class="text-stone-500">z: --</span> ] m`;
+      }
+      var hudVw = document.getElementById('hud-vw');
+      if (hudVw) {
+        hudVw.innerHTML = v.vx !== null ? `V_WB: [ <span class="text-white">vx: ${v.vx.toFixed(2)}</span>, <span class="text-white">vy: ${v.vy.toFixed(2)}</span>, <span class="text-emerald-400">vz: ${v.vz.toFixed(2)}</span> ] m/s` : `V_WB: [ <span class="text-white">vx: --</span>, <span class="text-white">vy: --</span>, <span class="text-stone-500">vz: --</span> ] m/s`;
       }
       // update empty states visibility
       this._renderEmptyStates();

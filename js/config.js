@@ -13,8 +13,15 @@
 
   if (!window.APP_CONFIG) window.APP_CONFIG = {};
 
+  var defaultHost = (typeof window !== 'undefined' && window.location && window.location.host) ? window.location.host : 'localhost:8000';
+  var defaultWs = (typeof window !== 'undefined' && window.location && window.location.protocol === 'https:' ? 'wss://' : 'ws://') + defaultHost + '/ws';
+  if (storedUrl && storedUrl.indexOf('localhost') !== -1 && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    storedUrl = defaultWs;
+  }
+
   var C = window.APP_CONFIG;
-  C.websocketUrl = storedUrl || C.websocketUrl || 'ws://localhost:8000/ws';
+  C.mode = 'LIVE'; // Default strictly to LIVE truthful mode
+  C.websocketUrl = storedUrl || defaultWs;
   C.rateHz = 50.0;
   C.massKg = 1.5;
   C.gravity = 9.81;

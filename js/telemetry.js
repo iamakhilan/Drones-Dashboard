@@ -93,7 +93,7 @@
   class TelemetryEngine {
     constructor() {
       // Current mode: 'LIVE' or 'DEMO'
-      this.mode = 'DEMO'; // Default to DEMO mode for immediate inspection
+      this.mode = 'LIVE'; // Default strictly to LIVE mode (truthful data, empty when awaiting telemetry)
       
       // Normalized telemetry state matching drones-controller specifications
       this.state = {
@@ -106,8 +106,8 @@
           ros: false,
           websocket: false,
           latency_ms: 0,
-          state: 'DISCONNECTED', // 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'DEGRADED'
-          mode: 'DEMO',
+          state: 'AWAITING LIVE TELEMETRY',
+          mode: 'LIVE',
           uptime_s: 0,
           packet_rate_hz: 0
         },
@@ -272,6 +272,8 @@
       this._initWatchdog();
       if (this.mode === 'DEMO') {
         this.startDemoMode();
+      } else {
+        this.setDisconnectedState();
       }
     }
 
@@ -763,9 +765,18 @@
       _syncHeaderBadges('DISCONNECTED');
       this.state.connection.ros = false;
       this.state.connection.websocket = false;
-      this.state.connection.state = 'DISCONNECTED';
+      this.state.connection.state = 'AWAITING LIVE TELEMETRY';
       this.state.connection.latency_ms = null;
       
+      this.state.position = { x: null, y: null, z: null, total_dist: 0 };
+      this.state.velocity = { vx: null, vy: null, vz: null, norm: null };
+      this.state.acceleration = { ax: null, ay: null, az: null, norm: null };
+      this.state.orientation = { roll: null, pitch: null, yaw: null, roll_rate: null, pitch_rate: null, yaw_rate: null, qw: null, qx: null, qy: null, qz: null };
+      this.state.camera_pose = { x: null, y: null, z: null, roll: null, pitch: null, yaw: null };
+      this.state.trajectories.body = [];
+      this.state.trajectories.camera = [];
+      this.state.landmarks = [];
+
       this.state.health = {
         camera: 'DISCONNECTED',
         imu: 'DISCONNECTED',
@@ -774,13 +785,14 @@
         websocket: 'DISCONNECTED'
       };
 
-      this.state.vio.status = 'NOT CONNECTED';
-      this.state.controller.status = 'NOT CONNECTED';
-      this.state.controller.flight_state = 'UNKNOWN';
+      this.state.vio.status = 'AWAITING VIO';
+      this.state.controller.status = 'AWAITING TELEMETRY';
+      this.state.controller.flight_state = 'AWAITING TELEMETRY';
       this.state.controller.armed = false;
 
       this._emit('stateChange', this.state);
       this._emit('health', this.state.health);
+      this._emit('telemetry', this.state);
     }
 
     _initWatchdog() {
