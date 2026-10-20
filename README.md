@@ -108,6 +108,7 @@ Monocular Visual-Inertial Odometry · MSCKF State Estimation · 50 Hz Geometric 
 <td width="50%" valign="top">
 
 #### 🎮 Flight Operations & Navigation
+- **8BitDo Ultimate 2C & Gamepad Teleop:** Direct RC Mode 2 joystick control from any browser (Y: Guided, A: Arm, X: Takeoff 5m, B: Brake/Hover, LB/RB: Speed switch)
 - **MAVLink Flight Commands:** GUIDED mode, Arm, Disarm, Takeoff, Hold
 - **Live Target Dispatch:** Input $(X, Y, Z, \text{Yaw})$ coordinates and push live setpoints
 - **Airborne Handoff Integration:** Pauses velocity override on the ground to allow clean MAVLink vertical ascent before $SO(3)$ takes over

@@ -22,6 +22,7 @@
   <script src="js/vio_health.js"></script>
   <script src="js/compare.js"></script>
   <script src="js/snapshot.js"></script>
+  <script src="js/gamepad.js?v=4.0"></script>
 </head>
 <body class="min-h-screen flex flex-col font-sans selection:bg-brand-100 selection:text-brand-700">
   <header class="bg-[#1A1A1A] text-white min-h-14 px-3 sm:px-4 flex flex-wrap items-center gap-2 sm:gap-3 justify-between border-b border-black/10 shrink-0 sticky top-0 z-50 py-2">
@@ -283,6 +284,91 @@
             </div>
           </div>
         </div>
+
+        <!-- 3. Gamepad Subpanel: 8BitDo Ultimate 2C / RC Mode 2 Teleoperation -->
+        <div class="mt-4 bg-stone-50 rounded-xl p-4 border border-stone-200 shadow-sm">
+          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-sm">🎮</span>
+              <span class="text-xs font-semibold text-stone-800 uppercase tracking-wider font-mono">8BitDo Ultimate 2C / Gamepad Teleop (RC Mode 2)</span>
+              <span id="gp-status-badge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-stone-100 text-stone-500 border border-stone-200">DISCONNECTED</span>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] font-mono">
+              <span class="text-stone-500">Device: <span id="gp-device-name" class="text-stone-800 font-semibold">Connect 8BitDo &amp; press any button</span></span>
+              <span class="text-stone-400">|</span>
+              <span class="text-stone-500">Speed: <span id="gp-speed-mode" class="text-brand-600 font-bold">NORMAL (1.0 m/s)</span> <span class="text-[10px] text-stone-400 font-sans">(LB=0.5, RB=2.0)</span></span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-1 font-mono text-xs">
+            <!-- Button Y -->
+            <div id="gp-btn-y" class="bg-white p-2.5 rounded-lg border border-stone-200 flex items-center justify-between transition shadow-sm">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs border border-amber-300">Y</span>
+                <span class="font-sans font-semibold text-stone-700 text-[11px]">Mode GUIDED</span>
+              </div>
+              <span class="text-[10px] text-stone-400">MAVLink</span>
+            </div>
+            <!-- Button A -->
+            <div id="gp-btn-a" class="bg-white p-2.5 rounded-lg border border-stone-200 flex items-center justify-between transition shadow-sm">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs border border-emerald-300">A</span>
+                <span class="font-sans font-semibold text-stone-700 text-[11px]">ARM Motors</span>
+              </div>
+              <span class="text-[10px] text-emerald-600 font-bold">Throttle</span>
+            </div>
+            <!-- Button X -->
+            <div id="gp-btn-x" class="bg-white p-2.5 rounded-lg border border-stone-200 flex items-center justify-between transition shadow-sm">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-sky-100 text-sky-800 font-bold flex items-center justify-center text-xs border border-sky-300">X</span>
+                <span class="font-sans font-semibold text-stone-700 text-[11px]">TAKEOFF (5m)</span>
+              </div>
+              <span class="text-[10px] text-sky-600 font-bold">5.0m</span>
+            </div>
+            <!-- Button B -->
+            <div id="gp-btn-b" class="bg-white p-2.5 rounded-lg border border-stone-200 flex items-center justify-between transition shadow-sm">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-rose-100 text-rose-800 font-bold flex items-center justify-center text-xs border border-rose-300">B</span>
+                <span class="font-sans font-semibold text-stone-700 text-[11px]">BRAKE / Hover</span>
+              </div>
+              <span class="text-[10px] text-rose-600 font-bold">Hold</span>
+            </div>
+          </div>
+
+          <!-- Sticks live display & Axis Diagnostics -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-stone-200 text-[11px] font-mono">
+            <div class="bg-white px-3 py-1.5 rounded border border-stone-200 flex items-center justify-between">
+              <span class="text-stone-500 font-sans">🕹️ Left Stick (Throttle &amp; Yaw):</span>
+              <span id="gp-stick-left-val" class="text-stone-700 font-bold">Thr: 0.00 | Yaw: 0.00</span>
+            </div>
+            <div class="bg-white px-3 py-1.5 rounded border border-stone-200 flex items-center justify-between">
+              <span class="text-stone-500 font-sans">🕹️ Right Stick (Pitch &amp; Roll):</span>
+              <span id="gp-stick-right-val" class="text-stone-700 font-bold">Vx: 0.00 | Vy: 0.00</span>
+            </div>
+          </div>
+
+          <!-- Axis Mapping Diagnostics & Profile Override -->
+          <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-stone-100 text-[10px] font-mono flex-wrap gap-2">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-stone-500 font-sans font-semibold">Right Stick Mapping:</span>
+              <select id="gp-axis-mode" onchange="window.AeroVIOGamepad.setAxisMode(this.value)" class="bg-white border border-stone-300 rounded px-1.5 py-0.5 text-[10px] text-stone-700 font-mono font-semibold">
+                <option value="auto" selected>Auto-Detect (Adaptive Hybrid) [Recommended]</option>
+                <option value="pair_2_5">Axes 2 &amp; 5 (Roll=2, Pitch=5 - 8BitDo Linux BT)</option>
+                <option value="pair_2_3">Axes 2 &amp; 3 (Roll=2, Pitch=3 - Standard W3C Gamepad)</option>
+                <option value="pair_3_4">Axes 3 &amp; 4 (Roll=3, Pitch=4 - Xbox 360 / xpad Dongle)</option>
+              </select>
+              <button type="button" onclick="window.AeroVIOGamepad.setAxisMode('auto'); document.getElementById('gp-axis-mode').value='auto';" class="px-2 py-0.5 rounded bg-brand-100 hover:bg-brand-200 text-brand-800 border border-brand-300 font-mono text-[10px] font-bold" title="Auto-Detect Right Stick Axes">Auto</button>
+              <button type="button" onclick="window.AeroVIOGamepad.setAxisMode('pair_2_5'); document.getElementById('gp-axis-mode').value='pair_2_5';" class="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 font-mono text-[10px] font-bold" title="Set to 8BitDo Linux BT Axes 2 & 5">2&amp;5 (BT Linux)</button>
+              <button type="button" onclick="window.AeroVIOGamepad.setAxisMode('pair_2_3'); document.getElementById('gp-axis-mode').value='pair_2_3';" class="px-2 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 font-mono text-[10px] font-bold" title="Set to Standard Axes 2 & 3">2&amp;3</button>
+              <button type="button" onclick="window.AeroVIOGamepad.setAxisMode('pair_3_4'); document.getElementById('gp-axis-mode').value='pair_3_4';" class="px-2 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 font-mono text-[10px] font-bold" title="Set to Xbox / Dongle Axes 3 & 4">3&amp;4 (Xbox)</button>
+              <span id="gp-pair-badge" class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">Right Stick: Axes 2 &amp; 5</span>
+            </div>
+            <div class="flex items-center gap-2 text-stone-500">
+              <span>Live:</span>
+              <span id="gp-axes-monitor" class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 text-stone-700">A0:+0.00 A1:+0.00 A2:+0.00 A3:+0.00 A4:+0.00 A5:+0.00</span>
+            </div>
+          </div>
+        </div>
       </section>
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 scroll-mt-14" id="overview">
         <div>
@@ -349,7 +435,7 @@
                 <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                 Monocular Optical Feed
               </h2>
-              <span class="text-[11px] font-mono text-stone-500">/camera/image_raw</span>
+              <span class="text-[11px] font-mono text-stone-500">/camera/image</span>
             </div>
             <div class="flex items-center gap-1.5 flex-wrap">
               <span id="cam-status-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-800/80"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> DEMO SNAPSHOT</span>
@@ -370,7 +456,7 @@
             <div id="camera-placeholder" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-stone-950/95 text-stone-300 z-10 space-y-2">
               <svg class="w-10 h-10 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
               <div class="text-sm font-bold text-white">No Live Camera Stream Detected</div>
-              <p class="text-xs text-stone-400 max-w-sm">Topic <span class="font-mono text-cyan-400">/camera/image_raw</span> (mono8) is inactive. In LIVE mode, frames require an active ROS 2 publisher or image bridge.</p>
+              <p class="text-xs text-stone-400 max-w-sm">Topic <span class="font-mono text-cyan-400">/camera/image</span> is waiting. In LIVE mode, frames stream from Gazebo Iris Gimbal camera in real-time.</p>
               <span class="text-[10px] font-mono text-stone-500 bg-stone-900 px-2 py-1 rounded border border-stone-800">Switch to DEMO to view calibrated reference frame</span>
             </div>
 
@@ -400,8 +486,30 @@
               <button id="btn-toggle-reticle" onclick="toggleReticleOverlay()" class="min-h-[38px] px-3 py-1.5 bg-stone-900 text-white font-medium rounded-lg border border-stone-800 transition">Calibrated Reticle</button>
               <button id="btn-toggle-hud" onclick="toggleCameraHud()" class="min-h-[38px] px-3 py-1.5 bg-stone-900 text-white font-medium rounded-lg border border-stone-800 transition">Camera HUD</button>
               <button id="btn-toggle-fit" onclick="toggleCameraFitMode()" class="min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition">Fit: 1:1 Aspect</button>
+              <button id="btn-toggle-mjpeg" onclick="toggleMjpegStream()" class="min-h-[38px] px-3 py-1.5 bg-white hover:bg-stone-50 text-stone-700 font-medium rounded-lg border border-stone-200 transition" title="Toggle Direct High-Performance MJPEG Stream">MJPEG Stream</button>
             </div>
-            <span class="text-stone-500 font-mono text-[11px]">Subscribed: /camera/image_raw</span>
+            <span class="text-stone-500 font-mono text-[11px]">Subscribed: /camera/image &amp; /camera/image_raw</span>
+          </div>
+
+          <!-- Camera Gimbal Pan & Tilt Control Bar -->
+          <div class="mt-3 p-2.5 bg-stone-50 rounded-xl border border-stone-200/90 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-stone-700 font-sans font-bold flex items-center gap-1">
+                <span>📹</span> Gimbal Angle:
+              </span>
+              <button onclick="window.triggerGimbalAction('ground')" class="px-2.5 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-semibold text-brand-700 shadow-sm" title="Pitch down to -45° to view runway and ground">Ground (-45°)</button>
+              <button onclick="window.triggerGimbalAction('horizon')" class="px-2.5 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-semibold text-stone-700 shadow-sm" title="Pitch to 0° horizon">Horizon (0°)</button>
+              <button onclick="window.triggerGimbalAction('nadir')" class="px-2.5 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-semibold text-stone-700 shadow-sm" title="Pitch straight down -90°">Nadir (-90°)</button>
+            </div>
+            <div class="flex items-center gap-1 flex-wrap">
+              <span class="text-stone-500 font-sans text-[11px] mr-1">Pan / Tilt:</span>
+              <button onclick="window.triggerGimbalAction('pan_left')" class="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-bold text-stone-800" title="Pan Left 15° (D-Pad Left)">⮜ Left</button>
+              <button onclick="window.triggerGimbalAction('center')" class="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-semibold text-stone-700" title="Center Pan">Center</button>
+              <button onclick="window.triggerGimbalAction('pan_right')" class="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-bold text-stone-800" title="Pan Right 15° (D-Pad Right)">Right ⮞</button>
+              <span class="text-stone-300 mx-1">|</span>
+              <button onclick="window.triggerGimbalAction('tilt_up')" class="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-bold text-stone-800" title="Tilt Up 10° (D-Pad Up)">▲ Up</button>
+              <button onclick="window.triggerGimbalAction('tilt_down')" class="px-2 py-1 bg-white hover:bg-stone-100 border border-stone-300 rounded font-bold text-stone-800" title="Tilt Down 10° (D-Pad Down)">▼ Down</button>
+            </div>
           </div>
         </div>
         <!-- 3D Spatial Map & Trajectories -->
