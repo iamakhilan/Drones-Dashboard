@@ -51,7 +51,28 @@ import pathlib
 import ipaddress
 import numpy as np
 
+try:
+    import cv2
+    HAS_CV2 = True
+except ImportError:
+    HAS_CV2 = False
+
+try:
+    from cv_bridge import CvBridge
+    HAS_CV_BRIDGE = True
+except ImportError:
+    HAS_CV_BRIDGE = False
+
 DIRECTORY = pathlib.Path(__file__).parent.resolve()
+
+# Camera Frame Cache for MJPEG stream and WebSocket broadcasting
+LATEST_CAMERA_FRAME = {
+    "jpeg": None,
+    "timestamp": 0.0,
+    "width": 640,
+    "height": 480
+}
+LATEST_FRAME_LOCK = threading.Lock()
 
 # Physical vehicle & controller parameters from reference repository config files
 # config/vehicle.yaml
@@ -90,6 +111,8 @@ SERVER_STATE = {
     "mode": "LIVE",             # "LIVE" by default (truthful telemetry without fake synthetic playback)
     "ros2_connected": False,    # Truthful ROS 2 connection flag
     "ros2_status_detail": "Awaiting active ROS 2 telemetry from ArduPilot DDS",
+    "camera_connected": False,
+    "camera_fps": 0.0,
     "active_dataset": "orbit",
     "clients_count": 0,
     "frames_broadcast": 0,
@@ -109,13 +132,16 @@ WS_LOCK = threading.Lock()
 # ==============================================================================
 
 class MAVLinkController:
-    """Manages direct vehicle command & control (GUIDED, ARM, DISARM, TAKEOFF, HOLD)."""
+    """Manages direct vehicle command & control (GUIDED, ARM, DISARM, TAKEOFF, HOLD, GIMBAL)."""
     def __init__(self, target_endpoint="udp:127.0.0.1:14550"):
         self.endpoint = target_endpoint
         self.conn = None
         self.lock = threading.Lock()
         self.current_mode = "UNKNOWN"
         self.is_armed = False
+        self.gimbal_pitch = -45.0   # Default: optimal downward ground-viewing angle
+        self.gimbal_yaw = 0.0      # Default: centered forward
+        self.gimbal_roll = 0.0     # Default: level
         self._running = True
         self._hb_thread = None
 
@@ -137,20 +163,87 @@ class MAVLinkController:
                 self._warned_connect = True
             return False
 
+    def _send_gimbal_rc_override(self):
+        """Continuously asserts RC channel overrides for Gimbal roll, pitch, yaw.
+        SDF / ArduPilot mapping:
+          - Ch 6 (Roll): 1500 = 0° level
+          - Ch 7 (Pitch): 1700 = 0° horizon, 1450 = -45° ground view, 1200 = -90° nadir
+          - Ch 8 (Yaw): 1500 = 0° center, 1300 = left (-45°), 1700 = right (+45°)
+        """
+        if not self.conn:
+            return
+        try:
+            pitch_pwm = int(round(1700 + self.gimbal_pitch * 5.556))
+            pitch_pwm = max(1150, min(1850, pitch_pwm))
+            yaw_pwm = int(round(1500 + self.gimbal_yaw * 4.444))
+            yaw_pwm = max(1150, min(1850, yaw_pwm))
+            roll_pwm = int(round(1500 + self.gimbal_roll * 4.444))
+            roll_pwm = max(1300, min(1700, roll_pwm))
+
+            self.conn.mav.rc_channels_override_send(
+                self.conn.target_system or 1,
+                self.conn.target_component or 1,
+                0, 0, 0, 0, 0,
+                roll_pwm, pitch_pwm, yaw_pwm,
+                0, 0, 0, 0, 0, 0, 0, 0, 0
+            )
+        except Exception:
+            pass
+
     def _heartbeat_loop(self):
+        last_hb = 0.0
         while self._running:
-            time.sleep(1.0)
+            time.sleep(0.25)
             if self.conn is None:
                 self._connect()
                 continue
-            try:
-                msg = self.conn.recv_match(type='HEARTBEAT', blocking=False)
-                if msg is not None:
-                    from pymavlink import mavutil
-                    self.current_mode = getattr(self.conn, 'flightmode', 'UNKNOWN')
-                    self.is_armed = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
-            except Exception:
-                pass
+            now = time.time()
+            if now - last_hb >= 1.0:
+                last_hb = now
+                try:
+                    msg = self.conn.recv_match(type='HEARTBEAT', blocking=False)
+                    if msg is not None:
+                        from pymavlink import mavutil
+                        self.current_mode = getattr(self.conn, 'flightmode', 'UNKNOWN')
+                        self.is_armed = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
+                except Exception:
+                    pass
+            # Regularly maintain gimbal angle so ArduPilot doesn't reset to default 1100
+            self._send_gimbal_rc_override()
+
+    def set_gimbal(self, pitch=None, yaw=None, roll=None):
+        with self.lock:
+            if not self.conn and not self._connect():
+                return False, "MAVLink connection not available"
+            if pitch is not None:
+                self.gimbal_pitch = float(max(-90.0, min(20.0, pitch)))
+            if yaw is not None:
+                self.gimbal_yaw = float(max(-90.0, min(90.0, yaw)))
+            if roll is not None:
+                self.gimbal_roll = float(max(-30.0, min(30.0, roll)))
+            self._send_gimbal_rc_override()
+            print(f"[MAVLink] Gimbal set: Pitch={self.gimbal_pitch:.1f}°, Yaw={self.gimbal_yaw:.1f}°, Roll={self.gimbal_roll:.1f}°")
+            return True, f"Gimbal updated: pitch={self.gimbal_pitch:.1f}, yaw={self.gimbal_yaw:.1f}"
+
+    def gimbal_preset(self, preset_name):
+        p = preset_name.lower().strip()
+        if p == "ground":
+            return self.set_gimbal(pitch=-45.0, yaw=0.0, roll=0.0)
+        elif p == "horizon":
+            return self.set_gimbal(pitch=0.0, yaw=0.0, roll=0.0)
+        elif p == "nadir":
+            return self.set_gimbal(pitch=-90.0, yaw=0.0, roll=0.0)
+        elif p == "center":
+            return self.set_gimbal(yaw=0.0)
+        elif p == "pan_left":
+            return self.set_gimbal(yaw=self.gimbal_yaw - 15.0)
+        elif p == "pan_right":
+            return self.set_gimbal(yaw=self.gimbal_yaw + 15.0)
+        elif p == "tilt_up":
+            return self.set_gimbal(pitch=self.gimbal_pitch + 10.0)
+        elif p == "tilt_down":
+            return self.set_gimbal(pitch=self.gimbal_pitch - 10.0)
+        return False, f"Unknown preset: {preset_name}"
 
     def set_mode(self, mode_name="GUIDED"):
         with self.lock:
@@ -619,6 +712,29 @@ def decode_ws_frame(sock) -> str:
         return None
 
 
+def broadcast_ws_message(msg_dict):
+    """Safely broadcasts a JSON message dictionary to all active WebSocket clients."""
+    with WS_LOCK:
+        if not WS_CLIENTS:
+            return
+        snapshot = list(WS_CLIENTS)
+    try:
+        frame_bytes = encode_ws_frame(json.dumps(msg_dict))
+    except Exception:
+        return
+    dead_socks = set()
+    for sock in snapshot:
+        try:
+            sock.sendall(frame_bytes)
+        except Exception:
+            dead_socks.add(sock)
+    if dead_socks:
+        with WS_LOCK:
+            for dead in dead_socks:
+                WS_CLIENTS.discard(dead)
+            SERVER_STATE["clients_count"] = len(WS_CLIENTS)
+
+
 # ==============================================================================
 # Live ROS 2 Node Ingestion Adapter (Conditional on rclpy)
 # ==============================================================================
@@ -688,6 +804,17 @@ def try_init_ros2_live_bridge():
                     Imu, '/imu/data', self._on_imu, 10)
                 self.ap_imu_sub = self.create_subscription(
                     Imu, '/ap/v1/imu/experimental/data', self._on_imu, ap_qos)
+
+                from rclpy.qos import qos_profile_sensor_data
+                self.cam_bridge = CvBridge() if HAS_CV_BRIDGE else None
+                self._last_cam_time = 0.0
+                self._prev_cam_ts = 0.0
+
+                # Subscribe to camera topics (Iris camera bridged to /camera/image and /camera/image_raw)
+                self.cam_sub_image = self.create_subscription(
+                    Image, '/camera/image', self._on_camera_frame, qos_profile_sensor_data)
+                self.cam_sub_image_raw = self.create_subscription(
+                    Image, '/camera/image_raw', self._on_camera_frame, qos_profile_sensor_data)
 
                 self.current_state = {
                     "pose_wb": None,
@@ -785,6 +912,68 @@ def try_init_ros2_live_bridge():
                     "gyro": {"gx": w.x, "gy": w.y, "gz": w.z}
                 }
 
+            def _on_camera_frame(self, msg):
+                LIVE_ROS2_STATE["last_msg_time"] = time.time()
+                SERVER_STATE["ros2_connected"] = True
+                now = time.time()
+                # Rate limit frame broadcast to 30 FPS max (min 0.030s between frames)
+                if now - self._last_cam_time < 0.030:
+                    return
+                self._last_cam_time = now
+
+                try:
+                    cv_img = None
+                    if self.cam_bridge is not None:
+                        try:
+                            cv_img = self.cam_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+                        except Exception:
+                            pass
+
+                    if cv_img is None and HAS_CV2:
+                        enc = getattr(msg, 'encoding', 'rgb8').lower()
+                        if enc in ['bgr8', 'rgb8', '8uc3']:
+                            arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
+                            cv_img = arr if enc == 'bgr8' else cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+                        elif enc in ['mono8', '8uc1']:
+                            arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width))
+                            cv_img = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
+                        elif enc == 'bgra8':
+                            arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 4))
+                            cv_img = cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
+                        elif enc == 'rgba8':
+                            arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 4))
+                            cv_img = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+
+                    if cv_img is not None and HAS_CV2:
+                        ret, jpeg_buf = cv2.imencode('.jpg', cv_img, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+                        if ret:
+                            jpeg_bytes = jpeg_buf.tobytes()
+                            with LATEST_FRAME_LOCK:
+                                LATEST_CAMERA_FRAME["jpeg"] = jpeg_bytes
+                                LATEST_CAMERA_FRAME["timestamp"] = now
+                                LATEST_CAMERA_FRAME["width"] = msg.width
+                                LATEST_CAMERA_FRAME["height"] = msg.height
+
+                            dt = max(0.001, now - self._prev_cam_ts)
+                            self._prev_cam_ts = now
+                            SERVER_STATE["camera_connected"] = True
+                            SERVER_STATE["camera_fps"] = round(1.0 / dt, 1)
+
+                            b64 = base64.b64encode(jpeg_bytes).decode('ascii')
+                            ws_msg = {
+                                "type": "camera_frame",
+                                "topic": "/camera/image",
+                                "data": {
+                                    "image": f"data:image/jpeg;base64,{b64}",
+                                    "timestamp": now,
+                                    "width": msg.width,
+                                    "height": msg.height
+                                }
+                            }
+                            broadcast_ws_message(ws_msg)
+                except Exception as e:
+                    pass
+
             def publish_target_pose(self, x, y, z, yaw_deg=0.0):
                 try:
                     msg = PoseStamped()
@@ -805,11 +994,39 @@ def try_init_ros2_live_bridge():
                     print(f"[Bridge] Error publishing target pose: {e}")
                     return False
 
+            def publish_cmd_vel(self, vx, vy, vz, yaw_rate=0.0):
+                try:
+                    msg = TwistStamped()
+                    msg.header.stamp = self.get_clock().now().to_msg()
+                    msg.header.frame_id = "base_link"
+                    msg.twist.linear.x = float(vx)
+                    msg.twist.linear.y = float(vy)
+                    msg.twist.linear.z = float(vz)
+                    msg.twist.angular.z = float(yaw_rate)
+
+                    # Always publish to teleop topic for controller_node arbitration
+                    if hasattr(self, 'teleop_pub'):
+                        self.teleop_pub.publish(msg)
+
+                    # If controller_node is not running (0 subscribers on teleop_cmd), publish directly to /ap/v1/cmd_vel
+                    has_controller = hasattr(self, 'teleop_pub') and self.teleop_pub.get_subscription_count() > 0
+                    if not has_controller and hasattr(self, 'cmd_pub'):
+                        self.cmd_pub.publish(msg)
+                    return True
+                except Exception as e:
+                    print(f"[Bridge] Error publishing cmd_vel: {e}")
+                    return False
+
             def publish_zero_cmd_vel(self):
                 try:
                     msg = TwistStamped()
                     msg.header.stamp = self.get_clock().now().to_msg()
-                    self.cmd_pub.publish(msg)
+                    msg.header.frame_id = "base_link"
+                    if hasattr(self, 'teleop_pub'):
+                        self.teleop_pub.publish(msg)
+                    has_controller = hasattr(self, 'teleop_pub') and self.teleop_pub.get_subscription_count() > 0
+                    if not has_controller and hasattr(self, 'cmd_pub'):
+                        self.cmd_pub.publish(msg)
                     return True
                 except Exception as e:
                     return False
@@ -817,6 +1034,7 @@ def try_init_ros2_live_bridge():
         node = DashboardBridgeNode()
         node.target_pub = node.create_publisher(PoseStamped, '/drones_controller/target_pose', 10)
         node.cmd_pub = node.create_publisher(TwistStamped, '/ap/v1/cmd_vel', ap_qos)
+        node.teleop_pub = node.create_publisher(TwistStamped, '/drones_controller/teleop_cmd', 10)
         LIVE_ROS2_STATE["node"] = node
 
         def spin_ros():
@@ -983,25 +1201,116 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(DEMO_POINTCLOUD).encode('utf-8'))
             return
 
+        if self.path in ["/api/camera_stream", "/video_feed"]:
+            self.send_response(200)
+            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+
+            last_ts = 0
+            try:
+                while True:
+                    with LATEST_FRAME_LOCK:
+                        frame = LATEST_CAMERA_FRAME.get("jpeg")
+                        ts = LATEST_CAMERA_FRAME.get("timestamp", 0)
+
+                    if frame is not None and ts != last_ts:
+                        last_ts = ts
+                        header = (
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n"
+                            b"Content-Length: " + str(len(frame)).encode('ascii') + b"\r\n\r\n"
+                        )
+                        self.wfile.write(header + frame + b"\r\n")
+                        self.wfile.flush()
+                    elif frame is None:
+                        # Fallback to demo snapshot if no live frame yet
+                        demo_path = DIRECTORY / "monocular_tracking_feed.png"
+                        if demo_path.exists() and last_ts == 0:
+                            with open(demo_path, 'rb') as f:
+                                demo_bytes = f.read()
+                            header = (
+                                b"--frame\r\n"
+                                b"Content-Type: image/png\r\n"
+                                b"Content-Length: " + str(len(demo_bytes)).encode('ascii') + b"\r\n\r\n"
+                            )
+                            self.wfile.write(header + demo_bytes + b"\r\n")
+                            self.wfile.flush()
+                            last_ts = 1
+                    time.sleep(0.033)
+            except Exception:
+                pass
+            return
+
+        if self.path in ["/api/camera_frame", "/api/camera_snapshot"]:
+            with LATEST_FRAME_LOCK:
+                frame = LATEST_CAMERA_FRAME.get("jpeg")
+
+            if frame:
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/jpeg')
+                self.send_header('Content-Length', str(len(frame)))
+                self.send_header('Cache-Control', 'no-cache')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(frame)
+            else:
+                demo_img_path = DIRECTORY / "monocular_tracking_feed.png"
+                if demo_img_path.exists():
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'image/png')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    with open(demo_img_path, 'rb') as f:
+                        self.wfile.write(f.read())
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            return
+
         if self.path == "/api/camera_status":
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
+            with LATEST_FRAME_LOCK:
+                has_live = LATEST_CAMERA_FRAME.get("jpeg") is not None
+                w = LATEST_CAMERA_FRAME.get("width", 640)
+                h = LATEST_CAMERA_FRAME.get("height", 480)
             cam_status = {
                 "mode": SERVER_STATE["mode"],
                 "topic": "/camera/image_raw",
+                "active_topic": "/camera/image",
+                "width": w,
+                "height": h,
                 "encoding": "mono8",
                 "demo_image_available": (DIRECTORY / "monocular_tracking_feed.png").exists(),
                 "demo_image_url": "/monocular_tracking_feed.png",
-                "live_stream_available": False,  # No MJPEG bridge implemented; requires cv_bridge + ROS 2
-                "note": (
-                    "In LIVE mode, camera images are published as sensor_msgs/msg/Image on /camera/image_raw "
-                    "(mono8 encoding) and as bgr8 overlay on /camera/vio_overlay. "
-                    "A real-time MJPEG bridge endpoint is not yet implemented. "
-                    "Connect a ROS 2 image_transport republisher to stream frames."
-                )
+                "live_stream_available": True if (has_live or SERVER_STATE.get("ros2_connected", False)) else False,
+                "stream_url": "/api/camera_stream",
+                "snapshot_url": "/api/camera_frame",
+                "fps": SERVER_STATE.get("camera_fps", 0.0),
+                "note": "Camera streaming enabled via MJPEG (/api/camera_stream) and WebSocket (/ws)"
             }
             self.wfile.write(json.dumps(cam_status).encode('utf-8'))
+            return
+
+        if self.path == "/api/gimbal":
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            gimbal_data = {
+                "status": "success",
+                "pitch": MAVLINK.gimbal_pitch,
+                "yaw": MAVLINK.gimbal_yaw,
+                "roll": MAVLINK.gimbal_roll,
+                "note": "Camera Gimbal mounted on Servo channels 8, 9, 10"
+            }
+            self.wfile.write(json.dumps(gimbal_data).encode('utf-8'))
             return
 
         super().do_GET()
@@ -1050,7 +1359,7 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                             print(f"[Bridge] Switched active dataset to: {ds_key}")
                     elif msg_type == "action":
                         action = data.get("action", "").lower()
-                        alt = float(data.get("alt", 2.5))
+                        alt = float(data.get("alt", 5.0))
                         if action == "guided":
                             MAVLINK.set_mode("GUIDED")
                         elif action == "arm":
@@ -1064,6 +1373,18 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                             node = LIVE_ROS2_STATE.get("node")
                             if node:
                                 node.publish_zero_cmd_vel()
+                    elif msg_type == "teleop_cmd":
+                        vx = float(data.get("vx", 0.0))
+                        vy = float(data.get("vy", 0.0))
+                        vz = float(data.get("vz", 0.0))
+                        yaw_rate = float(data.get("yaw_rate", 0.0))
+                        now_log = time.time()
+                        if getattr(self, '_last_teleop_log', 0.0) + 1.0 < now_log and (abs(vx) > 0.01 or abs(vy) > 0.01 or abs(vz) > 0.01 or abs(yaw_rate) > 0.01):
+                            self._last_teleop_log = now_log
+                            print(f"[Bridge Teleop] Dispatched: vx={vx:+.2f}, vy={vy:+.2f}, vz={vz:+.2f}, yaw={yaw_rate:+.2f}")
+                        node = LIVE_ROS2_STATE.get("node")
+                        if node:
+                            node.publish_cmd_vel(vx, vy, vz, yaw_rate)
                     elif msg_type == "set_target":
                         tp = data.get("target_p")
                         tv = data.get("target_v")
@@ -1089,6 +1410,15 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
                             if node:
                                 node.publish_target_pose(SERVER_STATE["target_p"][0], SERVER_STATE["target_p"][1], SERVER_STATE["target_p"][2], SERVER_STATE["target_yaw"])
                             print(f"[Bridge] Command target updated to: {SERVER_STATE['target_p']}")
+                    elif msg_type == "gimbal_cmd":
+                        action = data.get("action")
+                        if action:
+                            MAVLINK.gimbal_preset(action)
+                        else:
+                            p = data.get("pitch")
+                            y = data.get("yaw")
+                            r = data.get("roll")
+                            MAVLINK.set_gimbal(pitch=p, yaw=y, roll=r)
                 except Exception:
                     pass
         except Exception:
@@ -1100,13 +1430,66 @@ class AeroVIOHandler(http.server.SimpleHTTPRequestHandler):
             print(f"[Bridge] Client disconnected (Remaining: {len(WS_CLIENTS)})")
 
     def do_POST(self):
+        if self.path == "/api/gimbal":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                req = json.loads(body)
+                action = req.get("action")
+                if action:
+                    success, msg = MAVLINK.gimbal_preset(action)
+                else:
+                    pitch = req.get("pitch")
+                    yaw = req.get("yaw")
+                    roll = req.get("roll")
+                    success, msg = MAVLINK.set_gimbal(pitch=pitch, yaw=yaw, roll=roll)
+                resp = {
+                    "status": "success" if success else "error",
+                    "message": msg,
+                    "pitch": MAVLINK.gimbal_pitch,
+                    "yaw": MAVLINK.gimbal_yaw,
+                    "roll": MAVLINK.gimbal_roll
+                }
+                self.send_response(200)
+            except Exception as e:
+                resp = {"status": "error", "message": str(e)}
+                self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+            return
+
+        if self.path == "/api/teleop":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                req = json.loads(body)
+                vx = float(req.get("vx", 0.0))
+                vy = float(req.get("vy", 0.0))
+                vz = float(req.get("vz", 0.0))
+                yaw_rate = float(req.get("yaw_rate", 0.0))
+                node = LIVE_ROS2_STATE.get("node")
+                if node:
+                    node.publish_cmd_vel(vx, vy, vz, yaw_rate)
+                resp = {"status": "success", "vx": vx, "vy": vy, "vz": vz, "yaw_rate": yaw_rate}
+                self.send_response(200)
+            except Exception as e:
+                resp = {"status": "error", "message": str(e)}
+                self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode('utf-8'))
+            return
+
         if self.path == "/api/action":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')
             try:
                 req = json.loads(body)
                 action = req.get("action", "").lower()
-                alt = float(req.get("alt", 2.5))
+                alt = float(req.get("alt", 5.0))
                 success = False
                 msg = ""
                 if action == "guided":
